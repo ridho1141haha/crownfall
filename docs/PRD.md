@@ -9,7 +9,7 @@
 **Development Model:** Solo Developer + AI Assistance
 **Source of Truth:** `docs/REVISED_PROJECT_BASELINE.md`
 
-> **Scope authority:** This PRD is aligned with the Revised Project Baseline v1.2, GDD v1.1, SYSTEMS v1.1, and TDD v1.1. The first playable target is a single-player vertical slice. Online multiplayer remains a long-term product goal, but is not part of the first slice or its acceptance criteria.
+> **Scope authority:** This PRD is aligned with the Revised Project Baseline v1.2, GDD v1.2, SYSTEMS v1.2, and TDD v1.2. The first playable target is a single-player vertical slice. Online multiplayer remains a long-term product goal, but is not part of the first slice or its acceptance criteria.
 
 ---
 
