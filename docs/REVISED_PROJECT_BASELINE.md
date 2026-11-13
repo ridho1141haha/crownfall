@@ -531,17 +531,6 @@ When changing an approved decision, update the owner document and this baseline 
 
 ---
 
-## 15. Final direction
-
-The project does not need more speculative systems before it has a playable loop.
-
-The next meaningful proof of CROWNFALL is not a lobby, six islands, a full story chapter, or a large NPC framework. It is a small kingdom that the player can build, protect through one night, and return to after sunrise.
-
-**Build the first kingdom loop. Prove it is fun. Then expand.**
-
-
----
-
 ## 15. Open design decisions
 
 The following decisions are intentionally unresolved. An open item is not an approved default and must be resolved in its owner document before implementation depends on it.
