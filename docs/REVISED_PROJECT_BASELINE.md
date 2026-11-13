@@ -1,14 +1,14 @@
 # CROWNFALL: THE LAST LIGHT
-# Revised Project Baseline — v1.1
+# Revised Project Baseline — v1.2
 
 **Date:** 2026-11-13  
-**Status:** Approved planning baseline for the first playable prototype  
+**Status:** Approved and synchronized planning baseline for the first single-player vertical slice  
 **Engine:** Godot 4  
 **Language:** GDScript  
 **Target:** Windows PC  
 **Development model:** Solo developer + AI assistance
 
-> This document resolves scope and architecture conflicts across the original README, GDD, PRD, TDD, and SYSTEMS documents. Until those documents are fully split and synchronized, this is the source of truth for the decisions listed here.
+> This document is the cross-project authority for approved scope, priorities, architecture constraints, and milestone order. The README communicates project status; PRD owns product requirements; GDD owns player-facing design; SYSTEMS owns gameplay rules; TDD owns technical implementation direction; ASSET_GUIDELINES owns visual and asset production standards. If a specialized document conflicts with a decision explicitly approved here, this baseline takes precedence until the conflict is resolved.
 
 ---
 
@@ -23,7 +23,7 @@
 | Later resources | Iron, Food, Crystal, Ancient Relics |
 | Player inventory | No complex personal inventory in the first slice |
 | Kingdom resources | One kingdom ledger; transactions go through one economy API |
-| NPC roles in first slice | Villager and Builder behavior only |
+| NPC scope in first slice | Villager recruitment and Builder behavior; Builder's internal role/assignment/actor representation remains open until M5 |
 | Farmer / Archer / Knight / Guard | Later milestones |
 | First enemy | One basic enemy archetype for the first night |
 | First map | Forgotten Shore only |
@@ -96,7 +96,7 @@ The slice is successful only if the loop is understandable and enjoyable without
 |---|---|---|
 | Gold | Primary currency | Recruitment and selected construction costs |
 | Wood | Basic material | Wooden wall and early structures |
-| Stone | Durable material | Stone upgrades and later defensive structures |
+| Stone | Core ledger resource; first-slice source and spending purpose remain open until M3 |
 
 Iron, Food, Crystal, and Ancient Relics are **not MVP resources**. They may exist in future design notes, but must not appear as required MVP HUD counters, costs, or acceptance criteria.
 
@@ -471,53 +471,99 @@ A generated script or a successful static review is not proof that a feature wor
 
 ---
 
-## 13. Immediate next task
+## 13. Immediate implementation gates
 
-### TASK 001 — Create the smallest runnable Godot project
+### TASK 001 — M0: Godot Foundation
 
-Do not implement the whole game in one prompt.
+Create the smallest runnable Godot project without expanding into gameplay systems.
 
 Deliver:
 
-1. `project.godot` configured for Godot 4.
-2. One main scene.
-3. One simple Forgotten Shore test scene with floor and collision.
-4. One player scene with horizontal movement.
-5. One local camera that follows the player.
-6. Main menu → game scene transition, if it can be done without distracting from movement.
-7. Clear run instructions.
+1. `project.godot` configured for the selected Godot 4 stable patch.
+2. One main scene configured as the project entry point.
+3. Minimal input/project settings needed to launch a local session.
+4. A simple test environment or empty world root only if required to verify startup.
+5. Clear run instructions and the exact Godot version used.
 
 Acceptance:
 
-- Project opens in the selected Godot 4 version.
-- No parser errors.
-- Game launches.
+- The project opens in the selected Godot version.
+- The project launches without parser or runtime startup errors.
+- The main scene is loaded as expected.
+- No player, economy, building, NPC, enemy, quest, save, or multiplayer system is added merely to inflate M0.
+
+### TASK 002 — M1: Player Prototype
+
+After M0 passes, add:
+
+1. Player scene with horizontal movement.
+2. Floor collision and playable test bounds.
+3. Local Camera2D that follows the player.
+4. Placeholder idle/walk feedback if it does not block movement validation.
+
+Acceptance:
+
 - Player moves left and right.
 - Player cannot fall through the floor.
-- Camera follows the player.
-- No multiplayer, economy, NPC, enemy, quest, or save system is added in this task.
+- Movement respects the test area's bounds.
+- Camera follows the local player.
+- Manual runtime testing is performed in the Godot editor/build.
 
-After TASK 001 passes in the actual editor/runtime, commit it and move to the next milestone.
+Commit M0 and M1 as separate focused changes. Do not combine all later game systems into the first implementation task.
 
 ---
 
-## 14. Documentation synchronization rules
+## 14. Documentation ownership and synchronization
 
-When updating the original documents:
+The current documentation set is synchronized to baseline v1.2. Maintain these ownership boundaries:
 
-- **README:** describe the current status honestly; label multiplayer and future islands as planned, not MVP commitments.
-- **GDD:** preserve the world, pillars, and long-term vision; update first-slice gameplay and resource scope.
-- **PRD:** set multiplayer, full chapter, mount, multiple NPC roles, and extra enemy types to later priorities.
-- **TDD:** describe simulation/presentation boundaries, save format, and future multiplayer seams without implementing a premature network layer.
-- **SYSTEMS:** align resource, building, NPC, save, and multiplayer priorities with this baseline.
-- **ASSET_GUIDELINES:** prioritize only the art assets needed by the current vertical slice. Placeholder art is acceptable during early mechanics validation.
-- **CHANGELOG:** record actual implemented changes; do not use it as a wishlist.
+- **README:** concise public-facing project summary and honest repository/implementation status.
+- **PRD:** product scope, requirement IDs, priorities, acceptance criteria, risks, and success definition.
+- **GDD:** player experience, world/lore direction, design pillars, first-slice gameplay, and open design choices.
+- **SYSTEMS:** system responsibilities, invariants, state transitions, gameplay rules, and system-level tests.
+- **TDD:** technical boundaries, project organization, data flow, persistence, and technical verification.
+- **ASSET_GUIDELINES:** visual identity, asset specifications, production priorities, and asset validation.
+- **CHANGELOG:** factual record of documentation or implementation changes; never a wishlist.
 
-If two documents conflict, this baseline wins until the documents are synchronized and this file is retired.
+A specialized document owns the details in its domain. This baseline takes precedence only for approved cross-project scope, priority, architecture constraints, and milestone order. Do not duplicate entire specifications across documents; cross-reference the owner document instead.
+
+When changing an approved decision, update the owner document and this baseline if the change affects cross-project scope or architecture. Record important lasting decisions and rationale in an ADR when the decision log is established. Keep versions and cross-document references synchronized.
 
 ---
 
 ## 15. Final direction
+
+The project does not need more speculative systems before it has a playable loop.
+
+The next meaningful proof of CROWNFALL is not a lobby, six islands, a full story chapter, or a large NPC framework. It is a small kingdom that the player can build, protect through one night, and return to after sunrise.
+
+**Build the first kingdom loop. Prove it is fun. Then expand.**
+
+
+---
+
+## 15. Open design decisions
+
+The following decisions are intentionally unresolved. An open item is not an approved default and must be resolved in its owner document before implementation depends on it.
+
+| ID | Decision | Owner | Deadline |
+|---|---|---|---|
+| OD-01 | Gold, Wood, and Stone sources and collection interactions | GDD / SYSTEMS / PRD | Before M3 |
+| OD-02 | Starting resource balances and recruitment cost/interaction | GDD / PRD | Before M3/M5 |
+| OD-03 | Stone's concrete first-slice purpose | GDD / PRD | Before M3 |
+| OD-04 | Wooden Wall placement, footprint, cost, duration, repair, and refund rules | GDD / SYSTEMS | Before M4 |
+| OD-05 | Builder as assignment, profession, role, or separate actor representation | GDD / TDD | Before M5 |
+| OD-06 | First enemy identity, behavior, tuning, and spawn conditions | GDD / SYSTEMS | Before M6 |
+| OD-07 | Wall destruction, settlement breach, NPC loss, and first-night failure outcomes | GDD / PRD | Before M6 |
+| OD-08 | Minimal exploration reward or point-of-interest interaction | GDD | Before M8 sign-off |
+| OD-09 | Persistent NPC fields and final save payload | TDD / SYSTEMS | Before M7 |
+| OD-10 | Exact Godot stable patch and project settings | TDD | During M0 |
+
+Do not silently fill these gaps while generating code. The relevant decision must be recorded before its dependent implementation task begins.
+
+---
+
+## 16. Final direction
 
 The project does not need more speculative systems before it has a playable loop.
 
