@@ -1,174 +1,410 @@
-# **CROWNFALL: THE LAST LIGHT**
+# CROWNFALL: THE LAST LIGHT
+# TECHNICAL DESIGN DOCUMENT (TDD)
 
-# **TECHNICAL DESIGN DOCUMENT (TDD)**
+**Document Version:** 1.2
+**Baseline:** Revised Project Baseline v1.2
+**Engine:** Godot 4 — exact stable patch to be recorded at M0
+**Language:** GDScript
+**Platform Target:** Windows PC
+**Architecture Direction:** Simulation / Presentation Separation
+**Status:** Pre-production — Single-Player Vertical Slice
 
-**Document Version: 1.1 (Synced with Revised Project Baseline)**
+---
 
-**Engine: Godot 4 (Lock exact stable patch in project.godot on M0 init)**
+## 1. Purpose and Technical Scope
 
-**Language: GDScript (Static Typing enforced)**
+This document defines the technical direction for the first single-player vertical slice and the boundaries that will make later expansion manageable.
 
-**Architecture: Modular, Simulation/Presentation Decoupled (Multiplayer-Ready Seams)**
+The repository is currently documentation-first. It does **not** yet contain a runnable Godot project, project.godot, gameplay scenes, or gameplay scripts. This TDD describes the intended architecture, not an implementation that already exists.
 
-**Platform: Windows PC**
+### 1.1 Technical Goals
 
-**Status: Pre-production (First Vertical Slice Baseline)**
+1. Keep the first implementation small and runnable.
+2. Separate authoritative gameplay state from UI, animations, and other presentation.
+3. Make core state changes explicit and validated.
+4. Persist stable game data through a versioned local save format.
+5. Keep future multiplayer seams possible without building networking infrastructure in P0.
+6. Avoid speculative abstractions and empty manager layers.
 
-# **1\. TECHNICAL OVERVIEW**
+### 1.2 Confirmed Direction
 
-## **1.1 Objective**
+| Area | Direction |
+|---|---|
+| Engine | Godot 4 stable release; exact patch recorded at M0 |
+| Language | GDScript |
+| Rendering | Godot 2D |
+| Player physics | CharacterBody2D is the intended starting point |
+| Camera | Local Camera2D |
+| World | Forgotten Shore first; further islands later |
+| Resource data | Gold, Wood, Stone in one kingdom ledger |
+| Static definitions | Godot Resources and/or static data files where useful |
+| Save | Versioned local JSON with temp write and backup recovery |
+| Version control | Git / GitHub |
+| Multiplayer | ENet host-authoritative concept, deferred until M9 |
 
-**This document defines the technical architecture, project organization, data/save schemas, and testing standards for CROWNFALL: THE LAST LIGHT. In accordance with REVISED\_PROJECT\_BASELINE.md, the project delivers a Single-Player Vertical Slice (M0–M8) first while preserving clean architectural seams for ENet Multiplayer (M9).**
+These are architectural directions. Specific classes, APIs, and directory names should be introduced only when justified by an actual feature.
 
-## **1.2 Technical Decisions**
+---
 
-| Component | Decision |
-| :---- | :---- |
-| **Engine** | **Godot 4 (Stable)** |
-| **Language** | **GDScript** |
-| **Rendering** | **Godot 2D** |
-| **Physics** | **CharacterBody2D** |
-| **Networking (M9)** | **ENetMultiplayerPeer (Host-Authoritative — deferred)** |
-| **Camera** | **Local Camera2D** |
-| **World** | **Separate island .tscn scenes (Forgotten Shore for MVP)** |
-| **Data** | **Custom Resource (.tres) \+ static JSON/CSV in data/** |
-| **Save** | **Versioned, atomic JSON serializer (user://)** |
-| **Version Control** | **Git / GitHub** |
-| **Target OS** | **Windows PC** |
+## 2. Architecture Principles
 
-# **2\. ARCHITECTURE OVERVIEW**
+### 2.1 Simulation Is Not Presentation
 
-## **2.1 Core Rule: Simulation is Not Presentation**
+Gameplay state must not be owned by UI or visual nodes.
 
-**Authoritative gameplay state must never live inside presentation or UI scripts:**
+| Layer | Responsibilities |
+|---|---|
+| Input | Read controls and submit gameplay requests |
+| Simulation / Gameplay | Economy, construction, NPC task state, world time, enemy state |
+| Presentation | Sprites, animations, camera, particles, lighting, HUD, menus, audio |
+| Persistence | Serialize and restore stable gameplay data |
+| Session / Scene Flow | Start a local session and transition between scenes |
 
-* **Simulation / Gameplay Layer: Kingdom resource ledger, building states, NPC task scheduling, world clock, enemy state.**  
-* **Presentation Layer: Sprites, animations, Camera2D, particles, shaders, HUD counters, menus, audio.**  
-* **Input Layer: Translates player input into explicit gameplay commands/requests.**  
-* **Persistence Layer: Serializes stable gameplay data (never transient visual nodes or animation frames).**
+A presentation node may display state or request an action. It must not become the source of truth for balances, construction progress, NPC task completion, or enemy damage.
 
-## **2.2 Authoritative Command & Event Flow**
+### 2.2 Command and Event Flow
 
-```
-Input
-  ↓
-Gameplay Command / Service
-  ↓
+~~~text
+Player Input / UI Request
+          |
+          v
+Gameplay Service / Command
+          |
+          v
 Validation
-  ↓
-Authoritative Game State
-  ↓
-Gameplay Events
-  ├── HUD
-  ├── Animation / Effects
-  ├── Audio
-  └── Save Dirty State
+          |
+          v
+Authoritative Gameplay State
+          |
+          v
+Committed Result / Gameplay Event
+       /       |       \
+      v        v        v
+    HUD     Audio   Animation/FX
+          |
+          v
+    Save Dirty State
+~~~
 
-```
+Use direct references when they keep dependencies simple. An EventBus is optional and should only be introduced when cross-system signal wiring becomes unwieldy.
 
-**This boundary allows a future host (M9) to validate the same commands without requiring networking code during the first vertical slice.**
+### 2.3 Do Not Over-Abstract
 
-# **3\. PROJECT DIRECTORY**
+- Do not create a manager for every system by default.
+- Do not create empty class hierarchies for future professions/enemies.
+- Do not add interfaces solely to claim multiplayer readiness.
+- Do not create many empty folders before a real feature requires them.
+- Prefer a small, testable implementation that can be evolved after runtime evidence.
 
-**Matches the repository root layout. Create subdirectories only when a real feature needs them:**
+---
 
-```
+## 3. Conceptual Project Organization
+
+The repository currently has placeholder root folders. The following is a **target organization**, not a claim that these files or subdirectories exist today.
+
+~~~text
 CROWNFALL/
 ├── project.godot
-├── assets/                 # Art, audio, fonts (placeholder art acceptable in MVP)
-├── data/                   # Static balance tables
-├── docs/                   # Documentation & REVISED_PROJECT_BASELINE.md
-├── resources/              # Custom Godot Resource (.tres) definitions
-├── scenes/                 # Main, world/islands, player, npc, buildings, enemies, ui
-├── scripts/                # Core, player, world, kingdom, economy, npc, survival, save, ui
-├── shaders/                # Visual shaders (later polish)
-└── tests/                  # Automated unit & runtime tests
+├── assets/
+├── data/
+├── docs/
+├── resources/
+├── scenes/
+├── scripts/
+├── shaders/
+└── tests/
+~~~
 
-```
+Create subdirectories only when a feature requires them. A possible future grouping is:
 
-## **3.1 Autoload Configuration**
+- scenes/player/
+- scenes/world/
+- scenes/npc/
+- scenes/buildings/
+- scenes/enemies/
+- scenes/ui/
+- scripts/core/
+- scripts/economy/
+- scripts/kingdom/
+- scripts/npc/
+- scripts/survival/
+- scripts/save/
 
-**Keep global singletons minimal for the first slice:**
+Do not create all of these in M0 if the task does not need them.
 
-| Singleton | Script | Responsibility |
-| :---- | :---- | :---- |
-| **GameManager** | **game\_manager.gd** | **Session-level flow only** |
-| **EventBus** | **event\_bus.gd** | **Cross-system signals when direct references are unwieldy** |
-| **SaveManager** | **save\_manager.gd** | **Atomic local save/load** |
-| **SceneManager** | **scene\_manager.gd** | **Scene transitions (if needed)** |
+### 3.1 Minimal Autoload Policy
 
-**Important: Do not register NetworkManager as an Autoload before the M9 multiplayer milestone begins.**
+Autoloads are global lifetime objects. Keep their number small.
 
-## **3.2 Coding Standards**
+| Candidate | P0 Policy |
+|---|---|
+| GameManager | Add only if session-level flow needs a persistent owner |
+| SaveManager | Add when local save/load is implemented |
+| EventBus | Optional; add only if direct references become difficult |
+| SceneManager | Optional; add only if scene transitions justify it |
+| NetworkManager | **Do not implement or register before M9** |
+| AudioManager | Defer until there is a real audio lifecycle requirement |
 
-* **Enforce static typing (var speed: float \= 100.0, func try\_spend(costs: Dictionary) \-\> bool:).**  
-* **Class/file names in PascalCase (or consistent snake\_case.gd for autoloads as listed above); variables and functions in snake\_case; signals in past tense (transaction\_committed, building\_completed, sunset\_started).**  
-* **Use stable persistent IDs (building\_id, npc\_id, island\_id) rather than scene paths or display names.**
+An Autoload is not automatically justified by a system name.
 
-# **4\. SAVE SYSTEM & ATOMIC PERSISTENCE**
+### 3.2 Coding Standards
 
-## **4.1 Minimum Save Payload (user://save\_slot\_0.json)**
+- Use static typing where it improves clarity and catches errors.
+- Use consistent snake_case for GDScript files, functions, variables, and signals.
+- Use clear, stable IDs for persistent entities (for example, building IDs and NPC IDs).
+- Keep data definitions separate from behavior where that separation is useful.
+- Avoid hard-coded duplicated balance values; centralize tunable values.
+- Prefer small functions with explicit inputs and results.
+- Handle invalid input and failed file operations explicitly.
+- Follow the conventions already present in the project once M0 initializes it.
 
-```
+Do not enforce contradictory naming styles. Consistency within the actual Godot project takes precedence over speculative naming rules.
+
+---
+
+## 4. First-Slice Technical Boundaries
+
+### 4.1 Player
+
+- Start with one local Monarch.
+- Use horizontal movement and collision.
+- Use one local Camera2D.
+- Keep input handling separate from kingdom/economy mutations.
+- No player synchronization, multiple player ownership, or multiplayer camera system in P0.
+
+### 4.2 World and Clock
+
+- Load Forgotten Shore as the only active world.
+- Keep world bounds and collision separate from decorative background layers.
+- Use one source of truth for current phase/time.
+- Publish phase changes for Builder safety, enemy spawning, lighting, and HUD.
+- Do not simulate inactive islands.
+
+### 4.3 Economy
+
+- Keep Gold, Wood, and Stone in one kingdom ledger.
+- Validate resource IDs, positive amounts, and available balances before committing.
+- Make multi-resource spending atomic.
+- Return an explicit success/failure result.
+- Keep HUD values derived from committed ledger state.
+
+### 4.4 Building
+
+- Validate placement before spending.
+- Validate the full cost before mutation.
+- Deduct exactly once when construction is accepted.
+- Store construction progress and durability in gameplay state.
+- Do not use animation completion as proof of gameplay construction completion.
+
+### 4.5 NPC and Builder
+
+- Give each persistent NPC a stable ID.
+- Keep movement, task state, and animation responsibilities distinguishable.
+- Validate task target and assignment before work.
+- Avoid per-frame repeated path requests.
+- At sunset, safety overrides optional work.
+- Exact Builder data representation remains open until the GDD/SYSTEMS decision is made before M5.
+
+### 4.6 First Enemy
+
+- Implement one enemy archetype only.
+- Use one predictable spawn route.
+- Apply damage through gameplay state/services.
+- Gate spawning on the authoritative world clock.
+- Defer additional enemy families and complex combat.
+
+---
+
+## 5. Persistence and Save Schema
+
+### 5.1 Save Design
+
+The first slice uses a versioned local save in Godot's user data location (for example, user://save_slot_0.json).
+
+The save contains stable gameplay state, not raw scene-tree state.
+
+Minimum conceptual payload:
+
+~~~json
 {
   "schema_version": 1,
   "world_id": "aetherion",
   "island_id": "forgotten_shore",
-  "day_count": 2,
+  "day_count": 1,
   "world_time": 0.0,
+  "world_phase": "daylight",
   "resources": {
-    "gold": 15,
-    "wood": 20,
-    "stone": 5
+    "gold": 0,
+    "wood": 0,
+    "stone": 0
   },
-  "buildings": [
-    {
-      "id": "wall_east_01",
-      "type": "wooden_wall",
-      "position_x": 420.0,
-      "level": 1,
-      "state": "COMPLETED",
-      "durability": 100
-    }
-  ],
-  "npcs": [
-    {
-      "id": "npc_01",
-      "role": "builder",
-      "state": "IDLE",
-      "position_x": 120.0
-    }
-  ],
-  "progression_flags": {
-    "first_night_survived": true
-  }
+  "buildings": [],
+  "npcs": [],
+  "progression_flags": {}
 }
+~~~
 
-```
+This is a structural example, not final balance data. Starting resource quantities, persistent NPC fields, building properties, and progression flags must follow approved design decisions.
 
-## **4.2 Atomic Write & Recovery Procedure**
+### 5.2 Required Save Rules
 
-1. **Serialize payload to a temporary file (user://save\_slot\_0.tmp).**  
-2. **Validate that serialization completed without error.**  
-3. **Preserve one previous valid backup (user://save\_slot\_0.bak) before replacing the active save.**  
-4. **On load, validate schema\_version and required fields; if corrupted or invalid, recover from .bak and report the recovery result.**
+- Include an explicit schema version.
+- Validate required fields and field types before applying loaded state.
+- Reject unsupported or malformed data safely.
+- Preserve stable IDs for persistent buildings and NPCs.
+- Do not serialize transient particles, animation frames, camera offsets, or temporary visual nodes.
+- Keep migration logic explicit if the schema changes in the future.
 
-# **5\. MULTIPLAYER SEAMS (M9 — DEFERRED)**
+### 5.3 Atomic Write and Recovery
 
-* **Do Not Implement Yet: No ENetMultiplayerPeer, RPCs, lobbies, or room codes in M0–M8.**  
-* **Preparation Rules:**  
-  * **Never couple gameplay simulation directly to UI nodes.**  
-  * **Route state mutations through command/service methods.**  
-  * **Avoid assuming the local player is the only possible actor in data models.**
+Intended flow:
 
-# **6\. TESTING REQUIREMENTS**
+1. Build the save payload from authoritative state.
+2. Serialize and write to a temporary file.
+3. Check file open/write/flush/close outcomes as supported by the chosen Godot APIs.
+4. Preserve the last known valid save as a backup.
+5. Replace the active save only after the new temporary file is validated.
+6. On load, validate the primary file.
+7. If invalid, attempt the backup and report the recovery result.
+8. Never overwrite a valid backup with malformed data.
 
-**Every milestone requires verifiable acceptance checks in tests/:**
+The exact replacement/rename sequence must be verified against the selected Godot version and target filesystem during M7. Do not claim atomicity merely because a temporary filename is used.
 
-* **Economy: Reject negative/zero/unknown IDs; enforce atomic multi-resource try\_spend; failed spends leave balances untouched.**  
-* **Building: Reject invalid placement/insufficient resources; deduct cost once; complete only through valid progress.**  
-* **NPC: Stop work on missing/cancelled targets; enforce dusk safety override to safe area without silent teleportation.**  
-* **Save: Round-trip state preservation; reject unsupported schema\_version; verify .bak backup recovery and non-destructive failed writes.**  
-* &nbsp;
+### 5.4 Save Test Cases
 
-&nbsp;
+- Valid save/load round trip.
+- Missing file behavior for a new game.
+- Malformed JSON rejection.
+- Missing required fields.
+- Unsupported schema version.
+- Backup recovery when primary is corrupt.
+- Failed write preserves previous valid data.
+- Save restores the exact required economy/building/NPC/progression state.
+
+---
+
+## 6. Test Strategy
+
+Testing should grow with the project rather than requiring a complex framework before M0.
+
+### 6.1 Test Levels
+
+| Level | Purpose |
+|---|---|
+| Static review | Inspect code/configuration for obvious issues; not runtime proof |
+| Unit or script-level tests | Verify isolated deterministic rules |
+| Headless project checks | Verify import/parser/startup behavior where supported |
+| Manual runtime tests | Verify movement, collisions, visuals, controls, and gameplay feel |
+| Regression checks | Re-run critical prior tests after changes |
+
+The test framework and automation tooling are not yet selected. Choose them when M0/M3 implementation needs are clear.
+
+### 6.2 Required Feature Tests
+
+**Economy**
+- Reject invalid IDs and non-positive amounts.
+- Verify insufficient balance is rejected.
+- Verify atomic multi-resource spending.
+- Verify failed operations do not mutate balances.
+
+**Building**
+- Reject invalid placement and insufficient funds.
+- Verify one-time cost deduction.
+- Verify legal state transitions and construction progress.
+
+**NPC**
+- Reject invalid task targets.
+- Release completed/cancelled tasks.
+- Verify dusk safety priority.
+- Verify safe-path failure is reported, not hidden by teleportation.
+
+**Survival**
+- Verify phase-gated enemy spawn.
+- Verify predictable target/route.
+- Verify wall damage and sunrise resolution.
+
+**Save**
+- Verify round-trip and schema validation.
+- Verify backup recovery.
+- Verify failed write does not destroy valid data.
+
+---
+
+## 7. Multiplayer Readiness — M9+, Not P0
+
+The long-term model is host-authoritative online co-op using Godot multiplayer/ENet, subject to later connectivity design and testing.
+
+P0 preparation is limited to:
+- Simulation not coupled to UI.
+- World-changing actions passing through validated service/command boundaries.
+- Stable persistent IDs.
+- No assumption that every data record must embed the local camera or input device.
+
+Do not implement:
+- ENetMultiplayerPeer
+- RPC methods
+- Lobbies or room codes
+- NetworkManager Autoload
+- State replication
+- Host migration
+- Relay services
+
+The first multiplayer validation target is two peers. Four-player support remains a target to validate, not a demonstrated result.
+
+---
+
+## 8. Milestone Technical Gates
+
+| Milestone | Technical Deliverable | Verification Gate |
+|---|---|---|
+| M0 — Godot Foundation | Godot project, main scene, input, basic world | Project opens and runs without errors |
+| M1 — Player Prototype | Player movement, floor collision, local camera | Manual runtime movement and collision test |
+| M2 — World Clock | Forgotten Shore blockout and phase clock | Deterministic phase transitions |
+| M3 — Economy | Kingdom ledger and collection/spending | Economy invariants pass |
+| M4 — Building | Placement validation and wall construction | Cost and state-transition tests pass |
+| M5 — NPC | Recruitment, Builder tasks, dusk safety | Task and safety tests pass |
+| M6 — First Night | One enemy, wall interaction, sunrise | Complete encounter is playable |
+| M7 — Save/Load | Versioned local persistence and recovery | Round-trip and backup tests pass |
+| M8 — Vertical Slice Polish | Integration, feedback, balance and regression fixes | Fresh tester completes the slice |
+| M9 — Multiplayer Prototype | ENet host authority and replication | Two-peer external test |
+| M10 — Content Expansion | Selected additional gameplay content | Existing slice remains stable |
+
+Milestones are gates, not calendar estimates. A later milestone must not begin solely because its architecture is mentioned in this document.
+
+---
+
+## 9. Definition of Done
+
+A technical feature is done only when:
+
+- Its scope and acceptance criteria are clear.
+- It is implemented in the actual Godot project.
+- Relevant tests have been run.
+- Runtime behavior has been checked where applicable.
+- No known critical regression remains.
+- Documentation reflects the actual behavior.
+- The change is committed with a focused message.
+
+A generated file, static code review, or successful parser check alone does not prove that a gameplay feature works.
+
+---
+
+## 10. Open Technical Decisions
+
+| Decision | Needed Before | Notes |
+|---|---|---|
+| Exact Godot stable patch and project settings | M0 | Record the version used to initialize the project |
+| Input map and movement tuning | M0/M1 | Validate by runtime feel |
+| Test framework/tooling | M3 | Select based on actual project requirements |
+| Resource collection representation | M3 | Must match the approved GDD rules |
+| Builder data representation | M5 | Depends on GDD/SYSTEMS decision |
+| Final save schema and required NPC fields | M7 | Freeze only after persistent state is known |
+| ENet connectivity/relay strategy | M9 | Requires external network testing |
+
+---
+
+**END OF TDD**
+
+Project: CROWNFALL: THE LAST LIGHT  
+Document: TDD.md  
+Version: 1.2
