@@ -1,7 +1,7 @@
 # CROWNFALL: THE LAST LIGHT
 # PRODUCT REQUIREMENTS DOCUMENT (PRD)
 
-**Document Version:** 1.1
+**Document Version:** 1.2
 **Product:** CROWNFALL: THE LAST LIGHT
 **Platform:** Windows PC
 **Engine:** Godot 4
@@ -9,7 +9,7 @@
 **Development Model:** Solo Developer + AI Assistance
 **Source of Truth:** `docs/REVISED_PROJECT_BASELINE.md`
 
-> **Scope authority:** This PRD is aligned with the Revised Project Baseline v1.1, GDD v1.1, SYSTEMS v1.1, and TDD v1.1. The first playable target is a single-player vertical slice. Online multiplayer remains a long-term product goal, but is not part of the first slice or its acceptance criteria.
+> **Scope authority:** This PRD is aligned with the Revised Project Baseline v1.2, GDD v1.1, SYSTEMS v1.1, and TDD v1.1. The first playable target is a single-player vertical slice. Online multiplayer remains a long-term product goal, but is not part of the first slice or its acceptance criteria.
 
 ---
 
@@ -224,7 +224,7 @@ Acceptance:
 - At sunset, optional work is interrupted and the Builder returns toward the designated safe area when a valid path exists.
 - An unreachable safe area is reported as a failure; the NPC is not silently teleported.
 
-For the first slice, Builder is treated as a behavior/assignment available to a Villager, not a requirement for a separate hard-coded NPC species. The exact recruitment-to-assignment interaction must be defined in GDD/SYSTEMS before implementation.
+The first slice requires Villager recruitment and Builder behavior. Whether Builder is represented as a profession/assignment, a role, or a separate actor type is not yet locked; GDD/SYSTEMS must resolve that choice before implementation depends on it.
 
 Farmer, Archer, Knight, Guard, and advanced job progression are not P0.
 
@@ -325,6 +325,23 @@ Possible future features, not current commitments:
 - Cross-platform and console support.
 
 ---
+
+## 3.6 Open Design Decisions
+
+The requirements below describe outcomes, but several balancing and interaction details remain undecided. They must be resolved in GDD/SYSTEMS before the affected milestone is implemented:
+
+| Decision | Needed Before |
+|---|---|
+| Resource sources and collection interactions for Gold, Wood, and Stone | M3 |
+| Starting balances, recruitment cost, and recruitment interaction | M3/M5 |
+| Wooden Wall placement rules, cost, duration, and repair rules | M4 |
+| Builder's exact role/assignment/actor data model | M5 |
+| First enemy identity, behavior, tuning, and spawn conditions | M6 |
+| Consequences of wall destruction or first-night failure | M6 |
+| Exploration reward or point-of-interest interaction | M8 scope sign-off |
+| Persistent NPC fields required by save/load | M7 |
+
+These are intentionally open decisions, not permission to invent defaults during implementation.
 
 # 4. USER STORIES AND ACCEPTANCE
 
@@ -694,4 +711,4 @@ These long-term goals must be validated and prioritized incrementally. They are 
 
 Project: CROWNFALL: THE LAST LIGHT  
 Document: PRD.md  
-Version: 1.1
+Version: 1.2
