@@ -23,7 +23,7 @@ The long-term online co-op vision remains planned for M9+, but is no longer pres
 
 | File | Version | Summary |
 |---|---:|---|
-| README.md | 1.1 | Rewritten as the current project overview; distinguishes present repository status, P0 slice, deferred features, milestone gates, and documentation ownership |
+| README.md | 1.2 | Rewritten as the current project overview; distinguishes present repository status, P0 slice, deferred features, milestone gates, and documentation ownership |
 | docs/REVISED_PROJECT_BASELINE.md | 1.2 | Updated cross-document authority, NPC scope, Stone's unresolved first-slice purpose, M0/M1 separation, and open-decision register |
 | docs/PRD.md | 1.2 | Synchronized priorities and acceptance criteria; multiplayer is P1/M9, not P0; added design decisions and version references |
 | docs/GDD.md | 1.2 | Clarified first-slice gameplay, long-term story scope, limited P0 content, and unresolved design choices |
@@ -69,6 +69,7 @@ These decisions must be approved in the owning documents before their dependent 
 |---|---|
 | README.md — initial synchronization | 20bdf09 |
 | README.md — M0/M1 and status correction | ecaebb3 |
+| README.md — documentation version alignment | db82171 |
 | docs/GDD.md | 66c5c38 |
 | docs/PRD.md — v1.1 initial scope sync | d5637d4 |
 | docs/PRD.md — v1.2 open decisions and cross-references | 4afd9fc |
@@ -76,7 +77,7 @@ These decisions must be approved in the owning documents before their dependent 
 | docs/SYSTEMS.md | 58b84fb |
 | docs/TDD.md | afc6f69 |
 | docs/ASSET_GUIDELINES.md | 3b4d07c |
-| docs/REVISED_PROJECT_BASELINE.md | 1db6f60 |
+| docs/REVISED_PROJECT_BASELINE.md | 1db6f60, 481b20e |
 
 ---
 
