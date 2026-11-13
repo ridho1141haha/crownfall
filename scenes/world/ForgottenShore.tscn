@@ -1,0 +1,42 @@
+[gd_scene load_steps=4 format=3]
+
+[ext_resource type="PackedScene" path="res://scenes/player/Player.tscn" id="1_player_scene"]
+
+[sub_resource type="RectangleShape2D" id="RectangleShape2D_floor"]
+size = Vector2(2400, 120)
+
+[sub_resource type="RectangleShape2D" id="RectangleShape2D_wall"]
+size = Vector2(40, 600)
+
+[node name="ForgottenShore" type="Node2D"]
+
+[node name="SkyBackground" type="ColorRect" parent="."]
+offset_left = -1400.0
+offset_top = -800.0
+offset_right = 1400.0
+offset_bottom = 200.0
+color = Color(0.117647, 0.145098, 0.219608, 1)
+
+[node name="Ground" type="StaticBody2D" parent="."]
+
+[node name="GroundVisual" type="ColorRect" parent="Ground"]
+offset_left = -1200.0
+offset_right = 1200.0
+offset_bottom = 120.0
+color = Color(0.184314, 0.266667, 0.215686, 1)
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="Ground"]
+position = Vector2(0, 60)
+shape = SubResource("RectangleShape2D_floor")
+
+[node name="WorldBounds" type="StaticBody2D" parent="."]
+
+[node name="LeftWall" type="CollisionShape2D" parent="WorldBounds"]
+position = Vector2(-1180, -300)
+shape = SubResource("RectangleShape2D_wall")
+
+[node name="RightWall" type="CollisionShape2D" parent="WorldBounds"]
+position = Vector2(1180, -300)
+shape = SubResource("RectangleShape2D_wall")
+
+[node name="Player" parent="." instance=ExtResource("1_player_scene")]
