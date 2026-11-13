@@ -253,6 +253,6 @@ CROWNFALL should grow from a small, reliable kingdom loop into the larger Aether
 
 ---
 
-**Documentation Version:** 1.1  
+**Documentation Version:** 1.2  
 **Project:** CROWNFALL: THE LAST LIGHT  
 **Status:** Pre-production — Documentation Baseline Synchronized
