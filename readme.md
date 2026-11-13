@@ -12,7 +12,7 @@
 
 ## Project Status
 
-<badge>Pre-production</badge>
+**Status: Pre-production**
 
 CROWNFALL is currently in the **planning and documentation stage**. The approved first development target is a small **single-player vertical slice** on Forgotten Shore.
 
@@ -222,19 +222,23 @@ AI-generated code or assets are production aids, not proof of correctness. A fea
 
 ### M0 — Godot Foundation
 
-The first implementation task is to create the smallest runnable Godot project:
+- Initialize the Godot 4 project and record the exact stable patch.
+- Configure project settings and the main scene.
+- Verify that the project launches without parser or startup errors.
+- Document run instructions.
 
-- Initialize and configure the Godot 4 project.
-- Create a main scene.
-- Create a simple Forgotten Shore test scene with a floor and collision.
-- Create a player scene with horizontal movement.
+**M0 acceptance:** the project opens and runs with the expected main scene. Do not add gameplay systems merely to inflate this milestone.
+
+### M1 — Player Prototype
+
+- Add the player scene and horizontal movement.
+- Add floor collision and a bounded test area.
 - Add a local Camera2D that follows the player.
-- Add a simple scene transition only if it does not distract from validating movement.
-- Record the exact Godot version and run instructions.
+- Add placeholder idle/walk feedback when movement is stable.
 
-**M0/M1 acceptance:** the project opens and runs, the player moves left and right, the player cannot fall through the floor, and the camera follows correctly.
+**M1 acceptance:** the player moves left and right, cannot fall through the floor, respects test bounds, and the camera follows correctly. Verify this in the actual Godot runtime.
 
-Do not add multiplayer, economy, NPC, enemy, quest, or save systems to this first foundation task.
+Do not add multiplayer, economy, NPC, enemy, quest, or save systems during M0/M1.
 
 ---
 
