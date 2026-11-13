@@ -1,0 +1,5 @@
+# Godot 4 ignores
+.godot/
+*.translation
+.DS_Store
+Thumbs.db
