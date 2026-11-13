@@ -1,6 +1,9 @@
-[gd_scene load_steps=4 format=3]
+[gd_scene load_steps=7 format=3]
 
 [ext_resource type="PackedScene" path="res://scenes/player/Player.tscn" id="1_player_scene"]
+[ext_resource type="Script" path="res://scripts/world/TimeManager.gd" id="2_time_mgr"]
+[ext_resource type="Script" path="res://scripts/world/SkyAtmosphere.gd" id="3_sky_atmo"]
+[ext_resource type="Script" path="res://scripts/ui/ClockHUD.gd" id="4_clock_hud"]
 
 [sub_resource type="RectangleShape2D" id="RectangleShape2D_floor"]
 size = Vector2(2400, 120)
@@ -10,12 +13,17 @@ size = Vector2(40, 600)
 
 [node name="ForgottenShore" type="Node2D"]
 
-[node name="SkyBackground" type="ColorRect" parent="."]
+[node name="TimeManager" type="Node" parent="."]
+script = ExtResource("2_time_mgr")
+
+[node name="SkyBackground" type="ColorRect" parent="." node_paths=PackedStringArray("time_manager")]
 offset_left = -1400.0
 offset_top = -800.0
 offset_right = 1400.0
 offset_bottom = 200.0
-color = Color(0.117647, 0.145098, 0.219608, 1)
+color = Color(0.235, 0.439, 0.627, 1)
+script = ExtResource("3_sky_atmo")
+time_manager = NodePath("../TimeManager")
 
 [node name="Ground" type="StaticBody2D" parent="."]
 
@@ -40,3 +48,17 @@ position = Vector2(1180, -300)
 shape = SubResource("RectangleShape2D_wall")
 
 [node name="Player" parent="." instance=ExtResource("1_player_scene")]
+
+[node name="ClockHUD" type="CanvasLayer" parent="." node_paths=PackedStringArray("time_manager")]
+script = ExtResource("4_clock_hud")
+time_manager = NodePath("../TimeManager")
+
+[node name="MarginContainer" type="MarginContainer" parent="ClockHUD"]
+offset_right = 260.0
+offset_bottom = 48.0
+theme_override_constants/margin_left = 16
+theme_override_constants/margin_top = 12
+
+[node name="StatusLabel" type="Label" parent="ClockHUD/MarginContainer"]
+layout_mode = 2
+text = "Day 1  •  Daylight"
