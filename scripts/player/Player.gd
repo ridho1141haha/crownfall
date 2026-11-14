@@ -2,6 +2,7 @@ class_name PlayerController
 extends CharacterBody2D
 
 signal interaction_requested(player_x: float)
+signal upgrade_tier_requested(player_x: float)
 signal recruit_requested(player_x: float)
 signal build_wall_requested(player_x: float)
 signal repair_wall_requested(player_x: float)
@@ -38,6 +39,8 @@ func _physics_process(delta: float) -> void:
 func _unhandled_input(event: InputEvent) -> void:
 	if event.is_action_pressed("interact"):
 		interaction_requested.emit(global_position.x)
+	elif event.is_action_pressed("upgrade_tier"):
+		upgrade_tier_requested.emit(global_position.x)
 	elif event.is_action_pressed("recruit_villager"):
 		recruit_requested.emit(global_position.x)
 	elif event.is_action_pressed("build_wall"):

@@ -133,6 +133,22 @@ func load_state(save_path: String = DEFAULT_SAVE_PATH) -> Dictionary:
 
 
 
+
+static func _normalize_reign_state(raw_val: Variant) -> String:
+	if typeof(raw_val) == TYPE_STRING:
+		var s: String = String(raw_val).to_upper()
+		if ["ACTIVE", "BREACH_PENALTY", "ISLAND_CLEARED"].has(s):
+			return s
+		return "ACTIVE"
+	if EconomyLedger.is_exact_int_value(raw_val):
+		var idx: int = int(roundf(float(raw_val)))
+		if idx == 1:
+			return "BREACH_PENALTY"
+		elif idx == 2:
+			return "ISLAND_CLEARED"
+	return "ACTIVE"
+
+
 static func migrate_payload(data: Variant) -> Variant:
 	if typeof(data) != TYPE_DICTIONARY:
 		return data
@@ -145,14 +161,20 @@ static func migrate_payload(data: Variant) -> Variant:
 			d["player"] = {"position_x": 0.0, "facing_direction": 1}
 		if d.has("progression_flags") and typeof(d["progression_flags"]) == TYPE_DICTIONARY:
 			var pf: Dictionary = d["progression_flags"] as Dictionary
-			if not pf.has("reign_state"):
-				pf["reign_state"] = 0
+			pf["reign_state"] = _normalize_reign_state(pf.get("reign_state", "ACTIVE"))
 			if not pf.has("hearth_level"):
 				pf["hearth_level"] = 1
 			if not pf.has("shipwreck_stage"):
 				pf["shipwreck_stage"] = 0
 			if not pf.has("portal_relic_looted"):
 				pf["portal_relic_looted"] = false
+			if not pf.has("node_states") or typeof(pf["node_states"]) != TYPE_DICTIONARY:
+				var ns: Dictionary = {}
+				var col_arr: Variant = pf.get("collected_nodes", [])
+				if typeof(col_arr) == TYPE_ARRAY:
+					for item: Variant in (col_arr as Array):
+						ns[String(item)] = true
+				pf["node_states"] = ns
 		if d.has("buildings") and typeof(d["buildings"]) == TYPE_ARRAY:
 			for b: Variant in (d["buildings"] as Array):
 				if typeof(b) == TYPE_DICTIONARY:
@@ -229,6 +251,18 @@ func validate_payload(data: Variant) -> bool:
 			return false
 
 	if typeof(dict["progression_flags"]) != TYPE_DICTIONARY:
+		return false
+	var pf_chk: Dictionary = dict["progression_flags"] as Dictionary
+	if pf_chk.has("hearth_level"):
+		if not EconomyLedger.is_exact_int_value(pf_chk["hearth_level"]):
+			return false
+		var hl: int = int(roundf(float(pf_chk["hearth_level"])))
+		if hl < 1 or hl > 3:
+			return false
+	if pf_chk.has("reign_state") and typeof(pf_chk["reign_state"]) == TYPE_STRING:
+		if not ["ACTIVE", "BREACH_PENALTY", "ISLAND_CLEARED"].has(String(pf_chk["reign_state"])):
+			return false
+	if pf_chk.has("node_states") and typeof(pf_chk["node_states"]) != TYPE_DICTIONARY:
 		return false
 
 	return true

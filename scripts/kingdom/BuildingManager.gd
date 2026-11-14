@@ -17,8 +17,8 @@ const WATCHTOWER_ID: String = "watchtower_east_01"
 const FARM_WEST_ID: String = "farm_west_01"
 const FARM_EAST_ID: String = "farm_east_01"
 
-const WALL_POSITION_X: float = 360.0
-const WATCHTOWER_POSITION_X: float = 290.0
+const WALL_POSITION_X: float = 380.0
+const WATCHTOWER_POSITION_X: float = 210.0
 const FARM_WEST_POSITION_X: float = -310.0
 const FARM_EAST_POSITION_X: float = 120.0
 

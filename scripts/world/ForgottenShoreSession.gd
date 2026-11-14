@@ -11,33 +11,49 @@ enum ReignState {
 
 const FARM_HARVEST_INTERVAL: float = 60.0
 const FARM_GOLD_YIELD: int = 2
-
-const RESOURCE_NODES: Array[Dictionary] = [
-	{"id": "cache_gold_west", "resource": &"gold", "amount": 4, "x": -480.0, "renewable": false, "label": "Ancient Coin Chest (+4 Gold)"},
-	{"id": "timber_pile_west", "resource": &"wood", "amount": 5, "x": -110.0, "renewable": true, "label": "Fallen Timber (+5 Wood)"},
-	{"id": "stone_outcrop_east", "resource": &"stone", "amount": 3, "x": 190.0, "renewable": true, "label": "Ruined Masonry (+3 Stone)"},
-	{"id": "shrine_cache_far_west", "resource": &"gold", "amount": 3, "x": -780.0, "renewable": false, "label": "Forgotten Shrine (+3 Gold)"},
+const SHIPWRECK_X: float = -1350.0
+const PORTAL_X: float = 1350.0
+const SHIPWRECK_COSTS: Array[Dictionary] = [
+	{"gold": 2, "wood": 3, "stone": 1},
+	{"gold": 2, "wood": 3, "stone": 2},
+	{"gold": 2, "wood": 2, "stone": 1},
 ]
 
 var economy: EconomyLedger = EconomyLedger.new({"gold": 2, "wood": 2, "stone": 1})
 var building_mgr: BuildingManager = BuildingManager.new()
+var resource_mgr: ResourceNodeManager = ResourceNodeManager.new()
+var hearth_sys: HearthSystem = HearthSystem.new()
 var pop_mgr: NPCPopulationManager = NPCPopulationManager.new()
 var builder_npc: NPCBuilderAgent = null
-var _follower_sprites: Dictionary = {}
 var night_mgr: NightEncounterManager = NightEncounterManager.new()
 var save_mgr: SaveManager = SaveManager.new()
-var collected_node_ids: Dictionary = {}
+
+# Backward-compatible mirror for tests inspecting collected_node_ids directly
+var collected_node_ids: Dictionary:
+	get:
+		return resource_mgr.node_states
+
+var hearth_level: int:
+	get:
+		return hearth_sys.hearth_level
+	set(val):
+		hearth_sys.apply_save_level(val)
+
 var reign_state: ReignState = ReignState.ACTIVE
-const SHIPWRECK_X: float = -1350.0
-const PORTAL_X: float = 1350.0
-const SHIPWRECK_COSTS: Array[Dictionary] = [{"gold": 2, "wood": 3, "stone": 1}, {"gold": 2, "wood": 3, "stone": 2}, {"gold": 2, "wood": 2, "stone": 1}]
-var hearth_level: int = 1
 var shipwreck_stage: int = 0
 var portal_relic_looted: bool = false
-var _stagger_cooldown: float = 0.0
+var _actor_positions: Dictionary = {"player_1": 0.0}
+var _follower_sprites: Dictionary = {}
 var _farm_timers: Dictionary = {}
+var _sfx_cache: Dictionary = {}
+var _prev_wall_hp: int = 0
+var _prev_enemy_hp: int = 0
+var _stagger_cooldown: float = 0.0
 var _last_rejection_reason: String = ""
 var _signals_wired: bool = false
+var _anim_clock: float = 0.0
+var _prev_builder_x: float = NPCBuilderAgent.CAMP_POSITION_X
+var _active_target: Dictionary = {}
 
 @onready var time_manager: TimeManager = $TimeManager as TimeManager
 @onready var player: PlayerController = $Player as PlayerController
@@ -45,69 +61,55 @@ var _signals_wired: bool = false
 @onready var town_center_sprite: Sprite2D = get_node_or_null("WorldObjects/TownCenterAnchor/TownCenterSprite") as Sprite2D
 @onready var builder_sprite: Sprite2D = get_node_or_null("WorldObjects/BuilderActor/BuilderSprite") as Sprite2D
 @onready var enemy_sprite: Sprite2D = get_node_or_null("WorldObjects/NightEnemyActor/EnemySprite") as Sprite2D
-var _anim_clock: float = 0.0
-var _prev_builder_x: float = NPCBuilderAgent.CAMP_POSITION_X
 @onready var wall_label: Label = $WorldObjects/WoodenWallPlot/WallLabel as Label
 @onready var npc_visual: Node2D = $WorldObjects/BuilderActor as Node2D
 @onready var npc_label: Label = $WorldObjects/BuilderActor/NPCLabel as Label
 @onready var enemy_visual: Node2D = $WorldObjects/NightEnemyActor as Node2D
 @onready var slice_hud: CanvasLayer = $ClockHUD as CanvasLayer
 @onready var sfx_player: AudioStreamPlayer = get_node_or_null("SFXPlayer") as AudioStreamPlayer
-var _sfx_cache: Dictionary = {}
-var _prev_wall_hp: int = 0
-var _prev_enemy_hp: int = 0
-
-
-var _active_resource_nodes: Array[Dictionary] = []
 
 
 func _init() -> void:
 	builder_npc = pop_mgr.get_primary_agent()
 
 
-func _load_resource_nodes_from_data() -> void:
-	_active_resource_nodes.clear()
-	if FileAccess.file_exists("res://data/resource_nodes.json"):
-		var parsed: Variant = JSON.parse_string(FileAccess.get_file_as_string("res://data/resource_nodes.json"))
-		if typeof(parsed) == TYPE_DICTIONARY and (parsed as Dictionary).has("nodes"):
-			for item: Variant in (parsed as Dictionary)["nodes"]:
-				if typeof(item) != TYPE_DICTIONARY:
-					continue
-				var d: Dictionary = item as Dictionary
-				_active_resource_nodes.append({
-					"id": String(d["id"]),
-					"resource": StringName(String(d["resource"])),
-					"amount": int(d["amount"]),
-					"x": float(d["x"]),
-					"renewable": bool(d.get("renewable", false)),
-					"label": String(d.get("label", "")),
-					"prompt": String(d.get("prompt", "")),
-				})
-				var lbl: Label = get_node_or_null("WorldObjects/ResourceNodes/%s/Label" % String(d["id"])) as Label
-				if lbl != null and d.has("prompt"):
-					lbl.text = String(d["prompt"])
-	if _active_resource_nodes.is_empty():
-		_active_resource_nodes.assign(RESOURCE_NODES)
-
-
 func _ready() -> void:
-	_load_resource_nodes_from_data()
 	building_mgr.register_forgotten_shore_expansion_plots()
+	_sync_resource_prompts_from_data()
 	_wire_signals()
 	_consume_pending_load_if_requested()
 	_sync_all_presentations()
-	feedback_message.emit("Forgotten Shore: [A/D] Move | [E] Interact | [R] Recruit (2G) | [B] Build/Upgrade | [F] Repair | [T] 20x | [K] Save")
+	feedback_message.emit("Forgotten Shore: [A/D] Move | [E] Interact | [Q] Upgrade | [R] Recruit | [B] Build | [F] Repair | [T] 20x | [K] Save")
+
+
+func _sync_resource_prompts_from_data() -> void:
+	for n: Dictionary in resource_mgr.nodes:
+		var lbl: Label = get_node_or_null("WorldObjects/ResourceNodes/%s/Label" % String(n["id"])) as Label
+		if lbl != null and n.has("prompt"):
+			lbl.text = String(n["prompt"])
+
+
+func set_actor_position(actor_id: String, pos_x: float) -> void:
+	_actor_positions[actor_id] = pos_x
+
+
+func get_actor_position(actor_id: String) -> float:
+	if actor_id == "player_1" and player != null:
+		_actor_positions["player_1"] = player.global_position.x
+	return float(_actor_positions.get(actor_id, 0.0))
 
 
 func _process(delta: float) -> void:
 	_anim_clock += delta
+	if player != null:
+		_actor_positions["player_1"] = player.global_position.x
 	var sim_delta: float = delta * (time_manager.time_scale if time_manager != null else 1.0)
 	var is_night: bool = time_manager != null and time_manager.current_phase == TimeManager.Phase.NIGHT
 	var is_daylight: bool = time_manager == null or time_manager.current_phase == TimeManager.Phase.DAYLIGHT
 	pop_mgr.tick_all(sim_delta, building_mgr, night_mgr)
-	night_mgr.tick(sim_delta, is_night, building_mgr, hearth_level)
-	_tick_monarch_light_risk(sim_delta, is_night)
+	night_mgr.tick(sim_delta, is_night, building_mgr, hearth_sys.hearth_level)
 	_tick_farm_plots(sim_delta, is_daylight)
+	_tick_monarch_light_risk(sim_delta, is_night)
 	_sync_dynamic_actors()
 
 
@@ -139,26 +141,40 @@ func _wire_signals() -> void:
 		time_manager.sunrise_reached.connect(_on_sunrise_reached)
 
 	if player != null:
-		player.interaction_requested.connect(func(px: float) -> void: _on_player_interact(px))
-		player.recruit_requested.connect(func(px: float) -> void: _on_player_recruit(px))
-		player.build_wall_requested.connect(func(px: float) -> void: _on_player_build_wall(px))
-		player.repair_wall_requested.connect(func(px: float) -> void: _on_player_repair_wall(px))
-		player.manual_save_requested.connect(func() -> void: _on_manual_save())
+		player.interaction_requested.connect(func(px: float) -> void:
+			set_actor_position("player_1", px)
+			_on_player_interact(px)
+		)
+		player.upgrade_tier_requested.connect(func(px: float) -> void:
+			set_actor_position("player_1", px)
+			_on_player_upgrade_tier(px)
+		)
+		player.recruit_requested.connect(func(px: float) -> void:
+			set_actor_position("player_1", px)
+			execute_world_command("player_1", &"recruit", "vagrant_camp")
+		)
+		player.build_wall_requested.connect(func(px: float) -> void:
+			set_actor_position("player_1", px)
+			_on_player_build_wall(px)
+		)
+		player.repair_wall_requested.connect(func(px: float) -> void:
+			set_actor_position("player_1", px)
+			_on_player_repair_wall(px)
+		)
+		player.manual_save_requested.connect(func() -> void: execute_world_command("player_1", &"save_game", ""))
 		player.fast_clock_toggled.connect(_on_toggle_fast_clock)
 
 	economy.transaction_rejected.connect(_record_rejection)
 	building_mgr.building_action_rejected.connect(_record_rejection)
 	building_mgr.wall_state_changed.connect(_on_wall_state_changed)
 	builder_npc.recruitment_rejected.connect(_record_rejection)
+	builder_npc.npc_state_changed.connect(_on_npc_state_changed)
 	pop_mgr.population_action_rejected.connect(_record_rejection)
 	pop_mgr.roster_changed.connect(_sync_follower_nodes)
-	builder_npc.npc_state_changed.connect(_on_npc_state_changed)
 	night_mgr.night_encounter_resolved.connect(_on_night_resolved)
 
 	if slice_hud != null and slice_hud.has_method("bind_session"):
 		slice_hud.call("bind_session", self)
-
-
 
 
 func _play_sfx(sfx_name: String) -> void:
@@ -166,10 +182,7 @@ func _play_sfx(sfx_name: String) -> void:
 		return
 	if not _sfx_cache.has(sfx_name):
 		var path: String = "res://assets/audio/%s.wav" % sfx_name
-		if ResourceLoader.exists(path):
-			_sfx_cache[sfx_name] = load(path)
-		else:
-			_sfx_cache[sfx_name] = null
+		_sfx_cache[sfx_name] = load(path) if ResourceLoader.exists(path) else null
 	var stream: AudioStream = _sfx_cache.get(sfx_name, null) as AudioStream
 	if stream != null:
 		sfx_player.stream = stream
@@ -204,137 +217,221 @@ func _record_rejection(reason: String) -> void:
 	feedback_message.emit(reason)
 
 
-func _on_player_interact(player_x: float) -> bool:
+func _resolve_target_for_actor(actor_x: float) -> Dictionary:
+	return InteractionResolver.resolve_nearest(
+		actor_x,
+		resource_mgr,
+		building_mgr,
+		pop_mgr,
+		hearth_sys,
+		shipwreck_stage,
+		SHIPWRECK_X,
+		PORTAL_X,
+		portal_relic_looted
+	)
+
+
+func execute_world_command(actor_id: String, command: StringName, target_id: String = "") -> Dictionary:
 	_last_rejection_reason = ""
-	for node_def: Dictionary in _active_resource_nodes:
-		var node_id: String = String(node_def["id"])
-		if collected_node_ids.get(node_id, false):
-			continue
-		var node_x: float = float(node_def["x"])
-		if absf(player_x - node_x) <= 72.0:
-			var res_id: StringName = node_def["resource"] as StringName
-			var amount: int = int(node_def["amount"])
-			if economy.try_add(res_id, amount):
-				collected_node_ids[node_id] = true
+	var actor_x: float = get_actor_position(actor_id)
+	var ok: bool = false
+	var resolved_target: String = target_id
+
+	match command:
+		&"collect":
+			if resolved_target.is_empty():
+				var n: Dictionary = resource_mgr.find_nearest_available(actor_x)
+				resolved_target = String(n.get("id", ""))
+			var res: Dictionary = resource_mgr.try_collect(resolved_target, actor_x, economy)
+			ok = bool(res.get("ok", false))
+			if ok:
+				var nd: Dictionary = res["node"] as Dictionary
 				_update_resource_node_visuals()
 				_play_sfx("sfx_coin")
-				_spawn_floating_text(node_x, "+%d %s" % [amount, String(res_id).capitalize()])
-				feedback_message.emit("Collected: %s" % String(node_def["label"]))
-				return true
-			return false
+				_spawn_floating_text(float(nd["x"]), "+%d %s" % [int(nd["amount"]), String(nd["resource"]).capitalize()])
+				feedback_message.emit("Collected: %s" % String(nd["label"]))
+			else:
+				_record_rejection(String(res.get("reason", "Collection failed")))
 
-	var near_stand: String = pop_mgr.get_nearest_tool_stand(player_x)
-	if not near_stand.is_empty():
-		var assigned: NPCBuilderAgent = pop_mgr.assign_tool_stand(near_stand, economy, building_mgr)
-		if assigned != null:
-			_wire_follower_signals(assigned)
-			feedback_message.emit("%s assigned as %s!" % [assigned.npc_id, assigned.role.capitalize()])
-			return true
+		&"assign_tool":
+			if resolved_target.is_empty():
+				resolved_target = pop_mgr.get_nearest_tool_stand(actor_x)
+			var assigned: NPCBuilderAgent = pop_mgr.assign_tool_stand(resolved_target, economy, building_mgr)
+			ok = (assigned != null)
+			if ok:
+				_wire_follower_signals(assigned)
+				feedback_message.emit("%s assigned as %s!" % [assigned.npc_id, assigned.role.capitalize()])
+
+		&"recruit":
+			var agent: NPCBuilderAgent = pop_mgr.recruit_next_vagrant(actor_x, economy)
+			ok = (agent != null)
+			if ok:
+				resolved_target = agent.npc_id
+				_wire_follower_signals(agent)
+				feedback_message.emit("Recruited %s (%s)! Total NPCs: %d" % [agent.npc_id, agent.role.capitalize(), pop_mgr.get_recruited_count()])
+
+		&"build":
+			if resolved_target.is_empty():
+				resolved_target = building_mgr.get_nearest_plot_id(actor_x, BuildingManager.INTERACT_RANGE)
+			if resolved_target.is_empty():
+				resolved_target = BuildingManager.WALL_ID
+			ok = building_mgr.request_start_construction(actor_x, economy, resolved_target)
+			if ok:
+				_play_sfx("sfx_build")
+				feedback_message.emit("%s blueprint funded! Builder will construct it." % resolved_target)
+
+		&"repair":
+			if resolved_target.is_empty():
+				resolved_target = building_mgr.get_nearest_plot_id(actor_x, BuildingManager.INTERACT_RANGE)
+			if resolved_target.is_empty():
+				resolved_target = BuildingManager.WALL_ID
+			if time_manager != null and time_manager.current_phase == TimeManager.Phase.NIGHT:
+				if not economy.try_spend({"wood": 1}):
+					_record_rejection("Night panic repair costs +1 extra Wood!")
+					return {"ok": false, "actor_id": actor_id, "command": String(command), "target_id": resolved_target, "reason": _last_rejection_reason}
+			ok = building_mgr.request_repair(actor_x, economy, resolved_target)
+			if ok:
+				_play_sfx("sfx_build")
+				feedback_message.emit("Structure (%s) repaired to full durability!" % resolved_target)
+
+		&"upgrade_building":
+			if resolved_target.is_empty():
+				resolved_target = building_mgr.get_nearest_plot_id(actor_x, BuildingManager.INTERACT_RANGE)
+			if resolved_target.is_empty():
+				resolved_target = BuildingManager.WALL_ID
+			ok = building_mgr.request_upgrade_wall(actor_x, economy, resolved_target)
+			if ok:
+				_play_sfx("sfx_build")
+				feedback_message.emit("Upgraded to Stone Wall Tier 2 (260 HP, 20 thorn dmg)!")
+
+		&"upgrade_hearth":
+			var hres: Dictionary = hearth_sys.try_upgrade(actor_x, economy)
+			ok = bool(hres.get("ok", false))
+			if ok:
+				_sync_hearth_visuals()
+				_play_sfx("sfx_build")
+				_spawn_floating_text(0.0, "Hearth Lv.%d!" % hearth_sys.hearth_level, Color(1.0, 0.78, 0.35, 1.0))
+				feedback_message.emit("Hearth upgraded to Lv.%d (Light radius: %.0f px)!" % [hearth_sys.hearth_level, hearth_sys.get_radius_px()])
+			else:
+				_record_rejection(String(hres.get("reason", "Hearth upgrade failed")))
+
+		&"shipwreck":
+			ok = _on_player_interact_shipwreck(actor_x)
+
+		&"loot_portal":
+			if absf(actor_x - PORTAL_X) <= 96.0:
+				ok = _on_player_loot_portal_relic()
+			else:
+				_record_rejection("Move closer to Greed Portal (x=1350)")
+
+		&"save_game":
+			ok = _on_manual_save()
+
+		_:
+			_record_rejection("Unknown world command: %s" % String(command))
+
+	return {
+		"ok": ok,
+		"actor_id": actor_id,
+		"command": String(command),
+		"target_id": resolved_target,
+		"reason": "" if ok else _last_rejection_reason,
+	}
+
+
+func _on_player_interact(player_x: float) -> bool:
+	var tgt: Dictionary = _resolve_target_for_actor(player_x)
+	if not bool(tgt.get("has_target", false)):
+		_record_rejection("Nothing to collect or interact with at x=%.0f." % player_x)
 		return false
+	var p_cmd: StringName = tgt["primary_command"] as StringName
+	if String(p_cmd).is_empty():
+		if not String(tgt["upgrade_command"]).is_empty():
+			_record_rejection("Press [Q] to upgrade %s" % String(tgt["target_id"]))
+		else:
+			_record_rejection("No action available for %s" % String(tgt["target_id"]))
+		return false
+	var res: Dictionary = execute_world_command("player_1", p_cmd, String(tgt["target_id"]))
+	return bool(res.get("ok", false))
 
-	if absf(player_x - NPCBuilderAgent.CAMP_POSITION_X) <= 90.0 and pop_mgr.camp_vagrants_available > 0:
-		return _on_player_recruit(player_x)
 
-	var near_plot: String = building_mgr.get_nearest_plot_id(player_x, BuildingManager.INTERACT_RANGE)
-	if not near_plot.is_empty():
-		var plot: Dictionary = building_mgr.get_plot(near_plot)
-		var st: int = int(plot["state"])
-		if st == BuildingManager.WallState.DAMAGED:
-			return _on_player_repair_wall(player_x, near_plot)
-		elif st == BuildingManager.WallState.PLACEHOLDER or st == BuildingManager.WallState.DESTROYED:
-			return _on_player_build_wall(player_x, near_plot)
-		elif building_mgr.can_upgrade_wall(player_x, near_plot):
-			return _on_player_upgrade_wall(player_x, near_plot)
-
-	if absf(player_x - SHIPWRECK_X) <= 96.0:
-		return _on_player_interact_shipwreck(player_x)
-
-	if absf(player_x - PORTAL_X) <= 96.0 and not portal_relic_looted:
-		return _on_player_loot_portal_relic()
-
-	if absf(player_x) <= 80.0 and hearth_level < 3:
-		return _on_player_upgrade_hearth(player_x)
-
-	_record_rejection("Nothing to collect or interact with at x=%.0f." % player_x)
+func _on_player_upgrade_tier(player_x: float) -> bool:
+	var tgt: Dictionary = _resolve_target_for_actor(player_x)
+	if bool(tgt.get("has_target", false)) and not String(tgt["upgrade_command"]).is_empty():
+		var res: Dictionary = execute_world_command("player_1", tgt["upgrade_command"] as StringName, String(tgt["target_id"]))
+		return bool(res.get("ok", false))
+	if absf(player_x) <= HearthSystem.INTERACT_RANGE and hearth_sys.can_upgrade():
+		var hres: Dictionary = execute_world_command("player_1", &"upgrade_hearth", "town_hearth")
+		return bool(hres.get("ok", false))
+	_record_rejection("Nothing to upgrade near x=%.0f." % player_x)
 	return false
-
-
-func _on_player_recruit(player_x: float) -> bool:
-	_last_rejection_reason = ""
-	var agent: NPCBuilderAgent = pop_mgr.recruit_next_vagrant(player_x, economy)
-	if agent != null:
-		_wire_follower_signals(agent)
-		feedback_message.emit("Recruited %s (%s)! Total NPCs: %d" % [agent.npc_id, agent.role.capitalize(), pop_mgr.get_recruited_count()])
-		return true
-	return false
-
-
-func _wire_follower_signals(agent: NPCBuilderAgent) -> void:
-	if agent == null:
-		return
-	if not agent.farm_gold_earned.is_connected(_on_farmer_gold_earned):
-		agent.farm_gold_earned.connect(_on_farmer_gold_earned)
-	if not agent.archer_volley_fired.is_connected(_on_archer_volley_fired):
-		agent.archer_volley_fired.connect(_on_archer_volley_fired)
-
-
-func _on_farmer_gold_earned(npc_id: String, amount: int) -> void:
-	if economy.try_add(&"gold", amount):
-		_play_sfx("sfx_coin")
-		_spawn_floating_text(player.global_position.x if player != null else 0.0, "+%d Gold" % amount)
-		feedback_message.emit("Farmer %s harvested +%d Gold!" % [npc_id, amount])
-
-
-func _on_archer_volley_fired(_npc_id: String, damage: int, from_tower: bool) -> void:
-	_play_sfx("sfx_bow")
-	_spawn_floating_text(night_mgr.enemy_x, "-%d" % damage, Color(1.0, 0.45, 0.45, 1.0))
-	feedback_message.emit("Archer volley (%d dmg%s)!" % [damage, " from Watchtower" if from_tower else ""])
 
 
 func _on_player_build_wall(player_x: float, plot_id: String = "") -> bool:
-	_last_rejection_reason = ""
 	var target_id: String = plot_id
 	if target_id.is_empty():
 		target_id = building_mgr.get_nearest_plot_id(player_x, BuildingManager.INTERACT_RANGE)
 	if target_id.is_empty():
 		target_id = BuildingManager.WALL_ID
 	if building_mgr.can_upgrade_wall(player_x, target_id):
-		return _on_player_upgrade_wall(player_x, target_id)
-	if building_mgr.request_start_construction(player_x, economy, target_id):
-		_play_sfx("sfx_build")
-		feedback_message.emit("%s blueprint funded! Builder will construct it." % target_id)
-		return true
-	return false
+		return bool(execute_world_command("player_1", &"upgrade_building", target_id).get("ok", false))
+	return bool(execute_world_command("player_1", &"build", target_id).get("ok", false))
 
 
-func _on_player_upgrade_wall(player_x: float, plot_id: String = BuildingManager.WALL_ID) -> bool:
-	_last_rejection_reason = ""
-	if building_mgr.request_upgrade_wall(player_x, economy, plot_id):
-		feedback_message.emit("Upgraded to Stone Wall Tier 2 (260 HP, 20 thorn dmg)!")
-		return true
-	return false
+func _on_player_repair_wall(player_x: float, plot_id: String = "") -> bool:
+	var target_id: String = plot_id
+	if target_id.is_empty():
+		target_id = building_mgr.get_nearest_plot_id(player_x, BuildingManager.INTERACT_RANGE)
+	if target_id.is_empty():
+		target_id = BuildingManager.WALL_ID
+	return bool(execute_world_command("player_1", &"repair", target_id).get("ok", false))
 
 
+func execute_command(command_id: StringName, actor_x: float, params: Dictionary = {}) -> bool:
+	set_actor_position("local", actor_x)
+	var plot_id: String = String(params.get("plot_id", ""))
+	match command_id:
+		&"interact":
+			var tgt: Dictionary = _resolve_target_for_actor(actor_x)
+			if not bool(tgt.get("has_target", false)):
+				_record_rejection("Nothing to collect or interact with at x=%.0f." % actor_x)
+				return false
+			var p_cmd: StringName = tgt["primary_command"] as StringName
+			if String(p_cmd).is_empty():
+				return false
+			return bool(execute_world_command("local", p_cmd, String(tgt["target_id"])).get("ok", false))
+		&"recruit":
+			return bool(execute_world_command("local", &"recruit", "vagrant_camp").get("ok", false))
+		&"build_wall":
+			var pid_b: String = BuildingManager.WALL_ID if plot_id.is_empty() else plot_id
+			return bool(execute_world_command("local", &"build", pid_b).get("ok", false))
+		&"upgrade_wall":
+			var pid_u: String = BuildingManager.WALL_ID if plot_id.is_empty() else plot_id
+			return bool(execute_world_command("local", &"upgrade_building", pid_u).get("ok", false))
+		&"repair_wall":
+			var pid_r: String = BuildingManager.WALL_ID if plot_id.is_empty() else plot_id
+			return bool(execute_world_command("local", &"repair", pid_r).get("ok", false))
+		_:
+			return bool(execute_world_command("local", command_id, plot_id).get("ok", false))
 
 
-func get_hearth_upgrade_cost() -> Dictionary:
-	if hearth_level == 1:
-		return {"gold": 4, "wood": 4, "stone": 2}
-	elif hearth_level == 2:
-		return {"gold": 6, "wood": 5, "stone": 4}
-	return {}
-
-
+func execute_command_detailed(command_id: StringName, actor_x: float, params: Dictionary = {}) -> Dictionary:
+	var ok: bool = execute_command(command_id, actor_x, params)
+	return {
+		"ok": ok,
+		"command": String(command_id),
+		"reason": "" if ok else _last_rejection_reason,
+	}
 
 
 func _on_player_interact_shipwreck(player_x: float) -> bool:
-	_last_rejection_reason = ""
 	if absf(player_x - SHIPWRECK_X) > 96.0:
 		_record_rejection("Move closer to the Shipwreck (x=-1350)")
 		return false
 	if shipwreck_stage >= 3:
 		reign_state = ReignState.ISLAND_CLEARED
 		save_game_state()
+		_play_sfx("sfx_coin")
 		feedback_message.emit("Ship repaired! Setting sail from Forgotten Shore toward Eldergrove Forest!")
 		return true
 	var cost: Dictionary = SHIPWRECK_COSTS[shipwreck_stage]
@@ -363,92 +460,6 @@ func _on_player_loot_portal_relic() -> bool:
 	return false
 
 
-func _sync_landmark_visuals() -> void:
-	var ship_spr: Sprite2D = get_node_or_null("WorldObjects/ShipwreckAnchor/ShipSprite") as Sprite2D
-	var ship_lbl: Label = get_node_or_null("WorldObjects/ShipwreckAnchor/ShipLabel") as Label
-	if ship_spr != null:
-		ship_spr.frame = clampi(shipwreck_stage, 0, 3)
-	if ship_lbl != null:
-		if shipwreck_stage >= 3:
-			ship_lbl.text = "Vessel Ready! [E] Set Sail"
-		else:
-			var c: Dictionary = SHIPWRECK_COSTS[shipwreck_stage]
-			ship_lbl.text = "Shipwreck [E] Stage %d/3\n%dG %dW %dS" % [shipwreck_stage + 1, int(c["gold"]), int(c["wood"]), int(c["stone"])]
-	var portal_spr: Sprite2D = get_node_or_null("WorldObjects/GreedPortalAnchor/PortalSprite") as Sprite2D
-	var portal_lbl: Label = get_node_or_null("WorldObjects/GreedPortalAnchor/PortalLabel") as Label
-	if portal_spr != null:
-		portal_spr.frame = 1 if reign_state == ReignState.ISLAND_CLEARED else 0
-	if portal_lbl != null:
-		portal_lbl.text = "Greed Portal (Scavenged)" if portal_relic_looted else "Greed Portal [E]\nScavenge Relic (+3G +2S)"
-
-
-func _on_player_upgrade_hearth(player_x: float) -> bool:
-	_last_rejection_reason = ""
-	if absf(player_x) > 80.0:
-		_record_rejection("Move closer to Town Center Hearth (x=0) to upgrade")
-		return false
-	if hearth_level >= 3:
-		_record_rejection("Solar Brazier is already at maximum Tier 3")
-		return false
-	var cost: Dictionary = get_hearth_upgrade_cost()
-	if not economy.try_spend(cost):
-		_record_rejection("Need %dG %dW %dS to upgrade Town Center Hearth" % [int(cost["gold"]), int(cost["wood"]), int(cost["stone"])])
-		return false
-	hearth_level += 1
-	_sync_hearth_visuals()
-	_sync_landmark_visuals()
-	_play_sfx("sfx_build")
-	_spawn_floating_text(0.0, "Hearth Lv.%d!" % hearth_level, Color(1.0, 0.78, 0.35, 1.0))
-	feedback_message.emit("Hearth upgraded to Lv.%d (Light radius: %.0f px)!" % [hearth_level, NightEncounterManager.get_hearth_radius(hearth_level)])
-	return true
-
-
-func _sync_hearth_visuals() -> void:
-	var light: PointLight2D = get_node_or_null("WorldObjects/TownCenterAnchor/CampfireLight") as PointLight2D
-	if light != null:
-		var scales: Array[float] = [2.6, 4.2, 5.8]
-		light.texture_scale = scales[clampi(hearth_level - 1, 0, 2)]
-	var t_lbl: Label = get_node_or_null("WorldObjects/TownCenterAnchor/TownLabel") as Label
-	if t_lbl != null:
-		if hearth_level == 1:
-			t_lbl.text = "Town Center (Hearth Lv.1)\n[E] Beacon Lv2: 4G 4W 2S"
-		elif hearth_level == 2:
-			t_lbl.text = "Town Center (Hearth Lv.2)\n[E] Solar Lv3: 6G 5W 4S"
-		else:
-			t_lbl.text = "Town Center (Solar Brazier Lv.3)"
-
-
-func _tick_monarch_light_risk(sim_delta: float, is_night: bool) -> void:
-	_stagger_cooldown = maxf(0.0, _stagger_cooldown - sim_delta)
-	if not is_night or not night_mgr.enemy_active or player == null or _stagger_cooldown > 0.0:
-		return
-	var px: float = player.global_position.x
-	var in_light: bool = absf(px) <= NightEncounterManager.get_hearth_radius(hearth_level)
-	if not in_light and absf(px - night_mgr.enemy_x) <= 44.0:
-		_stagger_cooldown = 2.0
-		player.global_position.x = clampf(px - 48.0, player.min_bound_x, player.max_bound_x)
-		if economy.get_amount(&"gold") > 0:
-			economy.try_spend({"gold": 1})
-		feedback_message.emit("Shadow Stagger! Stay inside the Light at Night (-1 Gold)!")
-
-
-func _on_player_repair_wall(player_x: float, plot_id: String = "") -> bool:
-	_last_rejection_reason = ""
-	var target_id: String = plot_id
-	if target_id.is_empty():
-		target_id = building_mgr.get_nearest_plot_id(player_x, BuildingManager.INTERACT_RANGE)
-	if target_id.is_empty():
-		target_id = BuildingManager.WALL_ID
-	if time_manager != null and time_manager.current_phase == TimeManager.Phase.NIGHT:
-		if not economy.try_spend({"wood": 1}):
-			_record_rejection("Night panic repair costs +1 extra Wood!")
-			return false
-	if building_mgr.request_repair(player_x, economy, target_id):
-		feedback_message.emit("Structure (%s) repaired to full durability!" % target_id)
-		return true
-	return false
-
-
 func _on_manual_save() -> bool:
 	_last_rejection_reason = ""
 	if time_manager != null and time_manager.current_phase == TimeManager.Phase.NIGHT:
@@ -461,32 +472,26 @@ func _on_manual_save() -> bool:
 	return false
 
 
-func execute_command(command_id: StringName, actor_x: float, params: Dictionary = {}) -> bool:
-	var plot_id: String = String(params.get("plot_id", ""))
-	match command_id:
-		&"interact":
-			return _on_player_interact(actor_x)
-		&"recruit":
-			return _on_player_recruit(actor_x)
-		&"build_wall":
-			return _on_player_build_wall(actor_x, plot_id)
-		&"upgrade_wall":
-			return _on_player_upgrade_wall(actor_x, BuildingManager.WALL_ID if plot_id.is_empty() else plot_id)
-		&"repair_wall":
-			return _on_player_repair_wall(actor_x, plot_id)
-		&"save_game":
-			return _on_manual_save()
-	_record_rejection("Unknown command: %s" % String(command_id))
-	return false
+func _wire_follower_signals(agent: NPCBuilderAgent) -> void:
+	if agent == null:
+		return
+	if not agent.farm_gold_earned.is_connected(_on_farmer_gold_earned):
+		agent.farm_gold_earned.connect(_on_farmer_gold_earned)
+	if not agent.archer_volley_fired.is_connected(_on_archer_volley_fired):
+		agent.archer_volley_fired.connect(_on_archer_volley_fired)
 
 
-func execute_command_detailed(command_id: StringName, actor_x: float, params: Dictionary = {}) -> Dictionary:
-	var ok: bool = execute_command(command_id, actor_x, params)
-	return {
-		"ok": ok,
-		"command": String(command_id),
-		"reason": "" if ok else _last_rejection_reason,
-	}
+func _on_farmer_gold_earned(npc_id: String, amount: int) -> void:
+	if economy.try_add(&"gold", amount):
+		_play_sfx("sfx_coin")
+		_spawn_floating_text(player.global_position.x if player != null else 0.0, "+%d Gold" % amount)
+		feedback_message.emit("Farmer %s harvested +%d Gold!" % [npc_id, amount])
+
+
+func _on_archer_volley_fired(_npc_id: String, damage: int, from_tower: bool) -> void:
+	_play_sfx("sfx_bow")
+	_spawn_floating_text(night_mgr.enemy_x, "-%d" % damage, Color(1.0, 0.45, 0.45, 1.0))
+	feedback_message.emit("Archer volley (%d dmg%s)!" % [damage, " from Watchtower" if from_tower else ""])
 
 
 func _on_toggle_fast_clock() -> void:
@@ -498,18 +503,10 @@ func _on_toggle_fast_clock() -> void:
 
 func _on_daylight_started(day_number: int) -> void:
 	pop_mgr.set_dusk_or_night_safety(false, building_mgr)
-	# Regenerate renewable Wood & Stone nodes on Day 2+
 	if day_number > 1:
-		_refresh_renewable_nodes()
+		resource_mgr.refresh_renewable_nodes()
+		_update_resource_node_visuals()
 	feedback_message.emit("Day %d Daylight — Wood & Stone nodes refreshed! Expand Farms, Watchtower & Stone Wall." % day_number)
-
-
-
-func _refresh_renewable_nodes() -> void:
-	for node_def: Dictionary in _active_resource_nodes:
-		if bool(node_def.get("renewable", false)):
-			collected_node_ids.erase(String(node_def["id"]))
-	_update_resource_node_visuals()
 
 
 func _on_sunset_started(_day_number: int) -> void:
@@ -538,7 +535,8 @@ func _on_sunrise_reached(completed_day: int) -> void:
 		reign_state = ReignState.ISLAND_CLEARED
 	else:
 		reign_state = ReignState.ACTIVE
-	_refresh_renewable_nodes()
+	resource_mgr.refresh_renewable_nodes()
+	_update_resource_node_visuals()
 	pop_mgr.on_sunrise_refill()
 	save_game_state()
 
@@ -552,6 +550,52 @@ func _on_night_resolved(survived: bool, wall_held: bool) -> void:
 		feedback_message.emit("Sunrise reached! The wall fell, but dawn broke in time. Auto-saved!")
 	else:
 		feedback_message.emit("Raiders breached Town Center! Half your Gold was lost; rebuild before next dusk.")
+
+
+func _sync_hearth_visuals() -> void:
+	var light: PointLight2D = get_node_or_null("WorldObjects/TownCenterAnchor/CampfireLight") as PointLight2D
+	if light != null:
+		light.texture_scale = hearth_sys.get_texture_scale()
+	var t_lbl: Label = get_node_or_null("WorldObjects/TownCenterAnchor/TownLabel") as Label
+	if t_lbl != null:
+		if hearth_sys.hearth_level == 1:
+			t_lbl.text = "Town Center (Hearth Lv.1)\n[Q] Beacon Lv2: 4G 4W 2S"
+		elif hearth_sys.hearth_level == 2:
+			t_lbl.text = "Town Center (Hearth Lv.2)\n[Q] Solar Lv3: 6G 5W 4S"
+		else:
+			t_lbl.text = "Town Center (Solar Brazier Lv.3)"
+
+
+func _sync_landmark_visuals() -> void:
+	var ship_spr: Sprite2D = get_node_or_null("WorldObjects/ShipwreckAnchor/ShipSprite") as Sprite2D
+	var ship_lbl: Label = get_node_or_null("WorldObjects/ShipwreckAnchor/ShipLabel") as Label
+	if ship_spr != null:
+		ship_spr.frame = clampi(shipwreck_stage, 0, 3)
+	if ship_lbl != null:
+		if shipwreck_stage >= 3:
+			ship_lbl.text = "Vessel Ready! [E] Set Sail"
+		else:
+			var c: Dictionary = SHIPWRECK_COSTS[shipwreck_stage]
+			ship_lbl.text = "Shipwreck [E] Stage %d/3\n%dG %dW %dS" % [shipwreck_stage + 1, int(c["gold"]), int(c["wood"]), int(c["stone"])]
+	var portal_spr: Sprite2D = get_node_or_null("WorldObjects/GreedPortalAnchor/PortalSprite") as Sprite2D
+	var portal_lbl: Label = get_node_or_null("WorldObjects/GreedPortalAnchor/PortalLabel") as Label
+	if portal_spr != null:
+		portal_spr.frame = 1 if reign_state == ReignState.ISLAND_CLEARED else 0
+	if portal_lbl != null:
+		portal_lbl.text = "Greed Portal (Scavenged)" if portal_relic_looted else "Greed Portal [E]\nScavenge Relic (+3G +2S)"
+
+
+func _tick_monarch_light_risk(sim_delta: float, is_night: bool) -> void:
+	_stagger_cooldown = maxf(0.0, _stagger_cooldown - sim_delta)
+	if not is_night or not night_mgr.enemy_active or player == null or _stagger_cooldown > 0.0:
+		return
+	var px: float = player.global_position.x
+	if not hearth_sys.is_in_light(px) and absf(px - night_mgr.enemy_x) <= 44.0:
+		_stagger_cooldown = 2.0
+		player.global_position.x = clampf(px - 48.0, player.min_bound_x, player.max_bound_x)
+		if economy.get_amount(&"gold") > 0:
+			economy.try_spend({"gold": 1})
+		feedback_message.emit("Shadow Stagger! Stay inside the Light at Night (-1 Gold)!")
 
 
 func _get_plot_nodes(plot_id: String) -> Dictionary:
@@ -578,7 +622,7 @@ func _get_plot_nodes(plot_id: String) -> Dictionary:
 				"label": get_node_or_null("WorldObjects/FarmEastPlot/FarmLabel") as Label,
 				"title": "Farm Plot",
 				"cost": "3G 4W",
-				}
+			}
 	return {}
 
 
@@ -598,7 +642,7 @@ func _on_wall_state_changed(wall_id: String, new_state: String, progress: float,
 		"PLACEHOLDER":
 			spr.frame = 0
 			spr.modulate = Color(1.0, 1.0, 1.0, 0.75)
-			lbl.text = "%s [B]\n%s" % [title, cost_txt]
+			lbl.text = "%s [E/B]\n%s" % [title, cost_txt]
 		"UNDER_CONSTRUCTION":
 			spr.frame = 1
 			spr.modulate = Color(1.0, 1.0, 1.0, 1.0)
@@ -610,18 +654,18 @@ func _on_wall_state_changed(wall_id: String, new_state: String, progress: float,
 				lbl.text = "Stone Wall Lv.2\nHP %d/%d" % [durability, max_dur]
 			elif wall_id == BuildingManager.WALL_ID:
 				spr.modulate = Color(1.0, 1.0, 1.0, 1.0)
-				lbl.text = "Wooden Wall [B: Stone Lv2]\nHP %d/%d (3G 2W 5S)" % [durability, max_dur]
+				lbl.text = "Wooden Wall [Q: Stone Lv2]\nHP %d/%d (3G 2W 5S)" % [durability, max_dur]
 			else:
 				spr.modulate = Color(1.0, 1.0, 1.0, 1.0)
 				lbl.text = "%s\nHP %d/%d" % [title, durability, max_dur]
 		"DAMAGED":
 			spr.frame = 3
 			spr.modulate = Color(1.0, 0.85, 0.85, 1.0)
-			lbl.text = "Damaged %s [F]\nHP %d/%d" % [title, durability, max_dur]
+			lbl.text = "Damaged %s [E/F]\nHP %d/%d" % [title, durability, max_dur]
 		"DESTROYED":
 			spr.frame = 0
 			spr.modulate = Color(0.75, 0.4, 0.4, 0.65)
-			lbl.text = "Destroyed %s [B]\nRebuild: %s" % [title, cost_txt]
+			lbl.text = "Destroyed %s [E/B]\nRebuild: %s" % [title, cost_txt]
 
 
 func _on_npc_state_changed(_npc_id: String, _role: String, state_name: String, pos_x: float) -> void:
@@ -629,7 +673,7 @@ func _on_npc_state_changed(_npc_id: String, _role: String, state_name: String, p
 		npc_visual.position.x = pos_x
 	if npc_label != null:
 		if not builder_npc.recruited:
-			npc_label.text = "Vagrant [R: 2G]"
+			npc_label.text = "Vagrant [E/R: 2G]"
 		else:
 			match state_name:
 				"WORKING":
@@ -639,8 +683,6 @@ func _on_npc_state_changed(_npc_id: String, _role: String, state_name: String, p
 				_:
 					npc_label.text = ""
 			npc_label.visible = not npc_label.text.is_empty()
-
-
 
 
 func _sync_follower_nodes() -> void:
@@ -680,33 +722,25 @@ func _update_proximity_prompts() -> void:
 	if player == null:
 		return
 	var px: float = player.global_position.x
+	_active_target = _resolve_target_for_actor(px)
+	var active_kind: String = String(_active_target.get("kind", ""))
+	var active_id: String = String(_active_target.get("target_id", ""))
+	var highlight_col: Color = Color(1.0, 0.95, 0.55, 1.0)
+	var normal_col: Color = Color(1.0, 1.0, 1.0, 1.0)
 
-	var nodes_root: Node = get_node_or_null("WorldObjects/ResourceNodes")
-	if nodes_root != null:
-		for node_def: Dictionary in _active_resource_nodes:
-			var node_id: String = String(node_def["id"])
-			var lbl: Label = nodes_root.get_node_or_null(node_id + "/Label") as Label
-			if lbl != null:
-				var collected: bool = bool(collected_node_ids.get(node_id, false))
-				lbl.visible = (not collected) and (absf(px - float(node_def["x"])) <= 80.0)
+	# Show ONLY the single active resolved prompt (plus live build/damage status)
+	for n: Dictionary in resource_mgr.nodes:
+		var nid: String = String(n["id"])
+		var lbl: Label = get_node_or_null("WorldObjects/ResourceNodes/%s/Label" % nid) as Label
+		if lbl != null:
+			var is_active: bool = (active_kind == "resource" and active_id == nid)
+			lbl.visible = is_active and not resource_mgr.is_collected(nid)
+			lbl.modulate = highlight_col if is_active else normal_col
 
 	if npc_label != null and not builder_npc.recruited:
-		npc_label.visible = absf(px - builder_npc.position_x) <= 105.0
-
-	var ship_lbl: Label = get_node_or_null("WorldObjects/ShipwreckAnchor/ShipLabel") as Label
-	if ship_lbl != null:
-		ship_lbl.visible = absf(px - SHIPWRECK_X) <= 120.0
-	var portal_lbl: Label = get_node_or_null("WorldObjects/GreedPortalAnchor/PortalLabel") as Label
-	if portal_lbl != null:
-		portal_lbl.visible = absf(px - PORTAL_X) <= 120.0
-
-	var stands_root: Node = get_node_or_null("WorldObjects/ToolStands")
-	if stands_root != null:
-		for sid: String in NPCPopulationManager.TOOL_STANDS.keys():
-			var lbl: Label = stands_root.get_node_or_null(sid + "/Label") as Label
-			if lbl != null:
-				var sx: float = float((NPCPopulationManager.TOOL_STANDS[sid] as Dictionary)["x"])
-				lbl.visible = absf(px - sx) <= NPCPopulationManager.STAND_RANGE
+		var camp_active: bool = (active_kind == "camp")
+		npc_label.visible = camp_active
+		npc_label.modulate = highlight_col if camp_active else normal_col
 
 	for plot_id: String in [BuildingManager.WALL_ID, BuildingManager.WATCHTOWER_ID, BuildingManager.FARM_WEST_ID, BuildingManager.FARM_EAST_ID]:
 		var nodes: Dictionary = _get_plot_nodes(plot_id)
@@ -717,8 +751,26 @@ func _update_proximity_prompts() -> void:
 			continue
 		var plot: Dictionary = building_mgr.get_plot(plot_id)
 		var st: int = int(plot["state"])
-		var near: bool = absf(px - float(plot["position_x"])) <= 120.0
-		lbl.visible = near or st == BuildingManager.WallState.UNDER_CONSTRUCTION or st == BuildingManager.WallState.DAMAGED
+		var is_active_plot: bool = (active_kind == "building" and active_id == plot_id)
+		lbl.visible = is_active_plot or st == BuildingManager.WallState.UNDER_CONSTRUCTION or st == BuildingManager.WallState.DAMAGED
+		lbl.modulate = highlight_col if is_active_plot else normal_col
+
+	var ship_lbl: Label = get_node_or_null("WorldObjects/ShipwreckAnchor/ShipLabel") as Label
+	if ship_lbl != null:
+		ship_lbl.visible = (active_kind == "shipwreck")
+		ship_lbl.modulate = highlight_col if ship_lbl.visible else normal_col
+
+	var portal_lbl: Label = get_node_or_null("WorldObjects/GreedPortalAnchor/PortalLabel") as Label
+	if portal_lbl != null:
+		portal_lbl.visible = (active_kind == "portal")
+		portal_lbl.modulate = highlight_col if portal_lbl.visible else normal_col
+
+	for sid: String in NPCPopulationManager.TOOL_STANDS.keys():
+		var lbl: Label = get_node_or_null("WorldObjects/ToolStands/%s/Label" % sid) as Label
+		if lbl != null:
+			var is_stand: bool = (active_kind == "tool_stand" and active_id == sid)
+			lbl.visible = is_stand
+			lbl.modulate = highlight_col if is_stand else normal_col
 
 
 func _sync_dynamic_actors() -> void:
@@ -779,11 +831,11 @@ func _update_resource_node_visuals() -> void:
 	var nodes_root: Node = get_node_or_null("WorldObjects/ResourceNodes")
 	if nodes_root == null:
 		return
-	for node_def: Dictionary in _active_resource_nodes:
-		var node_id: String = String(node_def["id"])
+	for n: Dictionary in resource_mgr.nodes:
+		var node_id: String = String(n["id"])
 		var marker: CanvasItem = nodes_root.get_node_or_null(node_id) as CanvasItem
 		if marker != null:
-			marker.modulate.a = 0.25 if collected_node_ids.get(node_id, false) else 1.0
+			marker.modulate.a = 0.25 if resource_mgr.is_collected(node_id) else 1.0
 
 
 func _sync_all_presentations() -> void:
@@ -803,8 +855,30 @@ func _sync_all_presentations() -> void:
 		builder_npc.position_x
 	)
 	_sync_hearth_visuals()
+	_sync_landmark_visuals()
 	_update_resource_node_visuals()
 	_sync_dynamic_actors()
+
+
+func _reign_state_to_string(rs: ReignState) -> String:
+	match rs:
+		ReignState.BREACH_PENALTY:
+			return "BREACH_PENALTY"
+		ReignState.ISLAND_CLEARED:
+			return "ISLAND_CLEARED"
+		_:
+			return "ACTIVE"
+
+
+func _string_to_reign_state(raw_val: Variant) -> ReignState:
+	var norm: String = SaveManager._normalize_reign_state(raw_val)
+	match norm:
+		"BREACH_PENALTY":
+			return ReignState.BREACH_PENALTY
+		"ISLAND_CLEARED":
+			return ReignState.ISLAND_CLEARED
+		_:
+			return ReignState.ACTIVE
 
 
 func build_save_payload() -> Dictionary:
@@ -832,9 +906,10 @@ func build_save_payload() -> Dictionary:
 		"night_encounter": night_mgr.to_save_dict(),
 		"progression_flags": {
 			"first_night_survived": night_mgr.first_night_survived,
-			"collected_nodes": collected_node_ids.keys(),
-			"reign_state": int(reign_state),
-			"hearth_level": hearth_level,
+			"collected_nodes": resource_mgr.get_collected_ids_array(),
+			"node_states": resource_mgr.to_save_dict(),
+			"reign_state": _reign_state_to_string(reign_state),
+			"hearth_level": hearth_sys.hearth_level,
 			"shipwreck_stage": shipwreck_stage,
 			"portal_relic_looted": portal_relic_looted,
 		},
@@ -856,6 +931,7 @@ func load_game_state(save_path: String = SaveManager.DEFAULT_SAVE_PATH) -> bool:
 		var saved_px: float = float(p_dict.get("position_x", 0.0))
 		player.global_position.x = clampf(saved_px, player.min_bound_x, player.max_bound_x)
 		player.facing_direction = 1 if int(p_dict.get("facing_direction", 1)) >= 0 else -1
+		set_actor_position("player_1", player.global_position.x)
 
 	if data.has("night_encounter") and typeof(data["night_encounter"]) == TYPE_DICTIONARY:
 		night_mgr.apply_save_dict(data["night_encounter"])
@@ -875,19 +951,15 @@ func load_game_state(save_path: String = SaveManager.DEFAULT_SAVE_PATH) -> bool:
 
 	var flags: Dictionary = data["progression_flags"]
 	night_mgr.first_night_survived = bool(flags.get("first_night_survived", night_mgr.first_night_survived))
-	reign_state = int(flags.get("reign_state", ReignState.ACTIVE)) as ReignState
-	hearth_level = clampi(int(flags.get("hearth_level", 1)), 1, 3)
+	reign_state = _string_to_reign_state(flags.get("reign_state", "ACTIVE"))
+	hearth_sys.apply_save_level(int(flags.get("hearth_level", 1)))
 	shipwreck_stage = clampi(int(flags.get("shipwreck_stage", 0)), 0, 3)
 	portal_relic_looted = bool(flags.get("portal_relic_looted", false))
-	collected_node_ids.clear()
-	var saved_nodes: Variant = flags.get("collected_nodes", [])
-	if typeof(saved_nodes) == TYPE_ARRAY:
-		for item: Variant in saved_nodes:
-			collected_node_ids[String(item)] = true
+	resource_mgr.apply_save_state(flags.get("node_states", null), flags.get("collected_nodes", []))
 
 	if time_manager != null:
 		var is_unsafe: bool = time_manager.current_phase != TimeManager.Phase.DAYLIGHT
-		builder_npc.set_dusk_or_night_safety(is_unsafe)
+		pop_mgr.set_dusk_or_night_safety(is_unsafe, building_mgr)
 
 	_sync_all_presentations()
 	return true

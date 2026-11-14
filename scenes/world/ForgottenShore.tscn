@@ -152,7 +152,7 @@ texture = ExtResource("12_tent_tex")
 centered = false
 
 [node name="WoodenWallPlot" type="Node2D" parent="WorldObjects"]
-position = Vector2(360, 0)
+position = Vector2(380, 0)
 
 [node name="WallVisual" type="Sprite2D" parent="WorldObjects/WoodenWallPlot"]
 position = Vector2(-16, -48)
@@ -171,7 +171,7 @@ horizontal_alignment = 1
 
 
 [node name="WatchtowerPlot" type="Node2D" parent="WorldObjects"]
-position = Vector2(290, 0)
+position = Vector2(210, 0)
 
 [node name="WatchtowerVisual" type="Sprite2D" parent="WorldObjects/WatchtowerPlot"]
 position = Vector2(-16, -48)
