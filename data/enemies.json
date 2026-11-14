@@ -1,0 +1,22 @@
+{
+  "archetypes": {
+    "raider": {
+      "name": "Greedling Raider",
+      "hp": 45,
+      "speed": 95.0,
+      "damage": 15
+    },
+    "crawler": {
+      "name": "Shadow Crawler",
+      "hp": 45,
+      "speed": 135.0,
+      "damage": 12
+    },
+    "brute": {
+      "name": "Gloom Brute",
+      "hp": 160,
+      "speed": 55.0,
+      "damage": 35
+    }
+  }
+}

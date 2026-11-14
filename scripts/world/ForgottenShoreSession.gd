@@ -21,11 +21,15 @@ const RESOURCE_NODES: Array[Dictionary] = [
 
 var economy: EconomyLedger = EconomyLedger.new({"gold": 2, "wood": 2, "stone": 1})
 var building_mgr: BuildingManager = BuildingManager.new()
-var builder_npc: NPCBuilderAgent = NPCBuilderAgent.new()
+var pop_mgr: NPCPopulationManager = NPCPopulationManager.new()
+var builder_npc: NPCBuilderAgent = pop_mgr.get_primary_agent()
+var _follower_sprites: Dictionary = {}
 var night_mgr: NightEncounterManager = NightEncounterManager.new()
 var save_mgr: SaveManager = SaveManager.new()
 var collected_node_ids: Dictionary = {}
 var reign_state: ReignState = ReignState.ACTIVE
+var hearth_level: int = 1
+var _stagger_cooldown: float = 0.0
 var _farm_timers: Dictionary = {}
 var _last_rejection_reason: String = ""
 var _signals_wired: bool = false
@@ -87,8 +91,9 @@ func _process(delta: float) -> void:
 	var sim_delta: float = delta * (time_manager.time_scale if time_manager != null else 1.0)
 	var is_night: bool = time_manager != null and time_manager.current_phase == TimeManager.Phase.NIGHT
 	var is_daylight: bool = time_manager == null or time_manager.current_phase == TimeManager.Phase.DAYLIGHT
-	builder_npc.tick(sim_delta, building_mgr)
-	night_mgr.tick(sim_delta, is_night, building_mgr)
+	pop_mgr.tick_all(sim_delta, building_mgr, night_mgr)
+	night_mgr.tick(sim_delta, is_night, building_mgr, hearth_level)
+	_tick_monarch_light_risk(sim_delta, is_night)
 	_tick_farm_plots(sim_delta, is_daylight)
 	_sync_dynamic_actors()
 
@@ -132,6 +137,8 @@ func _wire_signals() -> void:
 	building_mgr.building_action_rejected.connect(_record_rejection)
 	building_mgr.wall_state_changed.connect(_on_wall_state_changed)
 	builder_npc.recruitment_rejected.connect(_record_rejection)
+	pop_mgr.population_action_rejected.connect(_record_rejection)
+	pop_mgr.roster_changed.connect(_sync_follower_nodes)
 	builder_npc.npc_state_changed.connect(_on_npc_state_changed)
 	night_mgr.night_encounter_resolved.connect(_on_night_resolved)
 
@@ -161,7 +168,16 @@ func _on_player_interact(player_x: float) -> bool:
 				return true
 			return false
 
-	if not builder_npc.recruited and absf(player_x - NPCBuilderAgent.CAMP_POSITION_X) <= 90.0:
+	var near_stand: String = pop_mgr.get_nearest_tool_stand(player_x)
+	if not near_stand.is_empty():
+		var assigned: NPCBuilderAgent = pop_mgr.assign_tool_stand(near_stand, economy, building_mgr)
+		if assigned != null:
+			_wire_follower_signals(assigned)
+			feedback_message.emit("%s assigned as %s!" % [assigned.npc_id, assigned.role.capitalize()])
+			return true
+		return false
+
+	if absf(player_x - NPCBuilderAgent.CAMP_POSITION_X) <= 90.0 and pop_mgr.camp_vagrants_available > 0:
 		return _on_player_recruit(player_x)
 
 	var near_plot: String = building_mgr.get_nearest_plot_id(player_x, BuildingManager.INTERACT_RANGE)
@@ -175,16 +191,39 @@ func _on_player_interact(player_x: float) -> bool:
 		elif building_mgr.can_upgrade_wall(player_x, near_plot):
 			return _on_player_upgrade_wall(player_x, near_plot)
 
+	if absf(player_x) <= 80.0 and hearth_level < 3:
+		return _on_player_upgrade_hearth(player_x)
+
 	_record_rejection("Nothing to collect or interact with at x=%.0f." % player_x)
 	return false
 
 
 func _on_player_recruit(player_x: float) -> bool:
 	_last_rejection_reason = ""
-	if builder_npc.request_recruit(player_x, economy):
-		feedback_message.emit("Villager recruited as Builder! Will construct/repair structures and retreat at Sunset.")
+	var agent: NPCBuilderAgent = pop_mgr.recruit_next_vagrant(player_x, economy)
+	if agent != null:
+		_wire_follower_signals(agent)
+		feedback_message.emit("Recruited %s (%s)! Total NPCs: %d" % [agent.npc_id, agent.role.capitalize(), pop_mgr.get_recruited_count()])
 		return true
 	return false
+
+
+func _wire_follower_signals(agent: NPCBuilderAgent) -> void:
+	if agent == null:
+		return
+	if not agent.farm_gold_earned.is_connected(_on_farmer_gold_earned):
+		agent.farm_gold_earned.connect(_on_farmer_gold_earned)
+	if not agent.archer_volley_fired.is_connected(_on_archer_volley_fired):
+		agent.archer_volley_fired.connect(_on_archer_volley_fired)
+
+
+func _on_farmer_gold_earned(npc_id: String, amount: int) -> void:
+	if economy.try_add(&"gold", amount):
+		feedback_message.emit("Farmer %s harvested +%d Gold!" % [npc_id, amount])
+
+
+func _on_archer_volley_fired(_npc_id: String, damage: int, from_tower: bool) -> void:
+	feedback_message.emit("Archer volley (%d dmg%s)!" % [damage, " from Watchtower" if from_tower else ""])
 
 
 func _on_player_build_wall(player_x: float, plot_id: String = "") -> bool:
@@ -210,6 +249,63 @@ func _on_player_upgrade_wall(player_x: float, plot_id: String = BuildingManager.
 	return false
 
 
+
+
+func get_hearth_upgrade_cost() -> Dictionary:
+	if hearth_level == 1:
+		return {"gold": 4, "wood": 4, "stone": 2}
+	elif hearth_level == 2:
+		return {"gold": 6, "wood": 5, "stone": 4}
+	return {}
+
+
+func _on_player_upgrade_hearth(player_x: float) -> bool:
+	_last_rejection_reason = ""
+	if absf(player_x) > 80.0:
+		_record_rejection("Move closer to Town Center Hearth (x=0) to upgrade")
+		return false
+	if hearth_level >= 3:
+		_record_rejection("Solar Brazier is already at maximum Tier 3")
+		return false
+	var cost: Dictionary = get_hearth_upgrade_cost()
+	if not economy.try_spend(cost):
+		_record_rejection("Need %dG %dW %dS to upgrade Town Center Hearth" % [int(cost["gold"]), int(cost["wood"]), int(cost["stone"])])
+		return false
+	hearth_level += 1
+	_sync_hearth_visuals()
+	feedback_message.emit("Hearth upgraded to Lv.%d (Light radius: %.0f px)!" % [hearth_level, NightEncounterManager.get_hearth_radius(hearth_level)])
+	return true
+
+
+func _sync_hearth_visuals() -> void:
+	var light: PointLight2D = get_node_or_null("WorldObjects/TownCenterAnchor/CampfireLight") as PointLight2D
+	if light != null:
+		var scales: Array[float] = [2.6, 4.2, 5.8]
+		light.texture_scale = scales[clampi(hearth_level - 1, 0, 2)]
+	var t_lbl: Label = get_node_or_null("WorldObjects/TownCenterAnchor/TownLabel") as Label
+	if t_lbl != null:
+		if hearth_level == 1:
+			t_lbl.text = "Town Center (Hearth Lv.1)\n[E] Beacon Lv2: 4G 4W 2S"
+		elif hearth_level == 2:
+			t_lbl.text = "Town Center (Hearth Lv.2)\n[E] Solar Lv3: 6G 5W 4S"
+		else:
+			t_lbl.text = "Town Center (Solar Brazier Lv.3)"
+
+
+func _tick_monarch_light_risk(sim_delta: float, is_night: bool) -> void:
+	_stagger_cooldown = maxf(0.0, _stagger_cooldown - sim_delta)
+	if not is_night or not night_mgr.enemy_active or player == null or _stagger_cooldown > 0.0:
+		return
+	var px: float = player.global_position.x
+	var in_light: bool = absf(px) <= NightEncounterManager.get_hearth_radius(hearth_level)
+	if not in_light and absf(px - night_mgr.enemy_x) <= 44.0:
+		_stagger_cooldown = 2.0
+		player.global_position.x = clampf(px - 48.0, player.min_bound_x, player.max_bound_x)
+		if economy.get_amount(&"gold") > 0:
+			economy.try_spend({"gold": 1})
+		feedback_message.emit("Shadow Stagger! Stay inside the Light at Night (-1 Gold)!")
+
+
 func _on_player_repair_wall(player_x: float, plot_id: String = "") -> bool:
 	_last_rejection_reason = ""
 	var target_id: String = plot_id
@@ -217,6 +313,10 @@ func _on_player_repair_wall(player_x: float, plot_id: String = "") -> bool:
 		target_id = building_mgr.get_nearest_plot_id(player_x, BuildingManager.INTERACT_RANGE)
 	if target_id.is_empty():
 		target_id = BuildingManager.WALL_ID
+	if time_manager != null and time_manager.current_phase == TimeManager.Phase.NIGHT:
+		if not economy.try_spend({"wood": 1}):
+			_record_rejection("Night panic repair costs +1 extra Wood!")
+			return false
 	if building_mgr.request_repair(player_x, economy, target_id):
 		feedback_message.emit("Structure (%s) repaired to full durability!" % target_id)
 		return true
@@ -271,7 +371,7 @@ func _on_toggle_fast_clock() -> void:
 
 
 func _on_daylight_started(day_number: int) -> void:
-	builder_npc.set_dusk_or_night_safety(false)
+	pop_mgr.set_dusk_or_night_safety(false, building_mgr)
 	# Regenerate renewable Wood & Stone nodes on Day 2+
 	if day_number > 1:
 		_refresh_renewable_nodes()
@@ -287,14 +387,14 @@ func _refresh_renewable_nodes() -> void:
 
 
 func _on_sunset_started(_day_number: int) -> void:
-	builder_npc.set_dusk_or_night_safety(true)
+	pop_mgr.set_dusk_or_night_safety(true, building_mgr)
 	feedback_message.emit("Sunset Warning — Builder is retreating to the Town Center safe zone!")
 
 
 func _on_night_started(_day_number: int) -> void:
-	builder_npc.set_dusk_or_night_safety(true)
+	pop_mgr.set_dusk_or_night_safety(true, building_mgr)
 	if not night_mgr.night_active:
-		night_mgr.on_night_started()
+		night_mgr.on_night_started(time_manager.current_day if time_manager != null else 1)
 	feedback_message.emit("Night has fallen! Greedling Raiders approach from the East Shore!")
 
 
@@ -311,6 +411,7 @@ func _on_sunrise_reached(completed_day: int) -> void:
 	else:
 		reign_state = ReignState.ACTIVE
 	_refresh_renewable_nodes()
+	pop_mgr.on_sunrise_refill()
 	save_game_state()
 
 
@@ -412,6 +513,32 @@ func _on_npc_state_changed(_npc_id: String, _role: String, state_name: String, p
 			npc_label.visible = not npc_label.text.is_empty()
 
 
+
+
+func _sync_follower_nodes() -> void:
+	var container: Node = get_node_or_null("WorldObjects/NPCFollowers")
+	if container == null:
+		return
+	for i: int in range(1, pop_mgr.agents.size()):
+		var agent: NPCBuilderAgent = pop_mgr.agents[i]
+		if not _follower_sprites.has(agent.npc_id):
+			var spr: Sprite2D = Sprite2D.new()
+			spr.centered = false
+			spr.offset = Vector2(-16, -32)
+			spr.hframes = 8
+			container.add_child(spr)
+			_follower_sprites[agent.npc_id] = spr
+		var s: Sprite2D = _follower_sprites[agent.npc_id] as Sprite2D
+		var tex_path: String = "res://assets/characters/npc/npc_builder_sheet.png"
+		if agent.role == "farmer":
+			tex_path = "res://assets/characters/npc/npc_farmer_sheet.png"
+		elif agent.role == "archer":
+			tex_path = "res://assets/characters/npc/npc_archer_sheet.png"
+		if ResourceLoader.exists(tex_path):
+			s.texture = load(tex_path)
+		s.position.x = agent.position_x
+
+
 func _update_proximity_prompts() -> void:
 	if player == null:
 		return
@@ -428,6 +555,14 @@ func _update_proximity_prompts() -> void:
 
 	if npc_label != null and not builder_npc.recruited:
 		npc_label.visible = absf(px - builder_npc.position_x) <= 105.0
+
+	var stands_root: Node = get_node_or_null("WorldObjects/ToolStands")
+	if stands_root != null:
+		for sid: String in NPCPopulationManager.TOOL_STANDS.keys():
+			var lbl: Label = stands_root.get_node_or_null(sid + "/Label") as Label
+			if lbl != null:
+				var sx: float = float((NPCPopulationManager.TOOL_STANDS[sid] as Dictionary)["x"])
+				lbl.visible = absf(px - sx) <= NPCPopulationManager.STAND_RANGE
 
 	for plot_id: String in [BuildingManager.WALL_ID, BuildingManager.WATCHTOWER_ID, BuildingManager.FARM_WEST_ID, BuildingManager.FARM_EAST_ID]:
 		var nodes: Dictionary = _get_plot_nodes(plot_id)
@@ -465,7 +600,24 @@ func _sync_dynamic_actors() -> void:
 		enemy_visual.position.x = night_mgr.enemy_x
 		if enemy_sprite != null and night_mgr.enemy_active:
 			enemy_sprite.frame = int(floorf(_anim_clock * 8.0)) % 4
+			if night_mgr.enemy_archetype == "brute":
+				enemy_sprite.scale = Vector2(1.45, 1.45)
+				enemy_sprite.modulate = Color(0.85, 0.65, 1.0, 1.0)
+			elif night_mgr.enemy_archetype == "crawler":
+				enemy_sprite.scale = Vector2(0.9, 0.85)
+				enemy_sprite.modulate = Color(1.0, 0.75, 0.75, 1.0)
+			else:
+				enemy_sprite.scale = Vector2(1.0, 1.0)
+				enemy_sprite.modulate = Color(1.0, 1.0, 1.0, 1.0)
 
+	if slice_hud != null and slice_hud.has_method("set_forecast_text"):
+		var day_n: int = time_manager.current_day if time_manager != null else 1
+		if night_mgr.enemy_active:
+			slice_hud.call("set_forecast_text", "ALERT: %s (%d/%d HP) at x=%.0f" % [night_mgr.get_enemy_display_name(), night_mgr.enemy_hp, night_mgr.enemy_max_hp, night_mgr.enemy_x])
+		else:
+			slice_hud.call("set_forecast_text", NightEncounterManager.get_night_forecast(day_n))
+
+	_sync_follower_nodes()
 	_update_proximity_prompts()
 
 
@@ -496,6 +648,7 @@ func _sync_all_presentations() -> void:
 		builder_npc.get_state_name(),
 		builder_npc.position_x
 	)
+	_sync_hearth_visuals()
 	_update_resource_node_visuals()
 	_sync_dynamic_actors()
 
@@ -521,12 +674,13 @@ func build_save_payload() -> Dictionary:
 		},
 		"resources": economy.get_all_balances(),
 		"buildings": building_mgr.to_save_array(),
-		"npcs": [builder_npc.to_save_dict()],
+		"npcs": pop_mgr.to_save_array(),
 		"night_encounter": night_mgr.to_save_dict(),
 		"progression_flags": {
 			"first_night_survived": night_mgr.first_night_survived,
 			"collected_nodes": collected_node_ids.keys(),
 			"reign_state": int(reign_state),
+			"hearth_level": hearth_level,
 		},
 	}
 
@@ -558,12 +712,15 @@ func load_game_state(save_path: String = SaveManager.DEFAULT_SAVE_PATH) -> bool:
 	building_mgr.apply_save_array(b_arr)
 
 	var n_arr: Array = data["npcs"]
-	if not n_arr.is_empty() and typeof(n_arr[0]) == TYPE_DICTIONARY:
-		builder_npc.apply_save_dict(n_arr[0])
+	pop_mgr.apply_save_array(n_arr)
+	for a: NPCBuilderAgent in pop_mgr.agents:
+		_wire_follower_signals(a)
+	_sync_follower_nodes()
 
 	var flags: Dictionary = data["progression_flags"]
 	night_mgr.first_night_survived = bool(flags.get("first_night_survived", night_mgr.first_night_survived))
 	reign_state = int(flags.get("reign_state", ReignState.ACTIVE)) as ReignState
+	hearth_level = clampi(int(flags.get("hearth_level", 1)), 1, 3)
 	collected_node_ids.clear()
 	var saved_nodes: Variant = flags.get("collected_nodes", [])
 	if typeof(saved_nodes) == TYPE_ARRAY:

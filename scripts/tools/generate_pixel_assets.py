@@ -469,6 +469,92 @@ def build_watchtower_states() -> Image.Image:
     return sheet
 
 
+
+
+def build_farmer_sheet() -> Image.Image:
+    sheet = new_canvas(32 * 8, 32)
+    straw = (224, 194, 98, 255)
+    straw_d = (176, 144, 58, 255)
+    for i in range(8):
+        f = new_canvas(32, 32)
+        is_work = i >= 4
+        bob = 1 if (i % 2 == 1) else 0
+        stride = [-2, 0, 2, 0][i % 4] if not is_work else 0
+        hy = 8 + bob
+        # Straw hat
+        rect(f, 10, hy + 1, 12, 2, straw)
+        rect(f, 12, hy - 1, 8, 2, straw_d)
+        rect(f, 14, hy + 3, 5, 4, SKIN)
+        put(f, 18, hy + 4, OUT)
+        # Earthy overalls
+        rect(f, 13, hy + 7, 6, 8, GRASS)
+        rect(f, 14, hy + 9, 4, 5, TUNIC_D)
+        rect(f, 14 + stride, 24, 2, 5, TUNIC_D)
+        rect(f, 17 - stride, 24, 2, 5, TUNIC_D)
+        rect(f, 14 + stride, 29, 3, 2, WOOD_D)
+        rect(f, 17 - stride, 29, 3, 2, WOOD_D)
+        # Scythe / hoe
+        swing = [0, -2, -3, 1][i % 4] if is_work else 0
+        rect(f, 20, 12 + bob + swing, 2, 12, WOOD_L)
+        rect(f, 17, 11 + bob + swing, 5, 2, STEEL)
+        sheet.paste(add_outline(f), (i * 32, 0))
+    return sheet
+
+
+def build_archer_sheet() -> Image.Image:
+    sheet = new_canvas(32 * 8, 32)
+    cloak = (46, 104, 78, 255)
+    cloak_d = (30, 72, 54, 255)
+    for i in range(8):
+        f = new_canvas(32, 32)
+        is_shoot = i >= 4
+        bob = 1 if (i % 2 == 1) else 0
+        stride = [-2, 0, 2, 0][i % 4] if not is_shoot else 0
+        hy = 8 + bob
+        rect(f, 12, hy, 7, 6, cloak)
+        rect(f, 11, hy + 2, 2, 4, cloak_d)
+        rect(f, 15, hy + 2, 4, 4, SKIN)
+        put(f, 18, hy + 3, OUT)
+        rect(f, 13, hy + 6, 6, 8, cloak)
+        rect(f, 12, hy + 7, 2, 7, cloak_d)
+        rect(f, 14 + stride, 23, 2, 6, TUNIC_D)
+        rect(f, 17 - stride, 23, 2, 6, TUNIC_D)
+        rect(f, 14 + stride, 29, 3, 2, WOOD_D)
+        rect(f, 17 - stride, 29, 3, 2, WOOD_D)
+        # Bow
+        bx = 21 if is_shoot else 19
+        rect(f, bx, 13 + bob, 2, 10, WOOD_L)
+        put(f, bx - 1, 14 + bob, WOOD)
+        put(f, bx - 1, 21 + bob, WOOD)
+        sheet.paste(add_outline(f), (i * 32, 0))
+    return sheet
+
+
+def build_tool_stands() -> Image.Image:
+    sheet = new_canvas(32 * 3, 32)
+    for idx in range(3):
+        f = new_canvas(32, 32)
+        # Wooden rack frame
+        rect(f, 6, 16, 2, 14, WOOD_D)
+        rect(f, 24, 16, 2, 14, WOOD_D)
+        rect(f, 5, 14, 22, 3, WOOD)
+        if idx == 0:
+            # Hammer
+            rect(f, 15, 17, 2, 9, WOOD_L)
+            rect(f, 12, 16, 8, 3, STEEL)
+        elif idx == 1:
+            # Scythe
+            rect(f, 15, 17, 2, 10, WOOD_L)
+            rect(f, 11, 16, 6, 2, STEEL)
+        else:
+            # Bow
+            rect(f, 16, 16, 2, 10, GOLD_D)
+            put(f, 15, 17, WOOD_L)
+            put(f, 15, 24, WOOD_L)
+        sheet.paste(add_outline(f), (idx * 32, 0))
+    return sheet
+
+
 def main() -> None:
     outputs = {
         "characters/player/player_monarch_sheet.png": build_monarch_sheet(),
@@ -483,6 +569,9 @@ def main() -> None:
         "environment/backgrounds/bg_forest_mid.png": build_forest_mid(),
         "buildings/farm_plot/building_farm_plot_states.png": build_farm_plot_states(),
         "buildings/watchtower/building_watchtower_states.png": build_watchtower_states(),
+        "characters/npc/npc_farmer_sheet.png": build_farmer_sheet(),
+        "characters/npc/npc_archer_sheet.png": build_archer_sheet(),
+        "buildings/tool_stands/props_tool_stands.png": build_tool_stands(),
     }
 
     for rel_path, img in outputs.items():

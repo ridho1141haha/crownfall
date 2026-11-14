@@ -1,4 +1,4 @@
-[gd_scene load_steps=21 format=3]
+[gd_scene load_steps=22 format=3]
 
 [ext_resource type="PackedScene" path="res://scenes/player/Player.tscn" id="1_player_scene"]
 [ext_resource type="Script" path="res://scripts/world/TimeManager.gd" id="2_time_mgr"]
@@ -16,6 +16,7 @@
 [ext_resource type="Texture2D" path="res://assets/environment/backgrounds/bg_forest_mid.png" id="14_forest_tex"]
 [ext_resource type="Texture2D" path="res://assets/buildings/watchtower/building_watchtower_states.png" id="15_tower_tex"]
 [ext_resource type="Texture2D" path="res://assets/buildings/farm_plot/building_farm_plot_states.png" id="16_farm_tex"]
+[ext_resource type="Texture2D" path="res://assets/buildings/tool_stands/props_tool_stands.png" id="17_stand_tex"]
 
 [sub_resource type="Gradient" id="Gradient_fire"]
 offsets = PackedFloat32Array(0, 0.45, 1)
@@ -310,6 +311,61 @@ offset_bottom = -38.0
 text = "Vagrant [R: 2G]"
 horizontal_alignment = 1
 
+
+[node name="ToolStands" type="Node2D" parent="WorldObjects"]
+
+[node name="hammer_stand" type="Sprite2D" parent="WorldObjects/ToolStands"]
+position = Vector2(-45, 0)
+texture = ExtResource("17_stand_tex")
+centered = false
+offset = Vector2(-16, -32)
+hframes = 3
+
+[node name="Label" type="Label" parent="WorldObjects/ToolStands/hammer_stand"]
+visible = false
+offset_left = -64.0
+offset_top = -62.0
+offset_right = 64.0
+offset_bottom = -36.0
+text = "[E] Builder (Free)"
+horizontal_alignment = 1
+
+[node name="scythe_stand" type="Sprite2D" parent="WorldObjects/ToolStands"]
+position = Vector2(-90, 0)
+texture = ExtResource("17_stand_tex")
+centered = false
+offset = Vector2(-16, -32)
+hframes = 3
+frame = 1
+
+[node name="Label" type="Label" parent="WorldObjects/ToolStands/scythe_stand"]
+visible = false
+offset_left = -64.0
+offset_top = -62.0
+offset_right = 64.0
+offset_bottom = -36.0
+text = "[E] Farmer (1G 1S)"
+horizontal_alignment = 1
+
+[node name="bow_stand" type="Sprite2D" parent="WorldObjects/ToolStands"]
+position = Vector2(45, 0)
+texture = ExtResource("17_stand_tex")
+centered = false
+offset = Vector2(-16, -32)
+hframes = 3
+frame = 2
+
+[node name="Label" type="Label" parent="WorldObjects/ToolStands/bow_stand"]
+visible = false
+offset_left = -64.0
+offset_top = -62.0
+offset_right = 64.0
+offset_bottom = -36.0
+text = "[E] Archer (1G 1W)"
+horizontal_alignment = 1
+
+[node name="NPCFollowers" type="Node2D" parent="WorldObjects"]
+
 [node name="NightEnemyActor" type="Node2D" parent="WorldObjects"]
 visible = false
 position = Vector2(820, 0)
@@ -355,3 +411,7 @@ text = "Gold: 2   |   Wood: 2   |   Stone: 1"
 [node name="FeedbackLabel" type="Label" parent="ClockHUD/MarginContainer/VBoxContainer"]
 layout_mode = 2
 text = "Explore Forgotten Shore"
+
+[node name="ForecastLabel" type="Label" parent="ClockHUD/MarginContainer/VBoxContainer"]
+layout_mode = 2
+text = "Tonight (East): 3 Waves • Greedling Raider"

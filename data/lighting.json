@@ -1,0 +1,40 @@
+{
+  "hearth_tiers": [
+    {
+      "level": 1,
+      "name": "Ember Hearth",
+      "radius_px": 180.0,
+      "texture_scale": 2.6,
+      "burn_dps": 2.0,
+      "weakened_pct": 0.2,
+      "upgrade_cost": {}
+    },
+    {
+      "level": 2,
+      "name": "Beacon Fire",
+      "radius_px": 320.0,
+      "texture_scale": 4.2,
+      "burn_dps": 2.0,
+      "weakened_pct": 0.2,
+      "upgrade_cost": {
+        "gold": 4,
+        "wood": 4,
+        "stone": 2
+      }
+    },
+    {
+      "level": 3,
+      "name": "Solar Brazier",
+      "radius_px": 460.0,
+      "texture_scale": 5.8,
+      "burn_dps": 4.0,
+      "weakened_pct": 0.2,
+      "upgrade_cost": {
+        "gold": 6,
+        "wood": 5,
+        "stone": 4
+      }
+    }
+  ],
+  "watchtower_light_radius_px": 110.0
+}

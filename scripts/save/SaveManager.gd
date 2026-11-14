@@ -147,6 +147,8 @@ static func migrate_payload(data: Variant) -> Variant:
 			var pf: Dictionary = d["progression_flags"] as Dictionary
 			if not pf.has("reign_state"):
 				pf["reign_state"] = 0
+			if not pf.has("hearth_level"):
+				pf["hearth_level"] = 1
 		if d.has("buildings") and typeof(d["buildings"]) == TYPE_ARRAY:
 			for b: Variant in (d["buildings"] as Array):
 				if typeof(b) == TYPE_DICTIONARY:

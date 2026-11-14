@@ -131,6 +131,7 @@ func register_plot(
 		"build_cost": build_cost.duplicate(),
 		"repair_cost": repair_cost.duplicate(),
 		"cancelled": false,
+		"claimed_by_npc_id": "",
 	}
 	_sync_primary_mirror()
 
@@ -397,7 +398,62 @@ func is_plot_needing_work(plot_id: String = WALL_ID) -> bool:
 	return st == WallState.UNDER_CONSTRUCTION or st == WallState.DAMAGED
 
 
-func select_highest_priority_task(from_x: float = 0.0) -> Dictionary:
+
+
+func claim_plot(plot_id: String, npc_id: String) -> bool:
+	if not _plots.has(plot_id) or npc_id.is_empty():
+		return false
+	var current_owner: String = String(_plots[plot_id].get("claimed_by_npc_id", ""))
+	if not current_owner.is_empty() and current_owner != npc_id:
+		return false
+	_plots[plot_id]["claimed_by_npc_id"] = npc_id
+	return true
+
+
+func release_plot_claim(plot_id: String, npc_id: String = "") -> void:
+	if not _plots.has(plot_id):
+		return
+	var current_owner: String = String(_plots[plot_id].get("claimed_by_npc_id", ""))
+	if npc_id.is_empty() or current_owner == npc_id:
+		_plots[plot_id]["claimed_by_npc_id"] = ""
+
+
+func release_all_claims_for_npc(npc_id: String) -> void:
+	if npc_id.is_empty():
+		return
+	for pid: String in _plots.keys():
+		if String(_plots[pid].get("claimed_by_npc_id", "")) == npc_id:
+			_plots[pid]["claimed_by_npc_id"] = ""
+
+
+func get_plot_claimant(plot_id: String) -> String:
+	if not _plots.has(plot_id):
+		return ""
+	return String(_plots[plot_id].get("claimed_by_npc_id", ""))
+
+
+func select_available_farm_plot(from_x: float, claimant_id: String) -> Dictionary:
+	var best_id: String = ""
+	var best_dist: float = INF
+	for pid: String in _plots.keys():
+		var plot: Dictionary = _plots[pid]
+		if String(plot.get("type", "")) != "farm_plot":
+			continue
+		if int(plot.get("state", WallState.PLACEHOLDER)) != WallState.COMPLETED:
+			continue
+		var owner: String = String(plot.get("claimed_by_npc_id", ""))
+		if not owner.is_empty() and owner != claimant_id:
+			continue
+		var dist: float = absf(float(plot["position_x"]) - from_x)
+		if dist < best_dist:
+			best_dist = dist
+			best_id = pid
+	if best_id.is_empty():
+		return {}
+	return _plots[best_id]
+
+
+func select_highest_priority_task(from_x: float = 0.0, claimant_id: String = "") -> Dictionary:
 	var best_plot_id: String = ""
 	var best_rank: int = 999
 	var best_dist: float = INF
@@ -406,6 +462,9 @@ func select_highest_priority_task(from_x: float = 0.0) -> Dictionary:
 		if not is_plot_needing_work(plot_id):
 			continue
 		var plot: Dictionary = _plots[plot_id]
+		var owner: String = String(plot.get("claimed_by_npc_id", ""))
+		if not claimant_id.is_empty() and not owner.is_empty() and owner != claimant_id:
+			continue
 		var st: int = int(plot["state"])
 		var prog: float = float(plot["progress"])
 		var rank: int = 3

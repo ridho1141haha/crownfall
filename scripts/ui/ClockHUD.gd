@@ -7,6 +7,12 @@ var _session: ForgottenShoreSession
 @onready var status_label: Label = $MarginContainer/VBoxContainer/StatusLabel as Label
 @onready var resources_label: Label = $MarginContainer/VBoxContainer/ResourcesLabel as Label
 @onready var feedback_label: Label = $MarginContainer/VBoxContainer/FeedbackLabel as Label
+@onready var forecast_label: Label = get_node_or_null("MarginContainer/VBoxContainer/ForecastLabel") as Label
+
+
+func set_forecast_text(txt: String) -> void:
+	if forecast_label != null:
+		forecast_label.text = txt
 
 
 func _ready() -> void:
