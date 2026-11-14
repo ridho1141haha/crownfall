@@ -3,7 +3,7 @@
 
 **Document Version:** 1.2
 **Baseline:** Revised Project Baseline v1.2
-**Engine:** Godot 4 — exact stable patch to be recorded at M0
+**Engine:** Godot 4.7.2.stable (verified at M0)
 **Language:** GDScript
 **Platform Target:** Windows PC
 **Architecture Direction:** Simulation / Presentation Separation
@@ -30,7 +30,7 @@ The repository is currently documentation-first. It does **not** yet contain a r
 
 | Area | Direction |
 |---|---|
-| Engine | Godot 4 stable release; exact patch recorded at M0 |
+| Engine | Godot 4.7.2.stable (verified at M0) |
 | Language | GDScript |
 | Rendering | Godot 2D |
 | Player physics | CharacterBody2D is the intended starting point |

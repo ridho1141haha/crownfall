@@ -25,7 +25,7 @@ var _started: bool = false
 
 
 func _ready() -> void:
-	_emit_initial_phase_if_needed()
+	call_deferred("_emit_initial_phase_if_needed")
 
 
 func _process(delta: float) -> void:
@@ -66,6 +66,17 @@ func get_phase_progress() -> float:
 	return clampf(phase_elapsed / get_current_phase_duration(), 0.0, 1.0)
 
 
+func get_phase_id() -> String:
+	match current_phase:
+		Phase.DAYLIGHT:
+			return "daylight"
+		Phase.SUNSET:
+			return "sunset"
+		Phase.NIGHT:
+			return "night"
+	return "daylight"
+
+
 func get_phase_name() -> String:
 	match current_phase:
 		Phase.DAYLIGHT:
@@ -75,6 +86,44 @@ func get_phase_name() -> String:
 		Phase.NIGHT:
 			return "Night"
 	return "Unknown"
+
+
+func to_save_dict() -> Dictionary:
+	return {
+		"day_count": current_day,
+		"world_time": snappedf(phase_elapsed, 0.001),
+		"world_phase": get_phase_id(),
+	}
+
+
+func apply_save_dict(data: Dictionary) -> bool:
+	if not data.has("day_count") or not data.has("world_time") or not data.has("world_phase"):
+		return false
+	var day_val: int = int(data["day_count"])
+	var time_val: float = float(data["world_time"])
+	var phase_str: String = String(data["world_phase"])
+	if day_val < 1 or time_val < 0.0:
+		return false
+	match phase_str:
+		"daylight":
+			current_phase = Phase.DAYLIGHT
+		"sunset":
+			current_phase = Phase.SUNSET
+		"night":
+			current_phase = Phase.NIGHT
+		_:
+			return false
+	current_day = day_val
+	phase_elapsed = clampf(time_val, 0.0, get_current_phase_duration())
+	_started = true
+	match current_phase:
+		Phase.DAYLIGHT:
+			daylight_started.emit(current_day)
+		Phase.SUNSET:
+			sunset_started.emit(current_day)
+		Phase.NIGHT:
+			night_started.emit(current_day)
+	return true
 
 
 func _emit_initial_phase_if_needed() -> void:

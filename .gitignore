@@ -1,5 +1,17 @@
-# Godot 4 ignores
+# Godot 4+ cache and import artifacts
 .godot/
 *.translation
+
+# Temporary and backup save files
+*.tmp
+*.bak
+
+# OS & Editor files
 .DS_Store
 Thumbs.db
+*.swp
+
+# Secrets & local tokens (never commit PATs)
+.env
+*.token
+*.pem

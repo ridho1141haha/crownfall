@@ -1,0 +1,311 @@
+class_name ForgottenShoreSession
+extends Node2D
+
+signal feedback_message(text: String)
+
+const RESOURCE_NODES: Array[Dictionary] = [
+	{"id": "cache_gold_west", "resource": &"gold", "amount": 4, "x": -480.0, "label": "Ancient Coin Chest (+4 Gold)"},
+	{"id": "timber_pile_west", "resource": &"wood", "amount": 5, "x": -110.0, "label": "Fallen Timber (+5 Wood)"},
+	{"id": "stone_outcrop_east", "resource": &"stone", "amount": 3, "x": 190.0, "label": "Ruined Masonry (+3 Stone)"},
+	{"id": "shrine_cache_far_west", "resource": &"gold", "amount": 3, "x": -780.0, "label": "Forgotten Shrine (+3 Gold)"},
+]
+
+var economy: EconomyLedger = EconomyLedger.new({"gold": 2, "wood": 2, "stone": 1})
+var building_mgr: BuildingManager = BuildingManager.new()
+var builder_npc: NPCBuilderAgent = NPCBuilderAgent.new()
+var night_mgr: NightEncounterManager = NightEncounterManager.new()
+var save_mgr: SaveManager = SaveManager.new()
+var collected_node_ids: Dictionary = {}
+
+@onready var time_manager: TimeManager = $TimeManager as TimeManager
+@onready var player: PlayerController = $Player as PlayerController
+@onready var wall_visual: ColorRect = $WorldObjects/WoodenWallPlot/WallVisual as ColorRect
+@onready var wall_label: Label = $WorldObjects/WoodenWallPlot/WallLabel as Label
+@onready var npc_visual: Node2D = $WorldObjects/BuilderActor as Node2D
+@onready var npc_label: Label = $WorldObjects/BuilderActor/NPCLabel as Label
+@onready var enemy_visual: Node2D = $WorldObjects/NightEnemyActor as Node2D
+@onready var slice_hud: CanvasLayer = $ClockHUD as CanvasLayer
+
+
+func _ready() -> void:
+	_wire_signals()
+	_consume_pending_load_if_requested()
+	_sync_all_presentations()
+	feedback_message.emit("Forgotten Shore: [A/D] Move | [E] Collect/Interact | [R] Recruit (2G) | [B] Build Wall (2G,4W,2S) | [F] Repair | [T] 20x Clock | [K] Save")
+
+
+func _process(delta: float) -> void:
+	var sim_delta: float = delta * (time_manager.time_scale if time_manager != null else 1.0)
+	var is_night: bool = time_manager != null and time_manager.current_phase == TimeManager.Phase.NIGHT
+	builder_npc.tick(sim_delta, building_mgr)
+	night_mgr.tick(sim_delta, is_night, building_mgr)
+	_sync_dynamic_actors()
+
+
+func _wire_signals() -> void:
+	if time_manager != null:
+		time_manager.daylight_started.connect(_on_daylight_started)
+		time_manager.sunset_started.connect(_on_sunset_started)
+		time_manager.night_started.connect(_on_night_started)
+		time_manager.sunrise_reached.connect(_on_sunrise_reached)
+
+	if player != null:
+		player.interaction_requested.connect(_on_player_interact)
+		player.recruit_requested.connect(_on_player_recruit)
+		player.build_wall_requested.connect(_on_player_build_wall)
+		player.repair_wall_requested.connect(_on_player_repair_wall)
+		player.manual_save_requested.connect(_on_manual_save)
+		player.fast_clock_toggled.connect(_on_toggle_fast_clock)
+
+	economy.transaction_rejected.connect(func(reason: String) -> void: feedback_message.emit(reason))
+	building_mgr.building_action_rejected.connect(func(reason: String) -> void: feedback_message.emit(reason))
+	building_mgr.wall_state_changed.connect(_on_wall_state_changed)
+	builder_npc.recruitment_rejected.connect(func(reason: String) -> void: feedback_message.emit(reason))
+	builder_npc.npc_state_changed.connect(_on_npc_state_changed)
+	night_mgr.night_encounter_resolved.connect(_on_night_resolved)
+
+	if slice_hud != null and slice_hud.has_method("bind_session"):
+		slice_hud.call("bind_session", self)
+
+
+func _on_player_interact(player_x: float) -> void:
+	for node_def: Dictionary in RESOURCE_NODES:
+		var node_id: String = String(node_def["id"])
+		if collected_node_ids.get(node_id, false):
+			continue
+		var node_x: float = float(node_def["x"])
+		if absf(player_x - node_x) <= 72.0:
+			var res_id: StringName = node_def["resource"] as StringName
+			var amount: int = int(node_def["amount"])
+			if economy.try_add(res_id, amount):
+				collected_node_ids[node_id] = true
+				_update_resource_node_visuals()
+				feedback_message.emit("Collected: %s" % String(node_def["label"]))
+				return
+
+	# Contextual fallback if pressing E near camp or wall
+	if not builder_npc.recruited and absf(player_x - NPCBuilderAgent.CAMP_POSITION_X) <= 90.0:
+		_on_player_recruit(player_x)
+		return
+	if absf(player_x - building_mgr.position_x) <= 90.0:
+		if building_mgr.state == BuildingManager.WallState.DAMAGED:
+			_on_player_repair_wall(player_x)
+		else:
+			_on_player_build_wall(player_x)
+		return
+
+	feedback_message.emit("Nothing to collect here. Explore West/East or approach Camp (x=-220) / Wall (x=360).")
+
+
+func _on_player_recruit(player_x: float) -> void:
+	if builder_npc.request_recruit(player_x, economy):
+		feedback_message.emit("Villager recruited as Builder! Will construct/repair walls and retreat at Sunset.")
+
+
+func _on_player_build_wall(player_x: float) -> void:
+	if building_mgr.request_start_construction(player_x, economy):
+		feedback_message.emit("Wooden Wall blueprint funded! Builder will construct it (or recruit one at Camp).")
+
+
+func _on_player_repair_wall(player_x: float) -> void:
+	if building_mgr.request_repair(player_x, economy):
+		feedback_message.emit("Wooden Wall repaired to full durability!")
+
+
+func _on_manual_save() -> void:
+	if save_game_state():
+		feedback_message.emit("Kingdom state saved to user://save_slot_0.json")
+
+
+func _on_toggle_fast_clock() -> void:
+	if time_manager == null:
+		return
+	time_manager.time_scale = 20.0 if is_equal_approx(time_manager.time_scale, 1.0) else 1.0
+	feedback_message.emit("Clock speed set to %.0fx" % time_manager.time_scale)
+
+
+func _on_daylight_started(day_number: int) -> void:
+	builder_npc.set_dusk_or_night_safety(false)
+	feedback_message.emit("Day %d Daylight — Explore, gather resources, recruit Builder, and prepare the East Wall." % day_number)
+
+
+func _on_sunset_started(_day_number: int) -> void:
+	builder_npc.set_dusk_or_night_safety(true)
+	feedback_message.emit("Sunset Warning — Builder is retreating to the Town Center safe zone!")
+
+
+func _on_night_started(_day_number: int) -> void:
+	builder_npc.set_dusk_or_night_safety(true)
+	night_mgr.on_night_started()
+	feedback_message.emit("Night has fallen! A Greedling Raider approaches from the East Shore!")
+
+
+func _on_sunrise_reached(_completed_day: int) -> void:
+	night_mgr.on_sunrise_reached(building_mgr)
+	save_game_state()
+
+
+func _on_night_resolved(survived: bool, wall_held: bool) -> void:
+	if survived and wall_held:
+		feedback_message.emit("Sunrise reached! Your Wooden Wall held the line. Kingdom state auto-saved!")
+	elif survived:
+		feedback_message.emit("Sunrise reached! The wall fell, but dawn broke in time. Auto-saved!")
+	else:
+		feedback_message.emit("The raider breached the Town Center during the night! Rebuild and reinforce before next dusk.")
+
+
+func _on_wall_state_changed(_wall_id: String, new_state: String, progress: float, durability: int, max_dur: int) -> void:
+	if wall_visual == null or wall_label == null:
+		return
+	match new_state:
+		"PLACEHOLDER":
+			wall_visual.color = Color(0.55, 0.55, 0.55, 0.45)
+			wall_label.text = "Wall Plot [B]
+2G 4W 2S"
+		"UNDER_CONSTRUCTION":
+			wall_visual.color = Color(0.78, 0.62, 0.28, 0.8)
+			wall_label.text = "Building Wall...
+%d%%" % int(round(progress * 100.0))
+		"COMPLETED":
+			wall_visual.color = Color(0.48, 0.34, 0.2, 1.0)
+			wall_label.text = "Wooden Wall
+HP %d/%d" % [durability, max_dur]
+		"DAMAGED":
+			wall_visual.color = Color(0.72, 0.36, 0.2, 1.0)
+			wall_label.text = "Damaged Wall [F]
+HP %d/%d" % [durability, max_dur]
+		"DESTROYED":
+			wall_visual.color = Color(0.35, 0.18, 0.18, 0.55)
+			wall_label.text = "Destroyed Wall [B]
+Rebuild: 2G 4W 2S"
+
+
+func _on_npc_state_changed(_npc_id: String, _role: String, state_name: String, pos_x: float) -> void:
+	if npc_visual != null:
+		npc_visual.position.x = pos_x
+	if npc_label != null:
+		npc_label.text = "Vagrant [R: 2G]" if not builder_npc.recruited else "Builder (%s)" % state_name
+
+
+func _sync_dynamic_actors() -> void:
+	if npc_visual != null:
+		npc_visual.position.x = builder_npc.position_x
+	if enemy_visual != null:
+		enemy_visual.visible = night_mgr.enemy_active
+		enemy_visual.position.x = night_mgr.enemy_x
+
+
+func _update_resource_node_visuals() -> void:
+	var nodes_root: Node = get_node_or_null("WorldObjects/ResourceNodes")
+	if nodes_root == null:
+		return
+	for node_def: Dictionary in RESOURCE_NODES:
+		var node_id: String = String(node_def["id"])
+		var marker: CanvasItem = nodes_root.get_node_or_null(node_id) as CanvasItem
+		if marker != null:
+			marker.modulate.a = 0.25 if collected_node_ids.get(node_id, false) else 1.0
+
+
+func _sync_all_presentations() -> void:
+	_on_wall_state_changed(
+		BuildingManager.WALL_ID,
+		building_mgr.get_state_name(),
+		building_mgr.construction_progress,
+		building_mgr.durability,
+		building_mgr.max_durability
+	)
+	_on_npc_state_changed(
+		NPCBuilderAgent.NPC_ID,
+		builder_npc.role,
+		builder_npc.get_state_name(),
+		builder_npc.position_x
+	)
+	_update_resource_node_visuals()
+	_sync_dynamic_actors()
+
+
+func build_save_payload() -> Dictionary:
+	var clock_dict: Dictionary = time_manager.to_save_dict() if time_manager != null else {
+		"day_count": 1,
+		"world_time": 0.0,
+		"world_phase": "daylight",
+	}
+	return {
+		"schema_version": SaveManager.SCHEMA_VERSION,
+		"world_id": "aetherion",
+		"island_id": "forgotten_shore",
+		"day_count": int(clock_dict["day_count"]),
+		"world_time": float(clock_dict["world_time"]),
+		"world_phase": String(clock_dict["world_phase"]),
+		"resources": economy.get_all_balances(),
+		"buildings": [building_mgr.to_save_dict()],
+		"npcs": [builder_npc.to_save_dict()],
+		"progression_flags": {
+			"first_night_survived": night_mgr.first_night_survived,
+			"collected_nodes": collected_node_ids.keys(),
+		},
+	}
+
+
+func save_game_state(save_path: String = SaveManager.DEFAULT_SAVE_PATH) -> bool:
+	return save_mgr.save_state(build_save_payload(), save_path)
+
+
+func execute_command(command_id: StringName, actor_x: float, _params: Dictionary = {}) -> bool:
+	match command_id:
+		&"interact":
+			_on_player_interact(actor_x)
+			return true
+		&"recruit":
+			_on_player_recruit(actor_x)
+			return builder_npc.recruited
+		&"build_wall":
+			_on_player_build_wall(actor_x)
+			return building_mgr.state != BuildingManager.WallState.PLACEHOLDER
+		&"repair_wall":
+			_on_player_repair_wall(actor_x)
+			return building_mgr.state == BuildingManager.WallState.COMPLETED
+		&"save_game":
+			return save_game_state()
+	return false
+
+
+func load_game_state(save_path: String = SaveManager.DEFAULT_SAVE_PATH) -> bool:
+	var res: Dictionary = save_mgr.load_state(save_path)
+	if not bool(res.get("ok", false)):
+		return false
+	var data: Dictionary = res["data"]
+	if time_manager != null:
+		time_manager.apply_save_dict(data)
+	economy.set_balances_from_dict(data["resources"])
+
+	var b_arr: Array = data["buildings"]
+	if not b_arr.is_empty() and typeof(b_arr[0]) == TYPE_DICTIONARY:
+		building_mgr.apply_save_dict(b_arr[0])
+
+	var n_arr: Array = data["npcs"]
+	if not n_arr.is_empty() and typeof(n_arr[0]) == TYPE_DICTIONARY:
+		builder_npc.apply_save_dict(n_arr[0])
+
+	var flags: Dictionary = data["progression_flags"]
+	night_mgr.first_night_survived = bool(flags.get("first_night_survived", false))
+	collected_node_ids.clear()
+	var saved_nodes: Variant = flags.get("collected_nodes", [])
+	if typeof(saved_nodes) == TYPE_ARRAY:
+		for item: Variant in saved_nodes:
+			collected_node_ids[String(item)] = true
+
+	if time_manager != null:
+		var is_unsafe: bool = time_manager.current_phase != TimeManager.Phase.DAYLIGHT
+		builder_npc.set_dusk_or_night_safety(is_unsafe)
+		if time_manager.current_phase == TimeManager.Phase.NIGHT and not night_mgr.enemy_active and not night_mgr.first_night_survived:
+			night_mgr.on_night_started()
+	_sync_all_presentations()
+	return true
+
+
+func _consume_pending_load_if_requested() -> void:
+	if Engine.has_meta("crownfall_load_on_start") and bool(Engine.get_meta("crownfall_load_on_start")):
+		Engine.set_meta("crownfall_load_on_start", false)
+		if load_game_state():
+			feedback_message.emit("Loaded saved kingdom state from user://save_slot_0.json")

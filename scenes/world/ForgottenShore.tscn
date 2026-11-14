@@ -1,9 +1,10 @@
-[gd_scene load_steps=7 format=3]
+[gd_scene load_steps=8 format=3]
 
 [ext_resource type="PackedScene" path="res://scenes/player/Player.tscn" id="1_player_scene"]
 [ext_resource type="Script" path="res://scripts/world/TimeManager.gd" id="2_time_mgr"]
 [ext_resource type="Script" path="res://scripts/world/SkyAtmosphere.gd" id="3_sky_atmo"]
 [ext_resource type="Script" path="res://scripts/ui/ClockHUD.gd" id="4_clock_hud"]
+[ext_resource type="Script" path="res://scripts/world/ForgottenShoreSession.gd" id="5_session"]
 
 [sub_resource type="RectangleShape2D" id="RectangleShape2D_floor"]
 size = Vector2(2400, 120)
@@ -12,6 +13,7 @@ size = Vector2(2400, 120)
 size = Vector2(40, 600)
 
 [node name="ForgottenShore" type="Node2D"]
+script = ExtResource("5_session")
 
 [node name="TimeManager" type="Node" parent="."]
 script = ExtResource("2_time_mgr")
@@ -21,7 +23,7 @@ offset_left = -1400.0
 offset_top = -800.0
 offset_right = 1400.0
 offset_bottom = 200.0
-color = Color(0.235, 0.439, 0.627, 1)
+color = Color(0.22, 0.42, 0.62, 1)
 script = ExtResource("3_sky_atmo")
 time_manager = NodePath("../TimeManager")
 
@@ -47,6 +49,142 @@ shape = SubResource("RectangleShape2D_wall")
 position = Vector2(1180, -300)
 shape = SubResource("RectangleShape2D_wall")
 
+[node name="WorldObjects" type="Node2D" parent="."]
+
+[node name="TownCenterAnchor" type="Node2D" parent="WorldObjects"]
+
+[node name="KeepVisual" type="ColorRect" parent="WorldObjects/TownCenterAnchor"]
+offset_left = -36.0
+offset_top = -64.0
+offset_right = 36.0
+color = Color(0.38, 0.32, 0.26, 1)
+
+[node name="CampfireGlow" type="ColorRect" parent="WorldObjects/TownCenterAnchor"]
+offset_left = -10.0
+offset_top = -18.0
+offset_right = 10.0
+color = Color(0.95, 0.55, 0.18, 1)
+
+[node name="TownLabel" type="Label" parent="WorldObjects/TownCenterAnchor"]
+offset_left = -64.0
+offset_top = -92.0
+offset_right = 64.0
+offset_bottom = -66.0
+text = "Town Center (Safe Zone)"
+horizontal_alignment = 1
+
+[node name="VagrantCamp" type="Node2D" parent="WorldObjects"]
+position = Vector2(-220, 0)
+
+[node name="TentVisual" type="ColorRect" parent="WorldObjects/VagrantCamp"]
+offset_left = -22.0
+offset_top = -36.0
+offset_right = 22.0
+color = Color(0.42, 0.36, 0.28, 1)
+
+[node name="WoodenWallPlot" type="Node2D" parent="WorldObjects"]
+position = Vector2(360, 0)
+
+[node name="WallVisual" type="ColorRect" parent="WorldObjects/WoodenWallPlot"]
+offset_left = -14.0
+offset_top = -56.0
+offset_right = 14.0
+color = Color(0.55, 0.55, 0.55, 0.45)
+
+[node name="WallLabel" type="Label" parent="WorldObjects/WoodenWallPlot"]
+offset_left = -70.0
+offset_top = -104.0
+offset_right = 70.0
+offset_bottom = -58.0
+text = "Wall Plot [B]
+2G 4W 2S"
+horizontal_alignment = 1
+
+[node name="ResourceNodes" type="Node2D" parent="WorldObjects"]
+
+[node name="cache_gold_west" type="ColorRect" parent="WorldObjects/ResourceNodes"]
+offset_left = -492.0
+offset_top = -20.0
+offset_right = -468.0
+color = Color(0.92, 0.76, 0.2, 1)
+
+[node name="Label" type="Label" parent="WorldObjects/ResourceNodes/cache_gold_west"]
+offset_left = -48.0
+offset_top = -28.0
+offset_right = 72.0
+text = "[E] Chest +4G"
+
+[node name="timber_pile_west" type="ColorRect" parent="WorldObjects/ResourceNodes"]
+offset_left = -124.0
+offset_top = -18.0
+offset_right = -96.0
+color = Color(0.52, 0.34, 0.18, 1)
+
+[node name="Label" type="Label" parent="WorldObjects/ResourceNodes/timber_pile_west"]
+offset_left = -42.0
+offset_top = -28.0
+offset_right = 74.0
+text = "[E] Timber +5W"
+
+[node name="stone_outcrop_east" type="ColorRect" parent="WorldObjects/ResourceNodes"]
+offset_left = 176.0
+offset_top = -22.0
+offset_right = 204.0
+color = Color(0.56, 0.6, 0.64, 1)
+
+[node name="Label" type="Label" parent="WorldObjects/ResourceNodes/stone_outcrop_east"]
+offset_left = -42.0
+offset_top = -28.0
+offset_right = 74.0
+text = "[E] Masonry +3S"
+
+[node name="shrine_cache_far_west" type="ColorRect" parent="WorldObjects/ResourceNodes"]
+offset_left = -792.0
+offset_top = -28.0
+offset_right = -768.0
+color = Color(0.45, 0.78, 0.88, 1)
+
+[node name="Label" type="Label" parent="WorldObjects/ResourceNodes/shrine_cache_far_west"]
+offset_left = -48.0
+offset_top = -28.0
+offset_right = 80.0
+text = "[E] Shrine +3G"
+
+[node name="BuilderActor" type="Node2D" parent="WorldObjects"]
+position = Vector2(-220, 0)
+
+[node name="BodyRect" type="ColorRect" parent="WorldObjects/BuilderActor"]
+offset_left = -8.0
+offset_top = -26.0
+offset_right = 8.0
+color = Color(0.32, 0.75, 0.45, 1)
+
+[node name="NPCLabel" type="Label" parent="WorldObjects/BuilderActor"]
+offset_left = -60.0
+offset_top = -52.0
+offset_right = 60.0
+offset_bottom = -28.0
+text = "Vagrant [R: 2G]"
+horizontal_alignment = 1
+
+[node name="NightEnemyActor" type="Node2D" parent="WorldObjects"]
+visible = false
+position = Vector2(820, 0)
+
+[node name="EnemyRect" type="ColorRect" parent="WorldObjects/NightEnemyActor"]
+offset_left = -10.0
+offset_top = -28.0
+offset_right = 10.0
+color = Color(0.82, 0.18, 0.24, 1)
+
+[node name="EnemyLabel" type="Label" parent="WorldObjects/NightEnemyActor"]
+offset_left = -50.0
+offset_top = -52.0
+offset_right = 50.0
+offset_bottom = -28.0
+text = "Greedling Raider"
+horizontal_alignment = 1
+
 [node name="Player" parent="." instance=ExtResource("1_player_scene")]
 
 [node name="ClockHUD" type="CanvasLayer" parent="." node_paths=PackedStringArray("time_manager")]
@@ -54,11 +192,23 @@ script = ExtResource("4_clock_hud")
 time_manager = NodePath("../TimeManager")
 
 [node name="MarginContainer" type="MarginContainer" parent="ClockHUD"]
-offset_right = 260.0
-offset_bottom = 48.0
+offset_right = 920.0
+offset_bottom = 96.0
 theme_override_constants/margin_left = 16
 theme_override_constants/margin_top = 12
 
-[node name="StatusLabel" type="Label" parent="ClockHUD/MarginContainer"]
+[node name="VBoxContainer" type="VBoxContainer" parent="ClockHUD/MarginContainer"]
+layout_mode = 2
+theme_override_constants/separation = 4
+
+[node name="StatusLabel" type="Label" parent="ClockHUD/MarginContainer/VBoxContainer"]
 layout_mode = 2
 text = "Day 1  •  Daylight"
+
+[node name="ResourcesLabel" type="Label" parent="ClockHUD/MarginContainer/VBoxContainer"]
+layout_mode = 2
+text = "Gold: 2   |   Wood: 2   |   Stone: 1"
+
+[node name="FeedbackLabel" type="Label" parent="ClockHUD/MarginContainer/VBoxContainer"]
+layout_mode = 2
+text = "Explore Forgotten Shore"
