@@ -1,14 +1,30 @@
 #!/usr/bin/env python3
 """
 Repository Static, Scene-Graph, CI Engine Lock & Documentation OD-01..OD-10 Consistency Verifier.
-Run from repository root:
+Works both in a Google Colab / Jupyter notebook cell and via CLI:
     python3 tests/verify_repo_integrity.py
 """
+import os
 import re
 import sys
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parent.parent
+
+def _resolve_repo_root() -> Path:
+    if "__file__" in globals():
+        candidate = Path(__file__).resolve().parent.parent
+        if (candidate / "project.godot").exists():
+            return candidate
+    colab_path = Path("/content/drive/MyDrive/crownfall")
+    if colab_path.exists():
+        return colab_path
+    cwd = Path(os.getcwd()).resolve()
+    if (cwd / "project.godot").exists():
+        return cwd
+    return cwd
+
+
+ROOT = _resolve_repo_root()
 errors: list[str] = []
 checks: int = 0
 
@@ -37,22 +53,35 @@ for tscn in sorted((ROOT / "scenes").rglob("*.tscn")):
 for gd in sorted(list((ROOT / "scripts").rglob("*.gd")) + list((ROOT / "tests").rglob("*.gd"))):
     rel = gd.relative_to(ROOT).as_posix()
     lines = gd.read_text(encoding="utf-8").splitlines()
-    bad_lines = [i for i, l in enumerate(lines, 1) if l.strip() and not l.lstrip().startswith("#") and " " in l[:len(l) - len(l.lstrip())]]
+    bad_lines = [
+        i
+        for i, l in enumerate(lines, 1)
+        if l.strip() and not l.lstrip().startswith("#") and " " in l[: len(l) - len(l.lstrip())]
+    ]
     assert_check(len(bad_lines) == 0, f"{rel}: pure tab indentation", f"lines {bad_lines}")
     full = "\n".join(lines)
     if rel.startswith("tests/"):
-        assert_check("session._ready()" not in full and "mid_session._ready()" not in full, f"{rel}: no duplicate manual _ready() call")
+        assert_check(
+            "session._ready()" not in full and "mid_session._ready()" not in full,
+            f"{rel}: no duplicate manual _ready() call",
+        )
 
 m8_txt = (ROOT / "tests/test_integration_m8_slice.gd").read_text(encoding="utf-8")
-assert_check('current_scene.name != "Main"' in m8_txt and 'current_scene.name != "ForgottenShore"' in m8_txt,
-             "test_integration_m8_slice.gd: verifies real SceneTree.current_scene transitions")
+assert_check(
+    'current_scene.name != "Main"' in m8_txt and 'current_scene.name != "ForgottenShore"' in m8_txt,
+    "test_integration_m8_slice.gd: verifies real SceneTree.current_scene transitions",
+)
 
 # 3. Verify CI workflow explicit Godot 4.7.2 version lock (zero 4.3.0 fallback)
 ci_txt = (ROOT / ".github/workflows/godot-ci.yml").read_text(encoding="utf-8")
-assert_check("version: 4.7.2" in ci_txt and "4.3.0" not in ci_txt,
-             ".github/workflows/godot-ci.yml: explicitly installs Godot 4.7.2 without silent 4.3.0 fallback")
-assert_check('grep -E "^4\\.7\\.2\\."' in ci_txt or 'grep -E "^4\.7\.2\."' in ci_txt,
-             ".github/workflows/godot-ci.yml: enforces runtime godot --version == 4.7.2.* check")
+assert_check(
+    "version: 4.7.2" in ci_txt and "4.3.0" not in ci_txt,
+    ".github/workflows/godot-ci.yml: explicitly installs Godot 4.7.2 without silent 4.3.0 fallback",
+)
+assert_check(
+    r'grep -E "^4\.7\.2\."' in ci_txt,
+    ".github/workflows/godot-ci.yml: enforces runtime godot --version == 4.7.2.* check",
+)
 
 # 4. Verify canonical enemy balance consistency (45 HP, 15 damage, 15 thorn, 3 waves) across code & docs
 nem_txt = (ROOT / "scripts/survival/NightEncounterManager.gd").read_text(encoding="utf-8")
@@ -78,7 +107,10 @@ for doc_name in ["GDD.md", "PRD.md", "SYSTEMS.md", "TDD.md", "REVISED_PROJECT_BA
     dtxt = doc_path.read_text(encoding="utf-8")
     for phrase in FORBIDDEN_PHRASES:
         assert_check(phrase not in dtxt, f"docs/{doc_name}: free of contradictory phrase '{phrase}'")
-    assert_check(re.search(r"\b(50|60) HP\b", dtxt) is None, f"docs/{doc_name}: zero conflicting 50/60 HP enemy numbers")
+    assert_check(
+        re.search(r"\b(50|60) HP\b", dtxt) is None,
+        f"docs/{doc_name}: zero conflicting 50/60 HP enemy numbers",
+    )
 
 # 6. Verify specific OD-01..OD-10 approved facts are present in GDD, PRD, and SYSTEMS
 for doc_name in ["GDD.md", "PRD.md", "SYSTEMS.md"]:
@@ -90,6 +122,9 @@ for doc_name in ["GDD.md", "PRD.md", "SYSTEMS.md"]:
 if errors:
     for e in errors:
         print(e)
-    sys.exit(1)
+    if "__file__" in globals():
+        sys.exit(1)
+    else:
+        raise AssertionError(f"{len(errors)} integrity checks failed")
 
 print(f"PASS: All {checks} repository integrity, scene-graph, CI lock, and OD-01..OD-10 documentation checks succeeded!")
