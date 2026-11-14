@@ -456,3 +456,6 @@ text = "Explore Forgotten Shore"
 [node name="ForecastLabel" type="Label" parent="ClockHUD/MarginContainer/VBoxContainer"]
 layout_mode = 2
 text = "Tonight (East): 3 Waves • Greedling Raider"
+
+[node name="SFXPlayer" type="AudioStreamPlayer" parent="."]
+volume_db = -4.0

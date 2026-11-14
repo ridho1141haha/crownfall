@@ -52,6 +52,10 @@ var _prev_builder_x: float = NPCBuilderAgent.CAMP_POSITION_X
 @onready var npc_label: Label = $WorldObjects/BuilderActor/NPCLabel as Label
 @onready var enemy_visual: Node2D = $WorldObjects/NightEnemyActor as Node2D
 @onready var slice_hud: CanvasLayer = $ClockHUD as CanvasLayer
+@onready var sfx_player: AudioStreamPlayer = get_node_or_null("SFXPlayer") as AudioStreamPlayer
+var _sfx_cache: Dictionary = {}
+var _prev_wall_hp: int = 0
+var _prev_enemy_hp: int = 0
 
 
 var _active_resource_nodes: Array[Dictionary] = []
@@ -155,6 +159,46 @@ func _wire_signals() -> void:
 		slice_hud.call("bind_session", self)
 
 
+
+
+func _play_sfx(sfx_name: String) -> void:
+	if sfx_player == null:
+		return
+	if not _sfx_cache.has(sfx_name):
+		var path: String = "res://assets/audio/%s.wav" % sfx_name
+		if ResourceLoader.exists(path):
+			_sfx_cache[sfx_name] = load(path)
+		else:
+			_sfx_cache[sfx_name] = null
+	var stream: AudioStream = _sfx_cache.get(sfx_name, null) as AudioStream
+	if stream != null:
+		sfx_player.stream = stream
+		sfx_player.play()
+
+
+func _spawn_floating_text(world_x: float, text: String, col: Color = Color(1.0, 0.92, 0.45, 1.0)) -> void:
+	if not is_inside_tree():
+		return
+	var lbl: Label = Label.new()
+	lbl.text = text
+	lbl.modulate = col
+	lbl.position = Vector2(world_x - 32.0, -48.0)
+	add_child(lbl)
+	var tw: Tween = create_tween()
+	tw.set_parallel(true)
+	tw.tween_property(lbl, "position:y", -78.0, 0.85)
+	tw.tween_property(lbl, "modulate:a", 0.0, 0.85)
+	tw.chain().tween_callback(lbl.queue_free)
+
+
+func _flash_sprite(spr: CanvasItem, flash_col: Color = Color(2.0, 1.2, 1.2, 1.0)) -> void:
+	if spr == null or not is_inside_tree():
+		return
+	spr.modulate = flash_col
+	var tw: Tween = create_tween()
+	tw.tween_property(spr, "modulate", Color(1.0, 1.0, 1.0, 1.0), 0.12)
+
+
 func _record_rejection(reason: String) -> void:
 	_last_rejection_reason = reason
 	feedback_message.emit(reason)
@@ -173,6 +217,8 @@ func _on_player_interact(player_x: float) -> bool:
 			if economy.try_add(res_id, amount):
 				collected_node_ids[node_id] = true
 				_update_resource_node_visuals()
+				_play_sfx("sfx_coin")
+				_spawn_floating_text(node_x, "+%d %s" % [amount, String(res_id).capitalize()])
 				feedback_message.emit("Collected: %s" % String(node_def["label"]))
 				return true
 			return false
@@ -234,10 +280,14 @@ func _wire_follower_signals(agent: NPCBuilderAgent) -> void:
 
 func _on_farmer_gold_earned(npc_id: String, amount: int) -> void:
 	if economy.try_add(&"gold", amount):
+		_play_sfx("sfx_coin")
+		_spawn_floating_text(player.global_position.x if player != null else 0.0, "+%d Gold" % amount)
 		feedback_message.emit("Farmer %s harvested +%d Gold!" % [npc_id, amount])
 
 
 func _on_archer_volley_fired(_npc_id: String, damage: int, from_tower: bool) -> void:
+	_play_sfx("sfx_bow")
+	_spawn_floating_text(night_mgr.enemy_x, "-%d" % damage, Color(1.0, 0.45, 0.45, 1.0))
 	feedback_message.emit("Archer volley (%d dmg%s)!" % [damage, " from Watchtower" if from_tower else ""])
 
 
@@ -251,6 +301,7 @@ func _on_player_build_wall(player_x: float, plot_id: String = "") -> bool:
 	if building_mgr.can_upgrade_wall(player_x, target_id):
 		return _on_player_upgrade_wall(player_x, target_id)
 	if building_mgr.request_start_construction(player_x, economy, target_id):
+		_play_sfx("sfx_build")
 		feedback_message.emit("%s blueprint funded! Builder will construct it." % target_id)
 		return true
 	return false
@@ -457,6 +508,7 @@ func _refresh_renewable_nodes() -> void:
 
 func _on_sunset_started(_day_number: int) -> void:
 	pop_mgr.set_dusk_or_night_safety(true, building_mgr)
+	_play_sfx("sfx_sunset")
 	feedback_message.emit("Sunset Warning — Builder is retreating to the Town Center safe zone!")
 
 
@@ -464,6 +516,7 @@ func _on_night_started(_day_number: int) -> void:
 	pop_mgr.set_dusk_or_night_safety(true, building_mgr)
 	if not night_mgr.night_active:
 		night_mgr.on_night_started(time_manager.current_day if time_manager != null else 1)
+	_play_sfx("sfx_night")
 	feedback_message.emit("Night has fallen! Greedling Raiders approach from the East Shore!")
 
 
@@ -692,6 +745,15 @@ func _sync_dynamic_actors() -> void:
 			slice_hud.call("set_forecast_text", "ALERT: %s (%d/%d HP) at x=%.0f" % [night_mgr.get_enemy_display_name(), night_mgr.enemy_hp, night_mgr.enemy_max_hp, night_mgr.enemy_x])
 		else:
 			slice_hud.call("set_forecast_text", NightEncounterManager.get_night_forecast(day_n))
+
+	if building_mgr.durability < _prev_wall_hp and _prev_wall_hp > 0:
+		_play_sfx("sfx_hit")
+		_flash_sprite(wall_visual)
+	_prev_wall_hp = building_mgr.durability
+
+	if night_mgr.enemy_active and night_mgr.enemy_hp < _prev_enemy_hp and _prev_enemy_hp > 0:
+		_flash_sprite(enemy_sprite)
+	_prev_enemy_hp = night_mgr.enemy_hp if night_mgr.enemy_active else 0
 
 	_sync_follower_nodes()
 	_update_proximity_prompts()
