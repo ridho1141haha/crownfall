@@ -1,0 +1,36 @@
+name: Crownfall Godot 4 Headless CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  verify-vertical-slice:
+    name: Static & Headless Godot 4 Verification
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Godot 4.3+ Headless
+        uses: chickensoft-games/setup-godot@v2
+        with:
+          version: 4.3.0
+          use-dotnet: false
+
+      - name: Verify Project Import & Parser
+        run: godot --headless --import
+
+      - name: Run P0 Unit Tests (M2-M7)
+        run: godot --headless --script res://tests/test_unit_m2_m7.gd
+
+      - name: Run P0 Scene Integration Test (M8 Full Loop)
+        run: godot --headless --script res://tests/test_integration_m8_slice.gd
+
+      - name: Run Combined P0 Vertical Slice Suite
+        run: godot --headless --script res://tests/test_vertical_slice.gd
+
+      - name: Run Experimental P1 Skeleton Tests (M9-M10)
+        run: godot --headless --script res://tests/test_experimental_p1_m9_m10.gd
