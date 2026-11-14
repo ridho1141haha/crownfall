@@ -43,6 +43,13 @@ jobs:
           godot --headless --import 2>&1 | tee /tmp/godot_import.log
           ! grep -E "(SCRIPT ERROR:|Parser Error:|TEST FAILURE:)" /tmp/godot_import.log
 
+      - name: Run Standalone World Clock Test
+        run: |
+          set -o pipefail
+          godot --headless --script res://tests/test_time_manager.gd 2>&1 | tee /tmp/godot_tm.log
+          ! grep -E "(SCRIPT ERROR:|Parser Error:|TEST FAILURE:)" /tmp/godot_tm.log
+          grep -q "PASS: test_time_manager" /tmp/godot_tm.log
+
       - name: Run P0 Unit Tests (M2-M7 + Extreme Save Rollback)
         run: |
           set -o pipefail
