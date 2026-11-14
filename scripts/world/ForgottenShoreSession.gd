@@ -22,7 +22,7 @@ const RESOURCE_NODES: Array[Dictionary] = [
 var economy: EconomyLedger = EconomyLedger.new({"gold": 2, "wood": 2, "stone": 1})
 var building_mgr: BuildingManager = BuildingManager.new()
 var pop_mgr: NPCPopulationManager = NPCPopulationManager.new()
-var builder_npc: NPCBuilderAgent = pop_mgr.get_primary_agent()
+var builder_npc: NPCBuilderAgent = null
 var _follower_sprites: Dictionary = {}
 var night_mgr: NightEncounterManager = NightEncounterManager.new()
 var save_mgr: SaveManager = SaveManager.new()
@@ -52,6 +52,10 @@ var _prev_builder_x: float = NPCBuilderAgent.CAMP_POSITION_X
 var _active_resource_nodes: Array[Dictionary] = []
 
 
+func _init() -> void:
+	builder_npc = pop_mgr.get_primary_agent()
+
+
 func _load_resource_nodes_from_data() -> void:
 	_active_resource_nodes.clear()
 	if FileAccess.file_exists("res://data/resource_nodes.json"):
@@ -74,7 +78,7 @@ func _load_resource_nodes_from_data() -> void:
 				if lbl != null and d.has("prompt"):
 					lbl.text = String(d["prompt"])
 	if _active_resource_nodes.is_empty():
-		_active_resource_nodes = RESOURCE_NODES.duplicate()
+		_active_resource_nodes.assign(RESOURCE_NODES)
 
 
 func _ready() -> void:
