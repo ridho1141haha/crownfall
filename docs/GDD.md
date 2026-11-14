@@ -106,7 +106,7 @@ The loop should make the relationship between daytime decisions and nighttime co
 | Island | Forgotten Shore | Other islands and inactive-island simulation |
 | Resources | Gold, Wood, Stone | Iron, Food, Crystal, Ancient Relics |
 | NPC | Villager recruitment and Builder behavior | Farmer, Archer, Knight, Guard, mount systems |
-| Buildings | Town Center anchor and Wooden Wall | Full building catalogue and upgrade tree |
+| Buildings | Town Center, Wooden Wall, Stone Wall Tier 2, Watchtower, and Farm Plots | Full kingdom upgrade tree |
 | Enemies | One basic enemy archetype | Multiple enemy families and bosses |
 | Survival | One night encounter and sunrise | Blood Moon and advanced world events |
 | Narrative | Environmental atmosphere and world premise | Full dialogue, quests, branching story, chapter framework |
@@ -124,12 +124,14 @@ The vertical slice uses one kingdom resource ledger.
 
 Iron, Food, Crystal, and Ancient Relics are deferred. No personal coin-pouch capacity or complex personal inventory is required in P0.
 
-Approved first-slice economy (`OD-01`, `OD-02`, `OD-03`): Starting balances are `2 Gold, 2 Wood, 1 Stone`. Resources are collected via `[E]` within `72 px` at four single-use Forgotten Shore caches (`cache_gold_west` `+4G` at `x=-480`, `timber_pile_west` `+5W` at `x=-110`, `stone_outcrop_east` `+3S` at `x=190`, and `shrine_cache_far_west` `+3G` at `x=-780`).
+Approved first-slice economy (`OD-01`, `OD-02`, `OD-03`): Starting balances are `2 Gold, 2 Wood, 1 Stone`. Resources are collected via `[E]` within `72 px` at four Forgotten Shore nodes defined in `data/resource_nodes.json`: one-time Gold caches (`cache_gold_west` `+4G` at `x=-480`, `shrine_cache_far_west` `+3G` at `x=-780`), renewable Wood/Stone nodes (`timber_pile_west` `+5W` at `x=-110`, `stone_outcrop_east` `+3S` at `x=190`) that refresh every Sunrise, plus `Farm Plots` (`3G, 4W`, `+2 Gold` every `60s` during Daylight).
 
 ### 3.4 Settlement and Construction
 
 - **Town Center:** the starting kingdom anchor and reference point for the settlement's safe area. It may be a fixed starting scene rather than a constructible building.
-- **Wooden Wall:** the primary construction target for the first-slice loop.
+- **Wooden Wall & Stone Wall Tier 2:** primary defensive wall at `x=360` (`150 HP`, upgradeable to `Stone Wall Lv.2` with `260 HP` and `20 thorn dmg` for `3G, 2W, 5S`).
+- **Watchtower (`x=290`):** defensive support tower (`3G, 3W, 3S`, `120 HP`) dealing `+10` support damage per strike to raiders attacking the wall.
+- **Farm Plots (`x=-310`, `x=120`):** passive Gold income (`3G, 4W`, `+2G / 60s` during Daylight).
 - **Construction flow:** choose a location, validate placement, validate and deduct cost once, create a blueprint/construction state, let Builder behavior progress it, then mark it completed.
 - **Damage and repair:** include only the minimum rules needed to make the first-night defense meaningful.
 
@@ -163,7 +165,7 @@ Approved first-night encounter (`OD-06`): **Greedling Raider** spawns at `x=820.
 
 ### 3.7 Outcome and Persistence
 
-Approved first-slice outcome and breach rule (`OD-07`): Reaching sunrise without a Town Center breach sets `first_night_survived = true` and auto-saves the kingdom state. If the wall is unbuilt or destroyed (`0 HP`), the raider reaches `TownCenter` (`x=0.0`) and sets `settlement_breached = true` (non-destructive recovery without permanent game-over, allowing the player to rebuild on the next day). Partially constructed walls (`>=25%` progress) act as a makeshift barricade with `int(round(progress * 80.0)) HP` (`OD-04`).
+Approved first-slice outcome and breach rule (`OD-07`): Reaching sunrise without a Town Center breach sets `first_night_survived = true` and auto-saves the kingdom state. If the wall is unbuilt or destroyed (`0 HP`), the raider reaches `TownCenter` (`x=0.0`) and sets `settlement_breached = true` (non-destructive recovery with a `50%` Gold breach penalty, allowing the player to rebuild on the next day). Partially constructed walls (`>=25%` progress) act as a makeshift barricade with `int(round(progress * 80.0)) HP` (`OD-04`).
 
 ---
 
