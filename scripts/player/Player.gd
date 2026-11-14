@@ -9,8 +9,8 @@ signal manual_save_requested()
 signal fast_clock_toggled()
 
 @export var move_speed: float = 240.0
-@export var min_bound_x: float = -1140.0
-@export var max_bound_x: float = 1140.0
+@export var min_bound_x: float = -1540.0
+@export var max_bound_x: float = 1540.0
 
 var gravity: float = ProjectSettings.get_setting("physics/2d/default_gravity") as float
 var facing_direction: int = 1

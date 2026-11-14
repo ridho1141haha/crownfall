@@ -28,7 +28,12 @@ var night_mgr: NightEncounterManager = NightEncounterManager.new()
 var save_mgr: SaveManager = SaveManager.new()
 var collected_node_ids: Dictionary = {}
 var reign_state: ReignState = ReignState.ACTIVE
+const SHIPWRECK_X: float = -1350.0
+const PORTAL_X: float = 1350.0
+const SHIPWRECK_COSTS: Array[Dictionary] = [{"gold": 2, "wood": 3, "stone": 1}, {"gold": 2, "wood": 3, "stone": 2}, {"gold": 2, "wood": 2, "stone": 1}]
 var hearth_level: int = 1
+var shipwreck_stage: int = 0
+var portal_relic_looted: bool = false
 var _stagger_cooldown: float = 0.0
 var _farm_timers: Dictionary = {}
 var _last_rejection_reason: String = ""
@@ -195,6 +200,12 @@ func _on_player_interact(player_x: float) -> bool:
 		elif building_mgr.can_upgrade_wall(player_x, near_plot):
 			return _on_player_upgrade_wall(player_x, near_plot)
 
+	if absf(player_x - SHIPWRECK_X) <= 96.0:
+		return _on_player_interact_shipwreck(player_x)
+
+	if absf(player_x - PORTAL_X) <= 96.0 and not portal_relic_looted:
+		return _on_player_loot_portal_relic()
+
 	if absf(player_x) <= 80.0 and hearth_level < 3:
 		return _on_player_upgrade_hearth(player_x)
 
@@ -263,6 +274,59 @@ func get_hearth_upgrade_cost() -> Dictionary:
 	return {}
 
 
+
+
+func _on_player_interact_shipwreck(player_x: float) -> bool:
+	_last_rejection_reason = ""
+	if absf(player_x - SHIPWRECK_X) > 96.0:
+		_record_rejection("Move closer to the Shipwreck (x=-1350)")
+		return false
+	if shipwreck_stage >= 3:
+		reign_state = ReignState.ISLAND_CLEARED
+		save_game_state()
+		feedback_message.emit("Ship repaired! Setting sail from Forgotten Shore toward Eldergrove Forest!")
+		return true
+	var cost: Dictionary = SHIPWRECK_COSTS[shipwreck_stage]
+	if not economy.try_spend(cost):
+		_record_rejection("Shipwreck Stage %d/3 needs %dG %dW %dS" % [shipwreck_stage + 1, int(cost["gold"]), int(cost["wood"]), int(cost["stone"])])
+		return false
+	shipwreck_stage += 1
+	_sync_landmark_visuals()
+	feedback_message.emit("Shipwreck repaired to Stage %d/3!" % shipwreck_stage)
+	return true
+
+
+func _on_player_loot_portal_relic() -> bool:
+	if portal_relic_looted:
+		_record_rejection("Portal Relic already scavenged")
+		return false
+	if economy.try_add(&"gold", 3) and economy.try_add(&"stone", 2):
+		portal_relic_looted = true
+		_sync_landmark_visuals()
+		feedback_message.emit("Scavenged Ancient Relic near Greed Portal (+3 Gold, +2 Stone)!")
+		return true
+	return false
+
+
+func _sync_landmark_visuals() -> void:
+	var ship_spr: Sprite2D = get_node_or_null("WorldObjects/ShipwreckAnchor/ShipSprite") as Sprite2D
+	var ship_lbl: Label = get_node_or_null("WorldObjects/ShipwreckAnchor/ShipLabel") as Label
+	if ship_spr != null:
+		ship_spr.frame = clampi(shipwreck_stage, 0, 3)
+	if ship_lbl != null:
+		if shipwreck_stage >= 3:
+			ship_lbl.text = "Vessel Ready! [E] Set Sail"
+		else:
+			var c: Dictionary = SHIPWRECK_COSTS[shipwreck_stage]
+			ship_lbl.text = "Shipwreck [E] Stage %d/3\n%dG %dW %dS" % [shipwreck_stage + 1, int(c["gold"]), int(c["wood"]), int(c["stone"])]
+	var portal_spr: Sprite2D = get_node_or_null("WorldObjects/GreedPortalAnchor/PortalSprite") as Sprite2D
+	var portal_lbl: Label = get_node_or_null("WorldObjects/GreedPortalAnchor/PortalLabel") as Label
+	if portal_spr != null:
+		portal_spr.frame = 1 if reign_state == ReignState.ISLAND_CLEARED else 0
+	if portal_lbl != null:
+		portal_lbl.text = "Greed Portal (Scavenged)" if portal_relic_looted else "Greed Portal [E]\nScavenge Relic (+3G +2S)"
+
+
 func _on_player_upgrade_hearth(player_x: float) -> bool:
 	_last_rejection_reason = ""
 	if absf(player_x) > 80.0:
@@ -277,6 +341,7 @@ func _on_player_upgrade_hearth(player_x: float) -> bool:
 		return false
 	hearth_level += 1
 	_sync_hearth_visuals()
+	_sync_landmark_visuals()
 	feedback_message.emit("Hearth upgraded to Lv.%d (Light radius: %.0f px)!" % [hearth_level, NightEncounterManager.get_hearth_radius(hearth_level)])
 	return true
 
@@ -560,6 +625,13 @@ func _update_proximity_prompts() -> void:
 	if npc_label != null and not builder_npc.recruited:
 		npc_label.visible = absf(px - builder_npc.position_x) <= 105.0
 
+	var ship_lbl: Label = get_node_or_null("WorldObjects/ShipwreckAnchor/ShipLabel") as Label
+	if ship_lbl != null:
+		ship_lbl.visible = absf(px - SHIPWRECK_X) <= 120.0
+	var portal_lbl: Label = get_node_or_null("WorldObjects/GreedPortalAnchor/PortalLabel") as Label
+	if portal_lbl != null:
+		portal_lbl.visible = absf(px - PORTAL_X) <= 120.0
+
 	var stands_root: Node = get_node_or_null("WorldObjects/ToolStands")
 	if stands_root != null:
 		for sid: String in NPCPopulationManager.TOOL_STANDS.keys():
@@ -685,6 +757,8 @@ func build_save_payload() -> Dictionary:
 			"collected_nodes": collected_node_ids.keys(),
 			"reign_state": int(reign_state),
 			"hearth_level": hearth_level,
+			"shipwreck_stage": shipwreck_stage,
+			"portal_relic_looted": portal_relic_looted,
 		},
 	}
 
@@ -725,6 +799,8 @@ func load_game_state(save_path: String = SaveManager.DEFAULT_SAVE_PATH) -> bool:
 	night_mgr.first_night_survived = bool(flags.get("first_night_survived", night_mgr.first_night_survived))
 	reign_state = int(flags.get("reign_state", ReignState.ACTIVE)) as ReignState
 	hearth_level = clampi(int(flags.get("hearth_level", 1)), 1, 3)
+	shipwreck_stage = clampi(int(flags.get("shipwreck_stage", 0)), 0, 3)
+	portal_relic_looted = bool(flags.get("portal_relic_looted", false))
 	collected_node_ids.clear()
 	var saved_nodes: Variant = flags.get("collected_nodes", [])
 	if typeof(saved_nodes) == TYPE_ARRAY:

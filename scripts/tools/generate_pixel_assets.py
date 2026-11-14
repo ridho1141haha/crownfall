@@ -555,6 +555,59 @@ def build_tool_stands() -> Image.Image:
     return sheet
 
 
+
+
+def build_shipwreck_stages() -> Image.Image:
+    sheet = new_canvas(64 * 4, 48)
+    sail = (224, 214, 196, 255)
+    sail_d = (182, 170, 152, 255)
+    for stage in range(4):
+        f = new_canvas(64, 48)
+        # Hull base (broken in stage 0, repaired by stage 1+)
+        if stage == 0:
+            rect(f, 8, 36, 22, 8, WOOD_D)
+            rect(f, 34, 38, 18, 6, WOOD_D)
+            rect(f, 12, 34, 14, 3, WOOD)
+        else:
+            rect(f, 8, 32, 48, 10, WOOD)
+            rect(f, 12, 30, 40, 4, WOOD_L)
+            rect(f, 14, 40, 36, 4, WOOD_D)
+        # Mast in stage 2+
+        if stage >= 2:
+            rect(f, 30, 10, 4, 22, WOOD_D)
+            rect(f, 22, 16, 20, 2, WOOD)
+        # Full sail + royal banner in stage 3
+        if stage >= 3:
+            rect(f, 20, 14, 18, 12, sail)
+            rect(f, 20, 22, 18, 4, sail_d)
+            rect(f, 30, 6, 8, 4, CAPE)
+            rect(f, 34, 7, 3, 2, GOLD_L)
+        sheet.paste(add_outline(f), (stage * 64, 0))
+    return sheet
+
+
+def build_greed_portal() -> Image.Image:
+    sheet = new_canvas(48 * 2, 48)
+    void_c = (44, 22, 62, 255)
+    void_g = (168, 54, 142, 255)
+    for i in range(2):
+        f = new_canvas(48, 48)
+        # Stone archway
+        rect(f, 8, 12, 8, 34, STONE_D)
+        rect(f, 32, 12, 8, 34, STONE_D)
+        rect(f, 6, 8, 36, 8, STONE)
+        rect(f, 10, 6, 28, 4, STONE_L)
+        # Inner rift
+        if i == 0:
+            rect(f, 16, 16, 16, 28, void_c)
+            rect(f, 19, 20, 10, 20, void_g)
+            rect(f, 22, 24, 4, 12, CRIMSON)
+        else:
+            rect(f, 16, 16, 16, 28, SHADOW)
+        sheet.paste(add_outline(f), (i * 48, 0))
+    return sheet
+
+
 def main() -> None:
     outputs = {
         "characters/player/player_monarch_sheet.png": build_monarch_sheet(),
@@ -572,6 +625,8 @@ def main() -> None:
         "characters/npc/npc_farmer_sheet.png": build_farmer_sheet(),
         "characters/npc/npc_archer_sheet.png": build_archer_sheet(),
         "buildings/tool_stands/props_tool_stands.png": build_tool_stands(),
+        "buildings/shipwreck/building_shipwreck_stages.png": build_shipwreck_stages(),
+        "environment/landmarks/env_greed_portal.png": build_greed_portal(),
     }
 
     for rel_path, img in outputs.items():

@@ -1,4 +1,4 @@
-[gd_scene load_steps=22 format=3]
+[gd_scene load_steps=24 format=3]
 
 [ext_resource type="PackedScene" path="res://scenes/player/Player.tscn" id="1_player_scene"]
 [ext_resource type="Script" path="res://scripts/world/TimeManager.gd" id="2_time_mgr"]
@@ -17,6 +17,8 @@
 [ext_resource type="Texture2D" path="res://assets/buildings/watchtower/building_watchtower_states.png" id="15_tower_tex"]
 [ext_resource type="Texture2D" path="res://assets/buildings/farm_plot/building_farm_plot_states.png" id="16_farm_tex"]
 [ext_resource type="Texture2D" path="res://assets/buildings/tool_stands/props_tool_stands.png" id="17_stand_tex"]
+[ext_resource type="Texture2D" path="res://assets/buildings/shipwreck/building_shipwreck_stages.png" id="18_ship_tex"]
+[ext_resource type="Texture2D" path="res://assets/environment/landmarks/env_greed_portal.png" id="19_portal_tex"]
 
 [sub_resource type="Gradient" id="Gradient_fire"]
 offsets = PackedFloat32Array(0, 0.45, 1)
@@ -31,7 +33,7 @@ fill_from = Vector2(0.5, 0.5)
 fill_to = Vector2(0.5, 0)
 
 [sub_resource type="RectangleShape2D" id="RectangleShape2D_floor"]
-size = Vector2(2400, 120)
+size = Vector2(3200, 120)
 
 [sub_resource type="RectangleShape2D" id="RectangleShape2D_wall"]
 size = Vector2(40, 600)
@@ -67,40 +69,40 @@ motion_scale = Vector2(0.18, 1)
 
 [node name="MountainsSprite" type="Sprite2D" parent="ParallaxBackground/MountainsLayer"]
 texture_repeat = 2
-position = Vector2(-1400, -130)
+position = Vector2(-1800, -130)
 scale = Vector2(1.4, 1.4)
 texture = ExtResource("13_mtn_tex")
 centered = false
 region_enabled = true
-region_rect = Rect2(0, 0, 2200, 96)
+region_rect = Rect2(0, 0, 3600, 96)
 
 [node name="ForestLayer" type="ParallaxLayer" parent="ParallaxBackground"]
 motion_scale = Vector2(0.42, 1)
 
 [node name="ForestSprite" type="Sprite2D" parent="ParallaxBackground/ForestLayer"]
 texture_repeat = 2
-position = Vector2(-1400, -96)
+position = Vector2(-1800, -96)
 texture = ExtResource("14_forest_tex")
 centered = false
 region_enabled = true
-region_rect = Rect2(0, 0, 2800, 96)
+region_rect = Rect2(0, 0, 3600, 96)
 
 [node name="Ground" type="StaticBody2D" parent="."]
 
 [node name="DeepSoil" type="ColorRect" parent="Ground"]
-offset_left = -1200.0
+offset_left = -1600.0
 offset_top = 32.0
-offset_right = 1200.0
+offset_right = 1600.0
 offset_bottom = 320.0
 color = Color(0.219608, 0.156863, 0.12549, 1)
 
 [node name="GroundSprite" type="Sprite2D" parent="Ground"]
 texture_repeat = 2
-position = Vector2(-1200, 0)
+position = Vector2(-1600, 0)
 texture = ExtResource("6_ground_tex")
 centered = false
 region_enabled = true
-region_rect = Rect2(0, 0, 2400, 32)
+region_rect = Rect2(0, 0, 3200, 32)
 
 [node name="CollisionShape2D" type="CollisionShape2D" parent="Ground"]
 position = Vector2(0, 60)
@@ -109,11 +111,11 @@ shape = SubResource("RectangleShape2D_floor")
 [node name="WorldBounds" type="StaticBody2D" parent="."]
 
 [node name="LeftWall" type="CollisionShape2D" parent="WorldBounds"]
-position = Vector2(-1180, -300)
+position = Vector2(-1580, -300)
 shape = SubResource("RectangleShape2D_wall")
 
 [node name="RightWall" type="CollisionShape2D" parent="WorldBounds"]
-position = Vector2(1180, -300)
+position = Vector2(1580, -300)
 shape = SubResource("RectangleShape2D_wall")
 
 [node name="WorldObjects" type="Node2D" parent="."]
@@ -365,6 +367,45 @@ text = "[E] Archer (1G 1W)"
 horizontal_alignment = 1
 
 [node name="NPCFollowers" type="Node2D" parent="WorldObjects"]
+
+
+[node name="ShipwreckAnchor" type="Node2D" parent="WorldObjects"]
+position = Vector2(-1350, 0)
+
+[node name="ShipSprite" type="Sprite2D" parent="WorldObjects/ShipwreckAnchor"]
+position = Vector2(-32, -48)
+texture = ExtResource("18_ship_tex")
+centered = false
+hframes = 4
+
+[node name="ShipLabel" type="Label" parent="WorldObjects/ShipwreckAnchor"]
+visible = false
+offset_left = -84.0
+offset_top = -96.0
+offset_right = 84.0
+offset_bottom = -50.0
+text = "Shipwreck [E] Stage 1/3
+2G 3W 1S"
+horizontal_alignment = 1
+
+[node name="GreedPortalAnchor" type="Node2D" parent="WorldObjects"]
+position = Vector2(1350, 0)
+
+[node name="PortalSprite" type="Sprite2D" parent="WorldObjects/GreedPortalAnchor"]
+position = Vector2(-24, -48)
+texture = ExtResource("19_portal_tex")
+centered = false
+hframes = 2
+
+[node name="PortalLabel" type="Label" parent="WorldObjects/GreedPortalAnchor"]
+visible = false
+offset_left = -84.0
+offset_top = -96.0
+offset_right = 84.0
+offset_bottom = -50.0
+text = "Greed Portal [E]
+Scavenge Relic (+3G +2S)"
+horizontal_alignment = 1
 
 [node name="NightEnemyActor" type="Node2D" parent="WorldObjects"]
 visible = false

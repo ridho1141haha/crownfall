@@ -149,6 +149,10 @@ static func migrate_payload(data: Variant) -> Variant:
 				pf["reign_state"] = 0
 			if not pf.has("hearth_level"):
 				pf["hearth_level"] = 1
+			if not pf.has("shipwreck_stage"):
+				pf["shipwreck_stage"] = 0
+			if not pf.has("portal_relic_looted"):
+				pf["portal_relic_looted"] = false
 		if d.has("buildings") and typeof(d["buildings"]) == TYPE_ARRAY:
 			for b: Variant in (d["buildings"] as Array):
 				if typeof(b) == TYPE_DICTIONARY:
