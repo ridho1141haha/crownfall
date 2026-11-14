@@ -114,6 +114,7 @@ func _process(_delta: float) -> bool:
 			for _step: int in range(174):
 				session._process(1.0)
 			session.time_manager.advance_time(180.0)
+			session.player.global_position.x = 340.0
 			if not _check(session.save_game_state(), "Sunrise Day 2 default save succeeded"):
 				return true
 

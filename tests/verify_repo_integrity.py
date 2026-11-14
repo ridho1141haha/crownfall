@@ -57,7 +57,7 @@ for gd in sorted(list((ROOT / "scripts").rglob("*.gd")) + list((ROOT / "tests").
     bad_lines = [
         i
         for i, l in enumerate(lines, 1)
-        if l.strip() and not l.lstrip().startswith("#") and " " in l[: len(l) - len(l.lstrip())]
+        if l.strip() and not l.lstrip().startswith("#") and not all(c == "\t" for c in l[: len(l) - len(l.lstrip())])
     ]
     assert_check(len(bad_lines) == 0, f"{rel}: pure tab indentation", f"lines {bad_lines}")
     full = "\n".join(lines)
