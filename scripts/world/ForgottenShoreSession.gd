@@ -9,7 +9,7 @@ enum ReignState {
 	ISLAND_CLEARED,
 }
 
-const FARM_HARVEST_INTERVAL: float = 10.0
+const FARM_HARVEST_INTERVAL: float = 60.0
 const FARM_GOLD_YIELD: int = 2
 
 const RESOURCE_NODES: Array[Dictionary] = [
@@ -196,6 +196,9 @@ func _on_player_repair_wall(player_x: float, plot_id: String = "") -> bool:
 
 func _on_manual_save() -> bool:
 	_last_rejection_reason = ""
+	if time_manager != null and time_manager.current_phase == TimeManager.Phase.NIGHT:
+		_record_rejection("Manual save [K] is disabled during active Night combat")
+		return false
 	if save_game_state():
 		feedback_message.emit("Kingdom state saved to user://save_slot_0.json")
 		return true
@@ -303,14 +306,14 @@ func _get_plot_nodes(plot_id: String) -> Dictionary:
 				"sprite": get_node_or_null("WorldObjects/FarmWestPlot/FarmVisual") as Sprite2D,
 				"label": get_node_or_null("WorldObjects/FarmWestPlot/FarmLabel") as Label,
 				"title": "Farm Plot",
-				"cost": "2G 3W",
+				"cost": "3G 4W",
 			}
 		BuildingManager.FARM_EAST_ID:
 			return {
 				"sprite": get_node_or_null("WorldObjects/FarmEastPlot/FarmVisual") as Sprite2D,
 				"label": get_node_or_null("WorldObjects/FarmEastPlot/FarmLabel") as Label,
 				"title": "Farm Plot",
-				"cost": "2G 3W",
+				"cost": "3G 4W",
 				}
 	return {}
 

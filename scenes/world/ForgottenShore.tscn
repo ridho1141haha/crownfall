@@ -202,7 +202,7 @@ offset_top = -86.0
 offset_right = 74.0
 offset_bottom = -40.0
 text = "Farm Plot [B]
-2G 3W"
+3G 4W"
 horizontal_alignment = 1
 
 [node name="FarmEastPlot" type="Node2D" parent="WorldObjects"]
@@ -221,7 +221,7 @@ offset_top = -86.0
 offset_right = 74.0
 offset_bottom = -40.0
 text = "Farm Plot [B]
-2G 3W"
+3G 4W"
 horizontal_alignment = 1
 
 [node name="ResourceNodes" type="Node2D" parent="WorldObjects"]

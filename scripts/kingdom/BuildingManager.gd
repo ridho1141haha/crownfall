@@ -54,8 +54,8 @@ const WATCHTOWER_BUILD_COST: Dictionary = {
 }
 
 const FARM_BUILD_COST: Dictionary = {
-	"gold": 2,
-	"wood": 3,
+	"gold": 3,
+	"wood": 4,
 }
 
 const FARM_REPAIR_COST: Dictionary = {

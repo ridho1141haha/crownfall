@@ -144,7 +144,7 @@ func _transition_to_next_phase() -> void:
 			night_started.emit(current_day)
 		Phase.NIGHT:
 			var completed_day: int = current_day
-			sunrise_reached.emit(completed_day)
 			current_day += 1
 			current_phase = Phase.DAYLIGHT
+			sunrise_reached.emit(completed_day)
 			daylight_started.emit(current_day)
