@@ -34,6 +34,8 @@ func _init() -> void:
 		return
 	if not _test_m7_atomic_save_and_rollback():
 		return
+	if not _test_p1_p2_farm_watchtower_stone_wall():
+		return
 	if _failures > 0:
 		quit(1)
 		return
@@ -276,4 +278,31 @@ func _test_m7_atomic_save_and_rollback() -> bool:
 	if not _check(bool(healed["ok"]) and bool(healed["recovered_from_backup"]) and FileAccess.file_exists(test_path), "M7 missing active file self-healed from .bak"):
 		return false
 	print("PASS: M7 SaveManager Safe Replacement, Rollback & Backup Self-Healing")
+	return true
+
+
+func _test_p1_p2_farm_watchtower_stone_wall() -> bool:
+	var ledger: EconomyLedger = EconomyLedgerScript.new({"gold": 12, "wood": 15, "stone": 12})
+	var bm: BuildingManager = BuildingManagerScript.new()
+	bm.register_forgotten_shore_expansion_plots()
+	if not _check(bm.has_plot(BuildingManager.WATCHTOWER_ID) and bm.has_plot(BuildingManager.FARM_WEST_ID) and bm.has_plot(BuildingManager.FARM_EAST_ID), "P2 expansion plots registered"):
+		return false
+	if not _check(bm.request_start_construction(BuildingManager.FARM_WEST_POSITION_X, ledger, BuildingManager.FARM_WEST_ID), "P2 start Farm West build"):
+		return false
+	bm.advance_construction(3.5, BuildingManager.FARM_WEST_ID)
+	if not _check(bm.is_standing(BuildingManager.FARM_WEST_ID), "P2 Farm West completed"):
+		return false
+	if not _check(bm.request_start_construction(BuildingManager.WATCHTOWER_POSITION_X, ledger, BuildingManager.WATCHTOWER_ID), "P2 start Watchtower build"):
+		return false
+	bm.advance_construction(3.5, BuildingManager.WATCHTOWER_ID)
+	if not _check(bm.is_standing(BuildingManager.WATCHTOWER_ID), "P2 Watchtower completed"):
+		return false
+	if not _check(bm.request_start_construction(BuildingManager.WALL_POSITION_X, ledger, BuildingManager.WALL_ID), "P2 build Wooden Wall Lv1"):
+		return false
+	bm.advance_construction(4.0, BuildingManager.WALL_ID)
+	if not _check(bm.request_upgrade_wall(BuildingManager.WALL_POSITION_X, ledger, BuildingManager.WALL_ID), "P2 upgrade to Stone Wall Lv2"):
+		return false
+	if not _check(bm.max_durability == BuildingManager.STONE_WALL_MAX_DURABILITY and bm.get_thorn_damage() == 20, "P2 Stone Wall Lv2 has 260 HP and 20 thorn dmg"):
+		return false
+	print("PASS: P1/P2 Farm Plot, Watchtower & Stone Wall Tier 2 Unit Test")
 	return true
