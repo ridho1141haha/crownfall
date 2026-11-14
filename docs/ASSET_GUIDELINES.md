@@ -6,7 +6,7 @@
 **Engine:** Godot 4.7.2.stable
 **Target Platform:** Windows PC
 **Art Direction:** Atmospheric Medieval-Fantasy 2D Pixel Art
-**Status:** M0–M8 Vertical Slice Prototype Implemented (Placeholder Visuals Active)
+**Status:** M0–M8 Vertical Slice + Priority 1/2 Implemented (12 Procedural Pixel-Art PNGs Active)
 
 ---
 
@@ -16,7 +16,7 @@ This document defines the visual direction, technical preparation standards, nam
 
 The first game target is a **single-player vertical slice on Forgotten Shore**. Art production must support that slice only. Do not create a large asset catalogue for future islands, professions, enemies, mounts, or multiplayer UI before the core gameplay loop is validated.
 
-**Current repository status:** no production game assets have been committed yet. The assets directory is currently a placeholder. These guidelines describe future production requirements; they do not mean the listed assets already exist.
+**Current repository status:** 12 procedural nearest-neighbor RGBA PNG spritesheets and tiles are generated via `scripts/tools/generate_pixel_assets.py` into `assets/` and wired into `Player.tscn` and `ForgottenShore.tscn` (Monarch, Builder, Greedling Raider, Town Center, Wooden/Stone Wall states, Farm Plot states, Watchtower states, Vagrant Tent, Resource nodes, Shore ground tile, and far-mountain/mid-forest parallax layers). Final hand-crafted production polish remains future work after core gameplay loops are balanced.
 
 Placeholder art is acceptable during early mechanics validation. Use simple shapes, temporary sprites, or clearly identified placeholder assets when the final art would slow down gameplay testing.
 

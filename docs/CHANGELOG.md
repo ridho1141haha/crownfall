@@ -7,6 +7,21 @@ This changelog records repository changes that actually occurred. Planned featur
 
 ---
 
+## [2026-11-14] Baseline v1.3.4 — Pixel-Art Pipeline, Priority 1–2 Expansion & Test Suite Fixes
+
+**Type:** Gameplay Expansion (Priority 1 & 2), Visual Integration & Test Hardening  
+**Engine Verified:** `Godot 4.7.2.stable`
+
+### Summary
+Integrated 12 procedural pixel-art PNG spritesheets (`scripts/tools/generate_pixel_assets.py`), parallax mountain/forest layers, `SkyLayer` (`layer = -101`), proximity-gated interaction prompts, and Priority 1–2 gameplay systems (`Farm Plot`, `Watchtower`, `Stone Wall Tier 2`, renewable Wood/Stone nodes, and multi-day `ReignState`). Fixed literal `\t` indentation in `tests/test_time_manager.gd`, Stage 1 player save position in M8 integration tests, and strict tab validation in `tests/verify_repo_integrity.py`.
+
+### Key Changes
+- **Assets & Visuals (`generate_pixel_assets.py`, `ForgottenShore.tscn`):** Added 12 crisp Nearest PNGs (including `building_vagrant_tent.png`, `bg_mountains_far.png`, `bg_forest_mid.png`, `building_farm_plot_states.png`, and `building_watchtower_states.png`), moved `SkyBackground` into `SkyLayer` (`-101`) behind `ParallaxBackground`, and extended `DeepSoil` bottom bounds.
+- **Priority 1 & 2 Gameplay (`BuildingManager.gd`, `ForgottenShoreSession.gd`, `NightEncounterManager.gd`):** Added renewable Wood/Stone nodes on Sunrise, `Farm Plot` (`x=-310`, `x=120`, `+2G/10s` during Daylight), `Watchtower` (`x=290`), `Stone Wall Lv.2` upgrade (`260 HP`, `20 thorn dmg`), nearest-plot `[E]/[B]/[F]` routing, and `BREACH_PENALTY` / `ISLAND_CLEARED` states.
+- **Test & Verifier Fixes (`tests/*.gd`, `tests/verify_repo_integrity.py`):** Fixed literal `\t` parse error in `test_time_manager.gd`, added `session.player.global_position.x = 340.0` before Stage 1 save in `test_integration_m8_slice.gd` and `test_vertical_slice.gd`, and tightened ASCII-tab indentation checks.
+
+---
+
 ## [2026-11-14] Baseline v1.3.3 — False-Green CI Elimination, M5/M8 Test Fixes & Full Doc Sync
 
 **Type:** Test Runner Hardening, Bug Fix & Documentation Synchronization  
