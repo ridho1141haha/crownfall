@@ -208,7 +208,13 @@ func _safe_replace_file(src_tmp_path: String, dst_path: String, staged_old_path:
 	var abs_dst: String = ProjectSettings.globalize_path(dst_path)
 	var abs_old: String = ProjectSettings.globalize_path(staged_old_path)
 
+	# Extreme rollback test path: move active -> .old first, then simulate crash/failure before .tmp -> active
 	if simulate_failure:
+		_remove_if_exists(staged_old_path)
+		if FileAccess.file_exists(dst_path):
+			if DirAccess.rename_absolute(abs_dst, abs_old) == OK:
+				# Simulate mid-swap failure right after active was moved to .old, then verify rollback!
+				DirAccess.rename_absolute(abs_old, abs_dst)
 		return false
 
 	# 1. Try direct atomic POSIX rename first (replaces target atomically on Linux/macOS)

@@ -17,6 +17,7 @@ var night_mgr: NightEncounterManager = NightEncounterManager.new()
 var save_mgr: SaveManager = SaveManager.new()
 var collected_node_ids: Dictionary = {}
 var _last_rejection_reason: String = ""
+var _signals_wired: bool = false
 
 @onready var time_manager: TimeManager = $TimeManager as TimeManager
 @onready var player: PlayerController = $Player as PlayerController
@@ -44,6 +45,9 @@ func _process(delta: float) -> void:
 
 
 func _wire_signals() -> void:
+	if _signals_wired:
+		return
+	_signals_wired = true
 	if time_manager != null:
 		time_manager.daylight_started.connect(_on_daylight_started)
 		time_manager.sunset_started.connect(_on_sunset_started)
