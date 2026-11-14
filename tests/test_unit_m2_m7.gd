@@ -252,6 +252,9 @@ func _test_m6_watchtower_support() -> bool:
 	var ledger: EconomyLedger = EconomyLedgerScript.new({"gold": 5, "wood": 7, "stone": 5})
 	var bm: BuildingManager = BuildingManagerScript.new()
 	bm.register_forgotten_shore_expansion_plots()
+	var wall_ledger: EconomyLedger = EconomyLedgerScript.new({"gold": 4, "wood": 6, "stone": 4})
+	bm.request_start_construction(BuildingManager.WALL_POSITION_X, wall_ledger)
+	bm.advance_construction(4.0)
 	var night: NightEncounterManager = NightEncounterManagerScript.new()
 	if not _check(bm.get_watchtower_support_damage() == 0, "M6 Scenario D no tower support before Watchtower is built"):
 		return false
