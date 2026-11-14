@@ -12,247 +12,77 @@
 
 ## Project Status
 
-**Status: Pre-production**
+**Document & Baseline Version:** 1.3  
+**Current Stage:** Runnable Single-Player Vertical Slice Prototype (`M0–M8` Implemented on `main`)  
+**Engine Target:** Godot `4.7.2.stable` (backward-compatible with Godot `4.3+`)
 
-CROWNFALL is currently in the **planning and documentation stage**. The approved first development target is a small **single-player vertical slice** on Forgotten Shore.
+This repository contains a runnable Godot 4 project (`project.godot`), playable scenes (`scenes/main/Main.tscn`, `scenes/world/ForgottenShore.tscn`, `scenes/player/Player.tscn`), modular gameplay systems (`scripts/`), and automated unit and scene-integration test suites (`tests/`).
 
-**Important repository status:** this repository does not yet contain a runnable Godot project. The current folders are placeholders, and no \`project.godot\`, playable scenes, gameplay scripts, or production game assets have been committed. The next implementation gate is M0 — Godot Foundation.
-
-Online co-op remains part of the long-term vision, but it is deliberately deferred until the single-player gameplay loop is proven.
-
----
-
-## About the Game
-
-**CROWNFALL: THE LAST LIGHT** is a 2D side-scrolling medieval fantasy game set in the fallen world of **Aetherion**. The player takes the role of a Monarch who restores a settlement, gathers resources, recruits villagers, builds defenses, explores the remains of a lost world, and prepares for creatures that emerge after sunset.
-
-The game is built around three design pillars:
-
-- **Build:** establish and improve a settlement through meaningful resource and construction decisions.
-- **Explore:** traverse forgotten places, discover useful resources, and uncover traces of Aetherion's past.
-- **Prepare and Survive:** use daylight wisely, protect the settlement, and survive threats after sunset.
-
-The long-term vision includes multiple islands, deeper kingdom systems, environmental storytelling, and online cooperative play for up to four players. Those features are not commitments for the first playable slice.
+- **P0 Vertical Slice (`M0–M8`):** Implemented and integrated on **Forgotten Shore** (player movement, deterministic world clock, atomic Gold/Wood/Stone kingdom ledger, multi-plot Wooden Wall construction/repair, Villager recruitment and Builder priority/safety AI, 3-wave nighttime Greedling Raider survival encounter, and atomic local save/load with backup recovery).
+- **P1 Experimental Skeletons (`M9–M10`):** `scripts/networking/NetworkSessionManager.gd` and `scripts/kingdom/ContentExpansionM10.gd` are included strictly as **experimental/deferred P1 prototypes** and are not claimed as completed playable multiplayer or expansion milestones.
 
 ---
 
-## Project Information
+## Running the Game & Automated Tests
 
-| Category | Current Direction |
-|---|---|
-| Project | CROWNFALL: THE LAST LIGHT |
-| Genre | Kingdom Building, Exploration, Survival, Adventure |
-| Engine | Godot 4 |
-| Language | GDScript |
-| Rendering | 2D |
-| Art Direction | Atmospheric medieval-fantasy pixel art |
-| Platform Target | Windows PC |
-| Base Resolution Target | 1280 × 720 (to be configured and verified in M0) |
-| First Playable Target | Single-player vertical slice |
-| First Island | Forgotten Shore |
-| MVP Resources | Gold, Wood, Stone |
-| First Construction Target | Wooden Wall |
-| First NPC Scope | Villager with Builder behavior |
-| First Survival Encounter | One basic enemy archetype |
-| Long-Term Multiplayer | Online co-op, target 1–4 players, planned for M9+ |
-| Development Model | Solo developer with AI assistance |
+### 1. Run Playable Prototype in Godot Editor
+Open `project.godot` in **Godot `4.7.2.stable`** (or `4.3+`) and press **F5**:
+- **Controls on Forgotten Shore:**
+  - `A` / `D` or `Left` / `Right`: Move Monarch horizontally
+  - `E`: Collect nearby resource caches (`Gold`, `Wood`, `Stone`) or interact contextually
+  - `R`: Recruit Villager as Builder at Vagrant Camp (`x = -220`, cost: `2 Gold`)
+  - `B`: Fund Wooden Wall construction at Eastern Wall Plot (`x = 360`, cost: `2 Gold, 4 Wood, 2 Stone`)
+  - `F`: Fund instant wall repair when damaged (`cost: 2 Wood, 1 Stone`)
+  - `T`: Toggle `1x` / `20x` clock speed for testing phase transitions
+  - `K`: Trigger manual local save (`user://save_slot_0.json`, disabled during active Night combat)
 
----
+### 2. Run Automated Test Suites (Headless CLI)
+ The repository separates unit tests, full scene integration tests (`Main.tscn` → `ForgottenShore.tscn`), and experimental P1 tests:
 
-## First Vertical Slice
+```bash
+# 1. P0 Unit Tests (M2 World Clock through M7 SaveManager)
+godot --headless --script res://tests/test_unit_m2_m7.gd
 
-The first playable target is intentionally small. It must prove that the central kingdom loop is understandable and enjoyable before the project expands.
+# 2. P0 Full Scene & Gameplay Loop Integration Test (M8: Main -> ForgottenShore -> Collect -> Recruit -> Build -> Night -> Sunrise -> Save/Reload)
+godot --headless --script res://tests/test_integration_m8_slice.gd
 
-### Intended gameplay loop
+# 3. Combined P0 Master Suite (Unit + Integration, strictly M0-M8)
+godot --headless --script res://tests/test_vertical_slice.gd
 
-1. Start a local game on Forgotten Shore.
-2. Move the Monarch through the side-scrolling environment.
-3. Collect Gold, Wood, and Stone.
-4. Recruit a Villager.
-5. Place and fund a Wooden Wall construction.
-6. Have Builder behavior complete or repair the wall.
-7. Advance through daylight, sunset, and night.
-8. Face one basic enemy encounter along one predictable route.
-9. Reach sunrise and preserve the resulting kingdom state through local save/load.
+# 4. Experimental P1 Skeleton Tests (M9 Networking Seams & M10 Content Expansion)
+godot --headless --script res://tests/test_experimental_p1_m9_m10.gd
 
-The 12-minute day/night cycle (8 minutes daylight, 1 minute sunset, 3 minutes night) is a **provisional tuning target**, not a final balance decision.
-
-### Scope by priority
-
-| Priority | Scope |
-|---|---|
-| P0 — M0 to M8 | Single-player vertical slice on Forgotten Shore |
-| P1 — M9 to M10 | Multiplayer prototype and selected content expansion, conditional on slice validation |
-| P2 — Future | Additional islands, larger story content, advanced systems, and other expansion ideas |
-
-### P0 includes
-
-- One local playable Monarch.
-- Horizontal movement, collision, and local camera.
-- One Forgotten Shore environment.
-- Day/night phase progression.
-- One kingdom ledger containing Gold, Wood, and Stone.
-- Villager recruitment and Builder task behavior.
-- Town Center as the starting settlement anchor.
-- Wooden Wall placement, construction, damage/repair as required by the first encounter.
-- One basic enemy archetype.
-- Versioned local save/load with backup recovery.
-- Minimal HUD and interaction feedback.
-
-### Explicitly deferred
-
-- Online multiplayer, lobbies, room codes, ENet, RPCs, and synchronization.
-- More than one playable island or inactive-island simulation.
-- Farmer, Archer, Knight, Guard, and mounted roles.
-- Additional enemy families and bosses.
-- A large building catalogue, complex crafting, trading, and personal inventory.
-- Full dialogue, quest, branching-story, or chapter framework.
-- Procedural world generation and advanced weather simulation.
-
-Deferred does not mean cancelled. It means these features must not expand the first slice without a deliberate scope change.
+# 5. Repository Static & Scene-Graph Integrity Verifier (Python 3)
+python3 tests/verify_repo_integrity.py
+```
 
 ---
 
-## World and Story
+## Milestone Status (`M0–M10`)
 
-Aetherion was once protected by **The First Light**, which maintained a balance between the human world and the realm of darkness. The **Great Eclipse** caused the First Light to vanish, leading to the collapse of kingdoms and the spread of hostile creatures.
-
-The long-term story follows the restoration of settlements and the discovery of what happened to the First Light. The names and broad chapter direction are part of the current world concept; a complete playable story chapter is not part of the first vertical slice.
-
-The first playable location is **Forgotten Shore**. Other island concepts are future content and do not require production assets during P0.
-
----
-
-## Development Milestones
-
-Milestones are sequential gates, not calendar promises.
-
-| Milestone | Deliverable | Exit Condition |
-|---|---|---|
-| M0 — Godot Foundation | Project configuration, main scene, input, basic world | Project launches without errors |
-| M1 — Player Prototype | Movement, collision, placeholder animation, camera | Movement works reliably in a test area |
-| M2 — World Clock | Forgotten Shore blockout, boundaries, day/night | Phase changes are deterministic |
-| M3 — Economy | Gold/Wood/Stone ledger, collection, spending | Economy acceptance tests pass |
-| M4 — Building | Wooden Wall placement and construction | Valid construction loop works |
-| M5 — NPC | Recruit Villager, Builder task behavior, safety | Builder behavior is predictable |
-| M6 — First Night | One enemy, wall defense, sunrise | First-night loop is playable |
-| M7 — Save/Load | Versioned atomic local save | Round-trip and recovery tests pass |
-| M8 — Vertical Slice Polish | Feedback, tuning, bug fixing | A fresh tester can complete the slice |
-| M9 — Multiplayer Prototype | ENet, host authority, replication | Two-peer external test works |
-| M10 — Content Expansion | Selected new buildings, roles, enemies, exploration/story content | New content does not destabilize the core loop |
+| Milestone | Priority | Scope | Current Repository Status |
+|---|---|---|---|
+| **M0 — Godot Foundation** | `P0` | `project.godot`, `Main.tscn`, input map | **Implemented & Runtime Verified** (`Godot 4.7.2.stable`) |
+| **M1 — Player Prototype** | `P0` | `Player.tscn`, `Player.gd`, bounds, `Camera2D` | **Implemented & Runtime Verified** (`Godot 4.7.2.stable`) |
+| **M2 — World Clock** | `P0` | `TimeManager.gd`, `SkyAtmosphere.gd`, phase signals | **Implemented & Unit/Integration Tested** |
+| **M3 — Economy** | `P0` | `EconomyLedger.gd` (`gold`, `wood`, `stone`), world caches | **Implemented & Unit/Integration Tested** |
+| **M4 — Building** | `P0` | `BuildingManager.gd`, multi-plot Wooden Wall state machine | **Implemented & Unit/Integration Tested** |
+| **M5 — NPC Builder** | `P0` | `NPCBuilderAgent.gd`, task validation & dusk safety override | **Implemented & Unit/Integration Tested** |
+| **M6 — First Night** | `P0` | `NightEncounterManager.gd`, 3-wave raider approach & wall defense | **Implemented & Unit/Integration Tested** |
+| **M7 — Save/Load** | `P0` | `SaveManager.gd`, safe replacement, `.bak` verification & rollback | **Implemented & Unit/Integration Tested** |
+| **M8 — Slice Integration** | `P0` | `ForgottenShoreSession.gd`, `ClockHUD.gd`, end-to-end loop test | **Implemented & Scene-Integration Tested** |
+| **M9 — Multiplayer** | `P1` | `NetworkSessionManager.gd` (ENet host-authority skeleton) | **Experimental Skeleton Only (Deferred)** |
+| **M10 — Expansion** | `P1` | `ContentExpansionM10.gd` (Stone Wall, Watchtower, Archer, Farmer) | **Experimental Skeleton Only (Deferred)** |
 
 ---
 
-## Technology and Architecture Direction
+## Documentation Index (Synchronized to v1.3)
 
-- Godot 4 with GDScript.
-- 2D side-scrolling presentation.
-- Gameplay simulation kept separate from input, UI, and visual presentation.
-- Kingdom resources managed through one validated ledger.
-- Versioned local save data with temporary writes and backup recovery.
-- Stable IDs for persistent world objects.
-- Future multiplayer should use host-authoritative state, but no networking infrastructure is to be implemented during P0.
-
-The exact Godot stable patch and project settings will be recorded when M0 initializes the project.
-
----
-
-## Repository Structure
-
-### Current repository
-
-The repository currently contains documentation and placeholder directories:
-
-~~~text
-Crownfall/
-├── assets/                 # Placeholder (.gitkeep)
-├── data/                   # Placeholder (.gitkeep)
-├── docs/
-│   ├── ASSET_GUIDELINES.md
-│   ├── CHANGELOG.md
-│   ├── GDD.md
-│   ├── PRD.md
-│   ├── REVISED_PROJECT_BASELINE.md
-│   ├── SYSTEMS.md
-│   └── TDD.md
-├── resources/              # Placeholder (.gitkeep)
-├── scenes/                 # Placeholder (.gitkeep)
-├── scripts/                # Placeholder (.gitkeep)
-├── shaders/                # Placeholder (.gitkeep)
-└── tests/                  # Placeholder (.gitkeep)
-~~~
-
-This is not yet the final runtime project structure. Directories and subdirectories should be created only when a real feature requires them.
-
----
-
-## Documentation Guide
-
-| Document | Responsibility |
-|---|---|
-| [Revised Project Baseline](docs/REVISED_PROJECT_BASELINE.md) | Approved scope, architecture constraints, milestone order, and current source of truth |
-| [PRD](docs/PRD.md) | Product requirements, priorities, acceptance criteria, and success conditions |
-| [GDD](docs/GDD.md) | Player experience, design pillars, world, lore, and vertical-slice gameplay |
-| [SYSTEMS](docs/SYSTEMS.md) | Gameplay-system behavior, rules, invariants, and dependencies |
-| [TDD](docs/TDD.md) | Godot project architecture, data flow, persistence, coding, and testing standards |
-| [Asset Guidelines](docs/ASSET_GUIDELINES.md) | Art direction, asset standards, production priorities, and validation |
-| [Changelog](docs/CHANGELOG.md) | Historical record of documentation and implementation changes |
-
-When documents overlap, the Revised Project Baseline governs approved scope and cross-system constraints. Each specialized document owns its subject matter. Unresolved design questions must remain visibly marked as open decisions rather than being silently treated as approved requirements.
-
----
-
-## Development Workflow
-
-Each milestone should follow this sequence:
-
-1. Confirm scope and acceptance criteria.
-2. Review dependencies and relevant documentation.
-3. Implement only the approved milestone.
-4. Run relevant automated or repeatable tests.
-5. Perform runtime testing in Godot where applicable.
-6. Review regressions and update documentation.
-7. Commit the verified change.
-
-AI-generated code or assets are production aids, not proof of correctness. A feature is not complete until its behavior has been tested in the actual project.
-
----
-
-## Next Development Gate
-
-### M0 — Godot Foundation
-
-- Initialize the Godot 4 project and record the exact stable patch.
-- Configure project settings and the main scene.
-- Verify that the project launches without parser or startup errors.
-- Document run instructions.
-
-**M0 acceptance:** the project opens and runs with the expected main scene. Do not add gameplay systems merely to inflate this milestone.
-
-### M1 — Player Prototype
-
-- Add the player scene and horizontal movement.
-- Add floor collision and a bounded test area.
-- Add a local Camera2D that follows the player.
-- Add placeholder idle/walk feedback when movement is stable.
-
-**M1 acceptance:** the player moves left and right, cannot fall through the floor, respects test bounds, and the camera follows correctly. Verify this in the actual Godot runtime.
-
-Do not add multiplayer, economy, NPC, enemy, quest, or save systems during M0/M1.
-
----
-
-## Project Principle
-
-CROWNFALL should grow from a small, reliable kingdom loop into the larger Aetherion experience. Prove the foundations first; expand only when the current milestone is stable.
-
-<p align="center">
-  <strong>CROWNFALL: THE LAST LIGHT</strong><br/>
-  <em>Build. Explore. Survive.</em>
-</p>
-
----
-
-**Documentation Version:** 1.2  
-**Project:** CROWNFALL: THE LAST LIGHT  
-**Status:** Pre-production — Documentation Baseline Synchronized
+- **[Revised Project Baseline (`docs/REVISED_PROJECT_BASELINE.md`)](docs/REVISED_PROJECT_BASELINE.md):** Cross-project authority for scope, priorities, and milestone gates.
+- **[Approved Design & Technical Decisions (`docs/DECISIONS_M2_M8.md`)](docs/DECISIONS_M2_M8.md):** Official resolution record for `OD-01` through `OD-10`.
+- **[Product Requirements Document (`docs/PRD.md`)](docs/PRD.md):** Product scope, requirement IDs, and acceptance criteria.
+- **[Game Design Document (`docs/GDD.md`)](docs/GDD.md):** World premise, first-slice gameplay loop, and 3-wave night encounter balance.
+- **[Game Systems Specification (`docs/SYSTEMS.md`)](docs/SYSTEMS.md):** System contracts, state transitions, invariants, and test gates.
+- **[Technical Design Document (`docs/TDD.md`)](docs/TDD.md):** Architecture layers, command return contracts, safe save replacement, and test separation.
+- **[Asset & Visual Guidelines (`docs/ASSET_GUIDELINES.md`)](docs/ASSET_GUIDELINES.md):** Pixel art specifications and placeholder conventions.
+- **[Changelog (`docs/CHANGELOG.md`)](docs/CHANGELOG.md):** Factual record of repository commits and verification boundaries.

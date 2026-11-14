@@ -1,5 +1,5 @@
 # CROWNFALL: THE LAST LIGHT
-# Revised Project Baseline — v1.2
+# Revised Project Baseline — v1.3
 
 **Date:** 2026-11-13  
 **Status:** Approved and synchronized planning baseline for the first single-player vertical slice  
@@ -317,7 +317,7 @@ CROWNFALL/
 └── tests/
 ```
 
-The current repository has placeholder directories for several of these folders. That does not mean a Godot project or gameplay implementation already exists.
+The repository now includes `project.godot`, playable `Main.tscn` and `ForgottenShore.tscn` scenes, modular `scripts/` for M0–M8, and automated tests in `tests/`. `NetworkSessionManager.gd` and `ContentExpansionM10.gd` are experimental P1 skeletons and are not active in the P0 vertical slice.
 
 Create subdirectories only when a real feature needs them. Avoid generating dozens of empty folders or placeholder managers just to match a large future architecture.
 
@@ -531,24 +531,22 @@ When changing an approved decision, update the owner document and this baseline 
 
 ---
 
-## 15. Open design decisions
+## 15. Open design decisions (Resolved for P0 Vertical Slice in `docs/DECISIONS_M2_M8.md`)
 
-The following decisions are intentionally unresolved. An open item is not an approved default and must be resolved in its owner document before implementation depends on it.
+All ten P0 vertical-slice open decisions (`OD-01` through `OD-10`) have been formally resolved and recorded in **[`docs/DECISIONS_M2_M8.md`](DECISIONS_M2_M8.md)**:
 
-| ID | Decision | Owner | Deadline |
+| ID | Decision | Status | Reference in `docs/DECISIONS_M2_M8.md` |
 |---|---|---|---|
-| OD-01 | Gold, Wood, and Stone sources and collection interactions | GDD / SYSTEMS / PRD | Before M3 |
-| OD-02 | Starting resource balances and recruitment cost/interaction | GDD / PRD | Before M3/M5 |
-| OD-03 | Stone's concrete first-slice purpose | GDD / PRD | Before M3 |
-| OD-04 | Wooden Wall placement, footprint, cost, duration, repair, and refund rules | GDD / SYSTEMS | Before M4 |
-| OD-05 | Builder as assignment, profession, role, or separate actor representation | GDD / TDD | Before M5 |
-| OD-06 | First enemy identity, behavior, tuning, and spawn conditions | GDD / SYSTEMS | Before M6 |
-| OD-07 | Wall destruction, settlement breach, NPC loss, and first-night failure outcomes | GDD / PRD | Before M6 |
-| OD-08 | Minimal exploration reward or point-of-interest interaction | GDD | Before M8 sign-off |
-| OD-09 | Persistent NPC fields and final save payload | TDD / SYSTEMS | Before M7 |
-| OD-10 | Exact Godot stable patch and project settings | TDD | During M0 |
-
-Do not silently fill these gaps while generating code. The relevant decision must be recorded before its dependent implementation task begins.
+| OD-01 | Gold, Wood, and Stone sources and collection interactions | **Resolved (v1.3)** | 4 deterministic Forgotten Shore caches (`[E]` within `72 px`) |
+| OD-02 | Starting resource balances and recruitment cost/interaction | **Resolved (v1.3)** | Start `2G, 2W, 1S`; Recruit Villager at Camp (`x=-220`) for `2G` |
+| OD-03 | Stone's concrete first-slice purpose | **Resolved (v1.3)** | Required for Wooden Wall foundation (`2G, 4W, 2S`) & repair (`2W, 1S`) |
+| OD-04 | Wooden Wall placement, footprint, cost, duration, repair, and refund rules | **Resolved (v1.3)** | East plot `x=360`, `4.0s` build, `150 HP` completed, partial barricade HP if unfinished, no refund |
+| OD-05 | Builder as assignment, profession, role, or separate actor representation | **Resolved (v1.3)** | Persistent `NPCBuilderAgent` (`id="npc_01"`, `role: "villager" -> "builder"`) |
+| OD-06 | First enemy identity, behavior, tuning, and spawn conditions | **Resolved (v1.3)** | 3 paced Greedling Raider waves (`t=0s, 55s, 110s`, `50 HP`, `15 dmg/s`, `10 thorn dmg`) |
+| OD-07 | Wall destruction, settlement breach, NPC loss, and first-night failure outcomes | **Resolved (v1.3)** | Non-destructive breach (`settlement_breached = true`); rebuildable on next day |
+| OD-08 | Minimal exploration reward or point-of-interest interaction | **Resolved (v1.3)** | Far-west Forgotten Shrine (`x=-780`) granting `+3 Gold` |
+| OD-09 | Persistent NPC fields and final save payload | **Resolved (v1.3)** | `schema_version: 1` including multi-plot `buildings[]`, `npcs[]`, and `night_encounter` state |
+| OD-10 | Exact Godot stable patch and project settings | **Resolved (v1.3)** | Verified on **Godot `4.7.2.stable`** (`1280x720`, `gl_compatibility`) |
 
 ---
 

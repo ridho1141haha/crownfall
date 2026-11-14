@@ -1,8 +1,8 @@
 # CROWNFALL: THE LAST LIGHT
 # GAME SYSTEMS SPECIFICATION
 
-**Document Version:** 1.2
-**Baseline:** Revised Project Baseline v1.2
+**Document Version:** 1.3
+**Baseline:** Revised Project Baseline v1.3 & `docs/DECISIONS_M2_M8.md`
 **Engine:** Godot 4
 **Status:** Pre-production — Single-Player Vertical Slice
 
@@ -504,3 +504,8 @@ Never report a test as passed unless it has actually run. Distinguish static rev
 Project: CROWNFALL: THE LAST LIGHT  
 Document: SYSTEMS.md  
 Version: 1.2
+
+
+---
+
+> **v1.3 Synchronization Note:** All P0 vertical-slice open decisions (`OD-01` through `OD-10`) referenced in this document have been formally resolved and approved in [`docs/DECISIONS_M2_M8.md`](DECISIONS_M2_M8.md).

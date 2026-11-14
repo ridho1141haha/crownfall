@@ -1,8 +1,8 @@
 # CROWNFALL: THE LAST LIGHT
 # GAME DESIGN DOCUMENT (GDD)
 
-**Document Version:** 1.2
-**Baseline:** Revised Project Baseline v1.2
+**Document Version:** 1.3
+**Baseline:** Revised Project Baseline v1.3 & `docs/DECISIONS_M2_M8.md`
 **Genre:** 2D Side-Scrolling Kingdom Building, Exploration & Survival
 **Engine:** Godot 4
 **Language:** GDScript
@@ -239,3 +239,8 @@ The Revised Project Baseline defines approved cross-project scope. This GDD owns
 Project: CROWNFALL: THE LAST LIGHT  
 Document: GDD.md  
 Version: 1.2
+
+
+---
+
+> **v1.3 Synchronization Note:** All P0 vertical-slice open decisions (`OD-01` through `OD-10`) referenced in this document have been formally resolved and approved in [`docs/DECISIONS_M2_M8.md`](DECISIONS_M2_M8.md).

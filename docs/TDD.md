@@ -1,9 +1,9 @@
 # CROWNFALL: THE LAST LIGHT
 # TECHNICAL DESIGN DOCUMENT (TDD)
 
-**Document Version:** 1.2
-**Baseline:** Revised Project Baseline v1.2
-**Engine:** Godot 4.7.2.stable (verified at M0)
+**Document Version:** 1.3
+**Baseline:** Revised Project Baseline v1.3 (`docs/DECISIONS_M2_M8.md`)
+**Engine:** Godot 4.7.2.stable (verified at M0/M1)
 **Language:** GDScript
 **Platform Target:** Windows PC
 **Architecture Direction:** Simulation / Presentation Separation
@@ -15,7 +15,7 @@
 
 This document defines the technical direction for the first single-player vertical slice and the boundaries that will make later expansion manageable.
 
-The repository is currently documentation-first. It does **not** yet contain a runnable Godot project, project.godot, gameplay scenes, or gameplay scripts. This TDD describes the intended architecture, not an implementation that already exists.
+The repository contains a runnable Godot `4.7.2.stable` project (`project.godot`), playable vertical-slice scenes (`Main.tscn`, `ForgottenShore.tscn`, `Player.tscn`), modular simulation scripts (`scripts/`), and separated automated unit, scene-integration, and experimental P1 test suites (`tests/`).
 
 ### 1.1 Technical Goals
 
@@ -100,7 +100,7 @@ Use direct references when they keep dependencies simple. An EventBus is optiona
 
 ## 3. Conceptual Project Organization
 
-The repository currently has placeholder root folders. The following is a **target organization**, not a claim that these files or subdirectories exist today.
+The repository implements the following directory layout for the P0 vertical slice (with `scripts/networking/` and `ContentExpansionM10.gd` kept as experimental P1 skeletons):
 
 ~~~text
 CROWNFALL/

@@ -1,7 +1,7 @@
 # CROWNFALL: THE LAST LIGHT
 # PRODUCT REQUIREMENTS DOCUMENT (PRD)
 
-**Document Version:** 1.2
+**Document Version:** 1.3
 **Product:** CROWNFALL: THE LAST LIGHT
 **Platform:** Windows PC
 **Engine:** Godot 4
@@ -9,7 +9,7 @@
 **Development Model:** Solo Developer + AI Assistance
 **Source of Truth:** `docs/REVISED_PROJECT_BASELINE.md`
 
-> **Scope authority:** This PRD is aligned with the Revised Project Baseline v1.2, GDD v1.2, SYSTEMS v1.2, and TDD v1.2. The first playable target is a single-player vertical slice. Online multiplayer remains a long-term product goal, but is not part of the first slice or its acceptance criteria.
+> **Scope authority:** This PRD is aligned with the Revised Project Baseline v1.3 & `docs/DECISIONS_M2_M8.md`, GDD v1.2, SYSTEMS v1.2, and TDD v1.2. The first playable target is a single-player vertical slice. Online multiplayer remains a long-term product goal, but is not part of the first slice or its acceptance criteria.
 
 ---
 
@@ -712,3 +712,8 @@ These long-term goals must be validated and prioritized incrementally. They are 
 Project: CROWNFALL: THE LAST LIGHT  
 Document: PRD.md  
 Version: 1.2
+
+
+---
+
+> **v1.3 Synchronization Note:** All P0 vertical-slice open decisions (`OD-01` through `OD-10`) referenced in this document have been formally resolved and approved in [`docs/DECISIONS_M2_M8.md`](DECISIONS_M2_M8.md).
