@@ -224,7 +224,7 @@ Acceptance:
 - At sunset, optional work is interrupted and the Builder returns toward the designated safe area when a valid path exists.
 - An unreachable safe area is reported as a failure; the NPC is not silently teleported.
 
-The first slice requires Villager recruitment and Builder behavior. Whether Builder is represented as a profession/assignment, a role, or a separate actor type is not yet locked; GDD/SYSTEMS must resolve that choice before implementation depends on it.
+Approved representation (`OD-05`): Recruiting the Villager at the Vagrant Camp (`x=-220.0`, cost `2 Gold`) transitions the persistent `NPCBuilderAgent` (`id="npc_01"`) from `role: "villager"` to `role: "builder"`.
 
 Farmer, Archer, Knight, Guard, and advanced job progression are not P0.
 
@@ -244,7 +244,7 @@ Acceptance:
 - Its route and target selection are deterministic enough to test.
 - Wall defense has a meaningful effect on the encounter.
 - The encounter can end at sunrise without requiring a full combat system.
-- Failure and recovery consequences must be specified in GDD/SYSTEMS before they are treated as final design.
+- Approved breach rule (`OD-07`): If the wall falls and a raider reaches Town Center (`x=0.0`), `settlement_breached` is recorded without permanent game-over so the player can recover on the next day.
 
 The first enemy archetype and its tuning are provisional. Multiple enemy families, bosses, and complex combat are deferred.
 
@@ -326,22 +326,20 @@ Possible future features, not current commitments:
 
 ---
 
-## 3.6 Open Design Decisions
+## 3.6 Approved P0 Design & Balance Decisions (`OD-01` to `OD-10`)
 
-The requirements below describe outcomes, but several balancing and interaction details remain undecided. They must be resolved in GDD/SYSTEMS before the affected milestone is implemented:
+All P0 balancing and interaction decisions are resolved and documented in [`docs/DECISIONS_M2_M8.md`](DECISIONS_M2_M8.md):
 
-| Decision | Needed Before |
+| Decision | Approved P0 Specification |
 |---|---|
-| Resource sources and collection interactions for Gold, Wood, and Stone | M3 |
-| Starting balances, recruitment cost, and recruitment interaction | M3/M5 |
-| Wooden Wall placement rules, cost, duration, and repair rules | M4 |
-| Builder's exact role/assignment/actor data model | M5 |
-| First enemy identity, behavior, tuning, and spawn conditions | M6 |
-| Consequences of wall destruction or first-night failure | M6 |
-| Exploration reward or point-of-interest interaction | M8 scope sign-off |
-| Persistent NPC fields required by save/load | M7 |
-
-These are intentionally open decisions, not permission to invent defaults during implementation.
+| Resource sources & collection (`OD-01`) | 4 single-use caches on Forgotten Shore (`[E]` within `72 px`) |
+| Starting balances & recruitment (`OD-02`) | Start `2G, 2W, 1S`; recruit Villager at Camp (`x=-220`) for `2G` |
+| Stone purpose & Wall rules (`OD-03`, `OD-04`) | East plot `x=360`; build cost `2G, 4W, 2S` (`4.0s`, `150 HP`); repair `2W, 1S` |
+| Builder data model (`OD-05`) | Persistent `NPCBuilderAgent` (`id="npc_01"`, `role: "villager" -> "builder"`) |
+| First-night enemy tuning (`OD-06`) | 3 Greedling Raider waves (`0s, 55s, 110s`), `45 HP`, `15 dmg/hit`, `15 thorn dmg/hit` |
+| Breach outcome (`OD-07`) | Non-destructive `settlement_breached = true` at Town Center (`x=0.0`) |
+| Exploration POI (`OD-08`) | Forgotten Shrine at `x=-780.0` granting `+3 Gold` |
+| Save payload (`OD-09`, `OD-10`) | `schema_version: 1` JSON with multi-plot `buildings[]`, `npcs[]`, and `night_encounter` on Godot `4.7.2.stable` |
 
 # 4. USER STORIES AND ACCEPTANCE
 
@@ -366,7 +364,7 @@ Acceptance:
 - The HUD reflects the committed balance.
 - Repeated interaction cannot duplicate a single-use resource reward.
 
-The exact source and collection interaction for each resource must be finalized in GDD/SYSTEMS before implementation.
+Approved resource sources (`OD-01`, `OD-02`, `OD-03`): Player starts with `2G, 2W, 1S` and collects 4 deterministic caches (`cache_gold_west` `+4G`, `timber_pile_west` `+5W`, `stone_outcrop_east` `+3S`, `shrine_cache_far_west` `+3G`) via `[E]` within `72 px`.
 
 ## 4.3 Recruitment and Construction
 

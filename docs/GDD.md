@@ -35,7 +35,7 @@ Every P0 feature should support at least one pillar. The first slice should demo
 
 - Simple controls; meaningful decisions.
 - Preparation and kingdom development matter more than action-heavy combat.
-- Exploration should reward curiosity, but its exact reward loop must be defined before content implementation.
+- Exploration rewards curiosity through deterministic world caches and the far-western Forgotten Shrine (`x=-780.0`, granting `+3 Gold`, `OD-08`).
 - The environment should communicate history without relying on long cutscenes.
 - Gameplay state must remain independent from HUD and visual presentation.
 - Every P0 resource and feature must have a clear purpose.
@@ -76,7 +76,7 @@ Its visual and gameplay identity should support:
 - Resource locations that encourage movement through the playable area.
 - A clear settlement anchor and a defensible route for the first night.
 
-The exact terrain layout, resource-node placement, and points of interest are content decisions to be finalized during blockout and playtesting.
+The first-slice terrain layout places the Town Center safe zone at `x=0.0`, Vagrant Camp at `x=-220.0`, Eastern Wooden Wall plot at `x=360.0`, and four single-use resource caches across `[-780.0, 190.0]` (`OD-01`, `OD-08`).
 
 Other island concepts are long-term worldbuilding, not P0 production requirements.
 
@@ -120,11 +120,11 @@ The vertical slice uses one kingdom resource ledger.
 |---|---|---|
 | Gold | Primary currency | Recruitment and selected construction costs |
 | Wood | Basic material | Wooden Wall and early construction |
-| Stone | Durable material | Reserved for a defined first-slice use only if the design requires it |
+| Stone | Durable material | Required for Wooden Wall foundation (`2G, 4W, 2S`) and wall repair (`2W, 1S`) (`OD-03`) |
 
 Iron, Food, Crystal, and Ancient Relics are deferred. No personal coin-pouch capacity or complex personal inventory is required in P0.
 
-The exact source, collection interaction, starting quantity, and spending costs for each resource are open design decisions. They must be settled before the relevant economy/building implementation milestone.
+Approved first-slice economy (`OD-01`, `OD-02`, `OD-03`): Starting balances are `2 Gold, 2 Wood, 1 Stone`. Resources are collected via `[E]` within `72 px` at four single-use Forgotten Shore caches (`cache_gold_west` `+4G` at `x=-480`, `timber_pile_west` `+5W` at `x=-110`, `stone_outcrop_east` `+3S` at `x=190`, and `shrine_cache_far_west` `+3G` at `x=-780`).
 
 ### 3.4 Settlement and Construction
 
@@ -143,7 +143,7 @@ The first slice requires:
 - Builder behavior capable of accepting and completing a valid wall construction or repair task.
 - A safety response when sunset begins.
 
-The design requirement is **Villager plus Builder behavior**. Whether Builder is represented internally as a profession/assignment, a role, or a separate actor type is not yet locked. Documentation must not imply that this implementation choice has been finalized.
+Approved Builder representation (`OD-05`): Recruited at the Vagrant Camp (`x=-220.0`) for `2 Gold`, transitioning the persistent `NPCBuilderAgent` (`id="npc_01"`) from `role: "villager"` (`UNRECRUITED`) to `role: "builder"` (`IDLE -> MOVING_TO_TASK -> WORKING / RETURNING_TO_SAFETY`).
 
 Farmer, Archer, Knight, Guard, and mounted roles are deferred.
 
@@ -159,13 +159,11 @@ The current tuning target is a 12-minute in-game day:
 
 These timings are provisional and must be tested.
 
-The first slice uses one basic enemy archetype following one predictable route and attacking the Wooden Wall. Its final appearance, name, health, movement speed, damage, spawn timing, and failure consequences are open design decisions.
+Approved first-night encounter (`OD-06`): **Greedling Raider** spawns at `x=820.0` in **3 paced waves** (`t = 0.0s, 55.0s, 110.0s`) during `Night` (`180s`), marching west at `95 px/s`. Each raider has `45 HP`, deals `15 damage/hit` (`1.0s` interval) to the Wooden Wall, and takes `15 thorn damage/hit` (`45 wall damage/wave`, `135 total wall damage` across 3 waves, leaving a completed `150 HP` wall standing at `15 HP` at sunrise).
 
 ### 3.7 Outcome and Persistence
 
-The first-slice goal is to reach sunrise and preserve the resulting kingdom state. The exact consequences of a destroyed wall, an enemy reaching the settlement, NPC loss, or player failure are not yet finalized.
-
-Do not invent a permanent-death or game-over rule in implementation before the failure/recovery design is approved.
+Approved first-slice outcome and breach rule (`OD-07`): Reaching sunrise without a Town Center breach sets `first_night_survived = true` and auto-saves the kingdom state. If the wall is unbuilt or destroyed (`0 HP`), the raider reaches `TownCenter` (`x=0.0`) and sets `settlement_breached = true` (non-destructive recovery without permanent game-over, allowing the player to rebuild on the next day). Partially constructed walls (`>=25%` progress) act as a makeshift barricade with `int(round(progress * 80.0)) HP` (`OD-04`).
 
 ---
 
@@ -185,22 +183,20 @@ The first multiplayer validation target is two peers in an external test. Four-p
 
 ---
 
-## 5. Open Design Decisions
+## 5. Approved First-Slice Design Decisions (`OD-01` to `OD-08`)
 
-The following decisions must be resolved in the relevant design document before implementation depends on them.
+All first-slice design decisions have been formally approved and synchronized with [`docs/DECISIONS_M2_M8.md`](DECISIONS_M2_M8.md):
 
-| ID | Decision Needed | Needed Before |
+| ID | Decision Topic | Approved Resolution |
 |---|---|---|
-| GDD-OD-01 | How Gold, Wood, and Stone are found and collected | M3 — Economy |
-| GDD-OD-02 | Starting resource quantities, recruitment cost, and recruitment interaction | M3/M5 |
-| GDD-OD-03 | Wooden Wall placement rules, cost, duration, footprint, and repair cost | M4 — Building |
-| GDD-OD-04 | Whether Builder is an assignment, profession, role, or separate actor type | M5 — NPC |
-| GDD-OD-05 | First enemy identity, behavior, tuning, and spawn conditions | M6 — First Night |
-| GDD-OD-06 | Consequences of wall destruction, settlement breach, and first-night failure | M6 — First Night |
-| GDD-OD-07 | Exact exploration reward or point-of-interest interaction for the slice | Before M8 scope sign-off |
-| GDD-OD-08 | Which persistent NPC attributes and states are necessary | M7 — Save/Load |
-
-An open decision is not an implementation requirement. Record the decision and rationale when it is approved; do not silently fill gaps with assumptions.
+| GDD-OD-01 (`OD-01`) | Gold, Wood, and Stone sources & collection | 4 single-use caches on Forgotten Shore interacted via `[E]` within `72 px` (`-480`, `-110`, `190`, `-780`) |
+| GDD-OD-02 (`OD-02`) | Starting balances & recruitment cost | Start with `2G, 2W, 1S`; recruit Villager at Camp (`x=-220`) for `2 Gold` |
+| GDD-OD-03 (`OD-03/04`) | Wooden Wall placement, cost, duration, repair | Plot at `x=360`; build cost `2G, 4W, 2S` (`4.0s`, `150 HP`); partial barricade `progress * 80 HP`; repair `2W, 1S` |
+| GDD-OD-04 (`OD-05`) | Builder representation | Persistent `NPCBuilderAgent` (`id="npc_01"`, `role: "villager" -> "builder"`) |
+| GDD-OD-05 (`OD-06`) | First enemy identity, behavior, tuning, spawn | Greedling Raider: 3 waves (`0s, 55s, 110s`), `45 HP`, `15 dmg/hit`, `15 thorn dmg/hit`, `95 px/s` |
+| GDD-OD-06 (`OD-07`) | Wall destruction & breach consequences | Non-destructive `settlement_breached = true` at `x=0.0`; rebuildable on next day |
+| GDD-OD-07 (`OD-08`) | Exploration reward / POI interaction | Far-western Forgotten Shrine (`x=-780.0`) granting `+3 Gold` |
+| GDD-OD-08 (`OD-09`) | Persistent NPC attributes in save | `id`, `recruited`, `role`, `state`, and `position_x` serialized in `user://save_slot_0.json` |
 
 ---
 

@@ -203,7 +203,7 @@ Do not enforce contradictory naming styles. Consistency within the actual Godot 
 - Validate task target and assignment before work.
 - Avoid per-frame repeated path requests.
 - At sunset, safety overrides optional work.
-- Exact Builder data representation remains open until the GDD/SYSTEMS decision is made before M5.
+- Builder is represented as `NPCBuilderAgent` (`id="npc_01"`, `recruited: bool`, `role: "villager" -> "builder"`, `OD-05`).
 
 ### 4.6 First Enemy
 

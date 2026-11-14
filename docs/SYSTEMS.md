@@ -185,9 +185,9 @@ The implementation may choose names that match the codebase, but the responsibil
 
 A successful mutation should provide a clear result/event so HUD feedback and tests can observe the committed transaction. Failure should return a clear rejection reason suitable for development diagnostics and player feedback.
 
-### Open Decisions
+### Approved Economy Parameters (`OD-01`, `OD-02`, `OD-03`)
 
-The exact resource source, collection interaction, starting quantity, and intended P0 use of Stone must be settled in GDD/PRD before M3. Do not infer that every resource needs an NPC gathering profession.
+Starting balances are `2 Gold, 2 Wood, 1 Stone`. Four single-use world caches provide `+4G`, `+5W`, `+3S`, and `+3G` when interacted with (`[E]` within `72 px`). Stone is required to construct (`2G, 4W, 2S`) and repair (`2W, 1S`) the `150 HP` Wooden Wall.
 
 ### Acceptance Checks
 
@@ -254,7 +254,7 @@ Only states used by the slice need implementation. Legal transitions must be exp
 
 The first slice needs at least one recruited Villager and Builder behavior capable of constructing or repairing the Wooden Wall.
 
-The exact internal representation of Builder is **not yet decided**. It may be a job, profession, assignment, role, or separate actor type. Resolve the data model before M5; do not assume the distinction in scripts or save schema prematurely.
+Approved Builder data model (`OD-05`): Represented as a persistent `NPCBuilderAgent` (`id="npc_01"`, `recruited: bool`, `role: "villager" -> "builder"`, state machine `UNRECRUITED -> IDLE -> MOVING_TO_TASK -> WORKING / RETURNING_TO_SAFETY`).
 
 ### Responsibilities
 
@@ -326,7 +326,7 @@ Release an invalid task cleanly. Do not repeatedly request paths every frame.
 - Wooden Wall as the first intended defensive target.
 - One encounter that can resolve at sunrise.
 
-The enemy's identity, visuals, stats, spawn timing, and exact combat rules are open design decisions. Do not import the old Greedling/Crawler/Brute set as a P0 requirement.
+Approved P0 encounter (`OD-06`): **Greedling Raider** spawns in **3 waves** (`t = 0.0s, 55.0s, 110.0s`) at `x=820.0` during `Night` (`180s`), marching west at `95 px/s` with `45 HP`, `15 damage/hit` (`1.0s` interval), and taking `15 thorn damage/hit` (`45 wall damage/wave`, `135 total wall damage` across 3 waves).
 
 ### Behavioral Contract
 
@@ -338,7 +338,7 @@ The enemy's identity, visuals, stats, spawn timing, and exact combat rules are o
 
 ### Failure and Recovery
 
-The consequences of a destroyed wall, settlement breach, NPC loss, or first-night failure are not finalized. Define those outcomes before M6 implementation. Do not introduce permanent death or an irreversible game-over rule without an approved design decision.
+Approved breach & recovery rule (`OD-07`): If the wall is unbuilt or destroyed (`0 HP`), the raider marches to `TownCenter` (`x=0.0`) and sets `settlement_breached = true` without permanent game-over, allowing recovery on the next day. Partially built walls (`>=25%` progress) act as a makeshift barricade with `int(round(progress * 80.0)) HP` (`OD-04`).
 
 ### Acceptance Checks
 
@@ -432,21 +432,21 @@ The first validation should use two peers. Do not implement ENet, RPCs, lobbies,
 
 ---
 
-## 12. Open Decisions and Ownership
+## 12. Approved System Decisions (`OD-01` to `OD-10`)
 
-| Decision | Owner Document | Must Be Settled Before |
+All system-level P0 decisions are resolved in [`docs/DECISIONS_M2_M8.md`](DECISIONS_M2_M8.md):
+
+| Decision | Owner Document | Approved Resolution |
 |---|---|---|
-| Gold/Wood/Stone sources and collection interaction | GDD + PRD | M3 |
-| Starting balances and recruitment cost/interaction | GDD + PRD | M3/M5 |
-| Stone's first-slice purpose | GDD + PRD | M3 |
-| Wall placement, costs, footprint, duration, repair | GDD + PRD | M4 |
-| Builder role/assignment/actor representation | GDD + TDD | M5 |
-| First enemy behavior and tuning | GDD | M6 |
-| Wall breach and failure consequences | GDD + PRD | M6 |
-| Minimal exploration reward/point of interest | GDD | M8 scope sign-off |
-| NPC fields required in save schema | TDD | M7 |
-
-Approved decisions should be recorded in the relevant document and, when they have lasting architectural/product consequences, in an Architecture Decision Record.
+| Gold/Wood/Stone sources & collection (`OD-01`) | GDD + SYSTEMS | 4 single-use caches (`-480`, `-110`, `190`, `-780`) via `[E]` (`72 px`) |
+| Starting balances & recruitment (`OD-02`) | GDD + PRD | `2G, 2W, 1S` start; `2G` recruitment at Vagrant Camp (`x=-220`) |
+| Stone's first-slice purpose (`OD-03`) | GDD + PRD | Required for Wooden Wall build (`2G, 4W, 2S`) and repair (`2W, 1S`) |
+| Wall placement, costs, duration, repair (`OD-04`) | GDD + SYSTEMS | East plot `x=360`, `4.0s` build, `150 HP`, partial barricade `progress * 80 HP` |
+| Builder representation (`OD-05`) | GDD + TDD | `NPCBuilderAgent` (`id="npc_01"`, `role: "villager" -> "builder"`) |
+| First enemy tuning (`OD-06`) | GDD + SYSTEMS | 3 waves (`0s, 55s, 110s`), `45 HP`, `15 dmg/hit`, `15 thorn dmg/hit` |
+| Wall breach consequences (`OD-07`) | GDD + PRD | Non-destructive `settlement_breached = true` at Town Center (`x=0.0`) |
+| Exploration reward (`OD-08`) | GDD | Far-west Forgotten Shrine (`x=-780.0`, `+3 Gold`) |
+| Save payload schema (`OD-09`) | TDD + SYSTEMS | `schema_version: 1` including multi-plot `buildings[]`, `npcs[]`, and `night_encounter` |
 
 ---
 
