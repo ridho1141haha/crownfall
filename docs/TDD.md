@@ -15,7 +15,7 @@
 
 This document defines the technical direction for the first single-player vertical slice and the boundaries that will make later expansion manageable.
 
-The repository contains a runnable Godot `4.7.2.stable` project (`project.godot`), playable vertical-slice scenes (`Main.tscn`, `ForgottenShore.tscn`, `Player.tscn`), modular simulation scripts (`scripts/`), and separated automated unit, scene-integration, and experimental P1 test suites (`tests/`).
+The repository contains a runnable Godot `4.7.2.stable` project (`project.godot`), playable vertical-slice scenes (`Main.tscn`, `ForgottenShore.tscn`, `Player.tscn`), modular simulation scripts (`scripts/`, including `ResourceNodeManager`, `HearthSystem`, `InteractionResolver`, `Watchtower`, `Farm Plot`, `Stone Wall Lv.2`, `West Wall`), `data/*.json`, and `shaders/*.gdshader`, and separated automated unit, scene-integration, and experimental P1 test suites (`tests/`).
 
 ### 1.1 Technical Goals
 

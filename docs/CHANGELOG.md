@@ -7,6 +7,21 @@ This changelog records repository changes that actually occurred. Planned featur
 
 ---
 
+## [2026-11-14] Baseline v1.3.6 — Modular Architecture, Gold Anti-Softlock, West Defense & 2D Shaders
+
+**Type:** Architecture Refactor (Task 1) & Gameplay/Visual Expansion (Task 2)  
+**Engine Verified:** `Godot 4.7.2.stable`
+
+### Summary
+Extracted `ResourceNodeManager`, `HearthSystem`, and `InteractionResolver` from `ForgottenShoreSession.gd`, added centralized `execute_world_command()`, separated `Watchtower` (`x=210`) and `WoodenWall` (`x=380`), added `+1G` enemy kill rewards and daily `Shrine Offering`, introduced `[Space]` *Kindle Flare* and `West Wall` (`x=-400`) for Day 2+ West Scouts, and added `gl_compatibility` 2D shaders (`day_night_atmosphere.gdshader`, `hit_flash.gdshader`).
+
+### Key Changes
+- **Task 1 Modularization:** `ResourceNodeManager.gd`, `HearthSystem.gd`, `InteractionResolver.gd`, `[Q]` `upgrade_tier`, and Save v2 fields (`hearth_level`, `reign_state` String, `node_states` Dictionary).
+- **Task 2 Anti-Softlock & West Lane:** `+1G` enemy defeat reward, daily `Shrine Offering` (`4W + 2S -> +2G`), `NightEncounterManager` loading `data/enemies.json`, `[Space]` *Kindle Flare*, `wall_west_01` (`x=-400`), and Day 2+ West Scout waves.
+- **Shaders & Feel:** `shaders/day_night_atmosphere.gdshader`, `shaders/hit_flash.gdshader`, randomized SFX pitch (`0.92..1.08`), and micro camera shake on wall impact.
+
+---
+
 ## [2026-11-14] Baseline v1.3.5 — Multi-NPC, Core Light Mechanic, Shipwreck & Procedural SFX
 
 **Type:** Feature Expansion (Priority 3–7), Polish & Regression Hardening  
@@ -33,7 +48,7 @@ Integrated 12 procedural pixel-art PNG spritesheets (`scripts/tools/generate_pix
 
 ### Key Changes
 - **Assets & Visuals (`generate_pixel_assets.py`, `ForgottenShore.tscn`):** Added 12 crisp Nearest PNGs (including `building_vagrant_tent.png`, `bg_mountains_far.png`, `bg_forest_mid.png`, `building_farm_plot_states.png`, and `building_watchtower_states.png`), moved `SkyBackground` into `SkyLayer` (`-101`) behind `ParallaxBackground`, and extended `DeepSoil` bottom bounds.
-- **Priority 1 & 2 Gameplay (`BuildingManager.gd`, `ForgottenShoreSession.gd`, `NightEncounterManager.gd`):** Added renewable Wood/Stone nodes on Sunrise, `Farm Plot` (`x=-310`, `x=120`, `+2G/10s` during Daylight), `Watchtower` (`x=290`), `Stone Wall Lv.2` upgrade (`260 HP`, `20 thorn dmg`), nearest-plot `[E]/[B]/[F]` routing, and `BREACH_PENALTY` / `ISLAND_CLEARED` states.
+- **Priority 1 & 2 Gameplay (`BuildingManager.gd`, `ForgottenShoreSession.gd`, `NightEncounterManager.gd`):** Added renewable Wood/Stone nodes on Sunrise, `Farm Plot` (`x=-310`, `x=120`, `+2G/60s` during Daylight), `Watchtower` (`x=290`), `Stone Wall Lv.2` upgrade (`260 HP`, `20 thorn dmg`), nearest-plot `[E]/[B]/[F]` routing, and `BREACH_PENALTY` / `ISLAND_CLEARED` states.
 - **Test & Verifier Fixes (`tests/*.gd`, `tests/verify_repo_integrity.py`):** Fixed literal `\t` parse error in `test_time_manager.gd`, added `session.player.global_position.x = 340.0` before Stage 1 save in `test_integration_m8_slice.gd` and `test_vertical_slice.gd`, and tightened ASCII-tab indentation checks.
 
 ---

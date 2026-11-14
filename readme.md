@@ -19,7 +19,7 @@
 This repository contains a runnable Godot 4 project (`project.godot`), playable scenes (`scenes/main/Main.tscn`, `scenes/world/ForgottenShore.tscn`, `scenes/player/Player.tscn`), modular gameplay systems (`scripts/`), and automated unit and scene-integration test suites (`tests/`).
 
 - **P0 Vertical Slice (`M0–M8`):** Implemented and integrated on **Forgotten Shore** (player movement, deterministic world clock, atomic Gold/Wood/Stone kingdom ledger, multi-plot Wooden Wall construction/repair, Villager recruitment and Builder priority/safety AI, 3-wave nighttime Greedling Raider survival encounter, and atomic local save/load with backup recovery).
-- **P1 Experimental Skeletons (`M9–M10`):** `scripts/networking/NetworkSessionManager.gd` and `scripts/kingdom/ContentExpansionM10.gd` remains an experimental P1 skeleton for `Archer`/`Farmer` NPC roles and `Crawler`/`Brute` waves, while `Farm Plot`, `Watchtower` plot (once built, deals +10 damage to every raider that strikes the wall), `Stone Wall Tier 2`, and renewable Wood/Stone nodes are active in `ForgottenShoreSession.gd`.
+- **P1 Experimental Skeletons (`M9–M10`):** `scripts/networking/NetworkSessionManager.gd` and `scripts/kingdom/ContentExpansionM10.gd` remains an experimental P1 skeleton for `Archer`/`Farmer` NPC roles and `Crawler`/`Brute` waves, while `Farm Plot`, `Watchtower` plot (once built, deals +10 damage to every raider that strikes the wall), `Stone Wall Tier 2`, `Hearth` Lv.1–3, `West Wall` (`x=-400`), `[Space]` *Kindle Flare*, and renewable Wood/Stone nodes are active in `ForgottenShoreSession.gd`.
 
 ---
 
