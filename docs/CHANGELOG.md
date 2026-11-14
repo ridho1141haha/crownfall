@@ -7,6 +7,22 @@ This changelog records repository changes that actually occurred. Planned featur
 
 ---
 
+## [2026-11-14] Baseline v1.3.5 — Multi-NPC, Core Light Mechanic, Shipwreck & Procedural SFX
+
+**Type:** Feature Expansion (Priority 3–7), Polish & Regression Hardening  
+**Engine Verified:** `Godot 4.7.2.stable`
+
+### Summary
+Completed single-player expansion Priorities 3 through 7: multi-NPC population (`Villager`, `Builder`, `Farmer`, `Archer`) with `ToolStands` and task claiming locks, "The Last Light" 3-tier Town Center Hearth mechanic with radiant burn/weakening and `ClockHUD` Night Forecast, expanded `[-1600, 1600]` Forgotten Shore with 3-stage `Shipwreck` and `Greed Portal`, procedural `.wav` SFX, floating popups, hit flashes, and full Save v2 migration/regression tests.
+
+### Key Changes
+- **Priority 3 (`NPCPopulationManager.gd`, `NPCBuilderAgent.gd`, `BuildingManager.gd`):** Added multi-NPC roster (up to 6 NPCs), 3 `ToolStands` (`hammer_stand`, `scythe_stand`, `bow_stand`), `claimed_by_npc_id` task lock, and animated follower sprites.
+- **Priority 4 (`NightEncounterManager.gd`, `ClockHUD.gd`, `data/lighting.json`, `data/enemies.json`):** Added 3-tier Hearth light radius (`180 -> 320 -> 460 px`), `Light Burn` DoT + `Weakened Strike`, `Shadow Crawler` & `Gloom Brute` escalation, Monarch `Shadow Stagger`, and `ForecastLabel`.
+- **Priority 5 (`ForgottenShore.tscn`, `Player.gd`):** Expanded bounds to `[-1600, 1600]`, added 3-stage `Shipwreck` (`x=-1350`) and `Greed Portal` (`x=1350`) relic scavenge.
+- **Priority 6 & 7 (`scripts/tools/generate_sfx_assets.py`, `ForgottenShoreSession.gd`, `tests/test_unit_m2_m7.gd`):** Added 6 procedural `.wav` SFX, `SFXPlayer`, floating text popups, damage-state-safe hit flash, and v2 regression unit tests.
+
+---
+
 ## [2026-11-14] Baseline v1.3.4 — Pixel-Art Pipeline, Priority 1–2 Expansion & Test Suite Fixes
 
 **Type:** Gameplay Expansion (Priority 1 & 2), Visual Integration & Test Hardening  
