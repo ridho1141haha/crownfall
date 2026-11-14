@@ -3,6 +3,7 @@ extends ColorRect
 @export var time_manager: TimeManager
 @export var canvas_modulate: CanvasModulate
 @export var campfire_light: PointLight2D
+@onready var atmosphere_overlay: ColorRect = get_node_or_null("../../ClockHUD/AtmosphereOverlay") as ColorRect
 
 const DAY_SKY: Color = Color(0.22, 0.42, 0.62, 1.0)
 const SUNSET_SKY: Color = Color(0.58, 0.26, 0.22, 1.0)
@@ -38,3 +39,17 @@ func _process(delta: float) -> void:
 	if campfire_light != null:
 		var base_energy: float = 1.45 if (time_manager != null and time_manager.current_phase != TimeManager.Phase.DAYLIGHT) else 0.75
 		campfire_light.energy = base_energy + sin(_flicker_time * 9.0) * 0.12
+
+	if atmosphere_overlay != null and atmosphere_overlay.material is ShaderMaterial and time_manager != null:
+		var mat: ShaderMaterial = atmosphere_overlay.material as ShaderMaterial
+		var tint: Color = Color(1.0, 1.0, 1.0, 0.0)
+		var vig: float = 0.16
+		match time_manager.current_phase:
+			TimeManager.Phase.SUNSET:
+				tint = Color(0.95, 0.45, 0.22, 0.16)
+				vig = 0.28
+			TimeManager.Phase.NIGHT:
+				tint = Color(0.08, 0.12, 0.28, 0.26)
+				vig = 0.42
+		mat.set_shader_parameter("tint_color", tint)
+		mat.set_shader_parameter("vignette_strength", vig)

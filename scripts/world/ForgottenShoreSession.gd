@@ -42,6 +42,9 @@ var hearth_level: int:
 var reign_state: ReignState = ReignState.ACTIVE
 var shipwreck_stage: int = 0
 var portal_relic_looted: bool = false
+var shrine_offering_used_today: bool = false
+var flare_active_timer: float = 0.0
+var flare_cooldown_timer: float = 0.0
 var _actor_positions: Dictionary = {"player_1": 0.0}
 var _follower_sprites: Dictionary = {}
 var _farm_timers: Dictionary = {}
@@ -107,7 +110,9 @@ func _process(delta: float) -> void:
 	var is_night: bool = time_manager != null and time_manager.current_phase == TimeManager.Phase.NIGHT
 	var is_daylight: bool = time_manager == null or time_manager.current_phase == TimeManager.Phase.DAYLIGHT
 	pop_mgr.tick_all(sim_delta, building_mgr, night_mgr)
-	night_mgr.tick(sim_delta, is_night, building_mgr, hearth_sys.hearth_level)
+	flare_active_timer = maxf(0.0, flare_active_timer - sim_delta)
+	flare_cooldown_timer = maxf(0.0, flare_cooldown_timer - sim_delta)
+	night_mgr.tick(sim_delta, is_night, building_mgr, hearth_sys.hearth_level, flare_active_timer > 0.0)
 	_tick_farm_plots(sim_delta, is_daylight)
 	_tick_monarch_light_risk(sim_delta, is_night)
 	_sync_dynamic_actors()
@@ -163,6 +168,7 @@ func _wire_signals() -> void:
 		)
 		player.manual_save_requested.connect(func() -> void: execute_world_command("player_1", &"save_game", ""))
 		player.fast_clock_toggled.connect(_on_toggle_fast_clock)
+		player.kindle_flare_requested.connect(func() -> void: execute_world_command("player_1", &"kindle_flare", ""))
 
 	economy.transaction_rejected.connect(_record_rejection)
 	building_mgr.building_action_rejected.connect(_record_rejection)
@@ -172,6 +178,7 @@ func _wire_signals() -> void:
 	pop_mgr.population_action_rejected.connect(_record_rejection)
 	pop_mgr.roster_changed.connect(_sync_follower_nodes)
 	night_mgr.night_encounter_resolved.connect(_on_night_resolved)
+	night_mgr.enemy_defeated.connect(_on_enemy_defeated)
 
 	if slice_hud != null and slice_hud.has_method("bind_session"):
 		slice_hud.call("bind_session", self)
@@ -185,6 +192,7 @@ func _play_sfx(sfx_name: String) -> void:
 		_sfx_cache[sfx_name] = load(path) if ResourceLoader.exists(path) else null
 	var stream: AudioStream = _sfx_cache.get(sfx_name, null) as AudioStream
 	if stream != null:
+		sfx_player.pitch_scale = randf_range(0.92, 1.08)
 		sfx_player.stream = stream
 		sfx_player.play()
 
@@ -204,8 +212,26 @@ func _spawn_floating_text(world_x: float, text: String, col: Color = Color(1.0, 
 	tw.chain().tween_callback(lbl.queue_free)
 
 
+
+func _trigger_camera_shake(intensity: float = 4.0, duration: float = 0.14) -> void:
+	if player == null or not is_inside_tree():
+		return
+	var cam: Camera2D = player.get_node_or_null("Camera2D") as Camera2D
+	if cam == null:
+		return
+	var tw: Tween = create_tween()
+	tw.tween_property(cam, "offset", Vector2(randf_range(-intensity, intensity), randf_range(-intensity, intensity)), duration * 0.5)
+	tw.tween_property(cam, "offset", Vector2.ZERO, duration * 0.5)
+
+
 func _flash_sprite(spr: CanvasItem, flash_col: Color = Color(2.0, 1.2, 1.2, 1.0), restore_col: Color = Color(1.0, 1.0, 1.0, 1.0)) -> void:
 	if spr == null or not is_inside_tree():
+		return
+	if spr.material is ShaderMaterial:
+		var smat: ShaderMaterial = spr.material as ShaderMaterial
+		smat.set_shader_parameter("flash_amount", 1.0)
+		var tw_s: Tween = create_tween()
+		tw_s.tween_method(func(v: float) -> void: smat.set_shader_parameter("flash_amount", v), 1.0, 0.0, 0.14)
 		return
 	spr.modulate = flash_col
 	var tw: Tween = create_tween()
@@ -227,7 +253,8 @@ func _resolve_target_for_actor(actor_x: float) -> Dictionary:
 		shipwreck_stage,
 		SHIPWRECK_X,
 		PORTAL_X,
-		portal_relic_looted
+		portal_relic_looted,
+		shrine_offering_used_today
 	)
 
 
@@ -323,6 +350,36 @@ func execute_world_command(actor_id: String, command: StringName, target_id: Str
 				ok = _on_player_loot_portal_relic()
 			else:
 				_record_rejection("Move closer to Greed Portal (x=1350)")
+
+		&"shrine_offering":
+			if absf(actor_x - (-780.0)) > ResourceNodeManager.INTERACT_RANGE:
+				_record_rejection("Move closer to Forgotten Shrine (x=-780)")
+			elif shrine_offering_used_today:
+				_record_rejection("Shrine Offering already used today")
+			elif not economy.try_spend({"wood": 4, "stone": 2}):
+				_record_rejection("Shrine Offering needs 4 Wood, 2 Stone")
+			else:
+				economy.try_add(&"gold", 2)
+				shrine_offering_used_today = true
+				ok = true
+				_play_sfx("sfx_coin")
+				_spawn_floating_text(-780.0, "+2G Offering")
+				feedback_message.emit("Shrine Offering accepted: 4W + 2S -> +2 Gold!")
+
+		&"kindle_flare":
+			if time_manager == null or time_manager.current_phase != TimeManager.Phase.NIGHT:
+				_record_rejection("Kindle Flare [Space] can only be used at Night")
+			elif flare_cooldown_timer > 0.0:
+				_record_rejection("Kindle Flare on cooldown (%.0fs)" % flare_cooldown_timer)
+			elif not economy.try_spend({"wood": 1}):
+				_record_rejection("Kindle Flare needs 1 Wood")
+			else:
+				flare_active_timer = 8.0
+				flare_cooldown_timer = 25.0
+				ok = true
+				_play_sfx("sfx_sunset")
+				_spawn_floating_text(actor_x, "KINDLE FLARE +50%!", Color(1.0, 0.82, 0.35, 1.0))
+				feedback_message.emit("Kindle Flare active! Hearth burn & Watchtower dmg +50% for 8s!")
 
 		&"save_game":
 			ok = _on_manual_save()
@@ -504,7 +561,9 @@ func _on_toggle_fast_clock() -> void:
 func _on_daylight_started(day_number: int) -> void:
 	pop_mgr.set_dusk_or_night_safety(false, building_mgr)
 	if day_number > 1:
-		resource_mgr.refresh_renewable_nodes()
+		shrine_offering_used_today = false
+		shrine_offering_used_today = false
+	resource_mgr.refresh_renewable_nodes()
 		_update_resource_node_visuals()
 	feedback_message.emit("Day %d Daylight — Wood & Stone nodes refreshed! Expand Farms, Watchtower & Stone Wall." % day_number)
 
@@ -539,6 +598,14 @@ func _on_sunrise_reached(completed_day: int) -> void:
 	_update_resource_node_visuals()
 	pop_mgr.on_sunrise_refill()
 	save_game_state()
+
+
+
+func _on_enemy_defeated(_archetype: String, reward_gold: int, pos_x: float) -> void:
+	if economy.try_add(&"gold", reward_gold):
+		_play_sfx("sfx_coin")
+		_spawn_floating_text(pos_x, "+%dG" % reward_gold)
+		feedback_message.emit("Raider defeated! +%d Gold" % reward_gold)
 
 
 func _on_night_resolved(survived: bool, wall_held: bool) -> void:
@@ -602,6 +669,8 @@ func _get_plot_nodes(plot_id: String) -> Dictionary:
 	match plot_id:
 		BuildingManager.WALL_ID:
 			return {"sprite": wall_visual, "label": wall_label, "title": "Wall Plot", "cost": "2G 4W 2S"}
+		BuildingManager.WEST_WALL_ID:
+			return {"sprite": get_node_or_null("WorldObjects/WestWallPlot/WallVisual") as Sprite2D, "label": get_node_or_null("WorldObjects/WestWallPlot/WallLabel") as Label, "title": "West Wall", "cost": "2G 4W 2S"}
 		BuildingManager.WATCHTOWER_ID:
 			return {
 				"sprite": get_node_or_null("WorldObjects/WatchtowerPlot/WatchtowerVisual") as Sprite2D,
@@ -742,7 +811,7 @@ func _update_proximity_prompts() -> void:
 		npc_label.visible = camp_active
 		npc_label.modulate = highlight_col if camp_active else normal_col
 
-	for plot_id: String in [BuildingManager.WALL_ID, BuildingManager.WATCHTOWER_ID, BuildingManager.FARM_WEST_ID, BuildingManager.FARM_EAST_ID]:
+	for plot_id: String in [BuildingManager.WALL_ID, BuildingManager.WEST_WALL_ID, BuildingManager.WATCHTOWER_ID, BuildingManager.FARM_WEST_ID, BuildingManager.FARM_EAST_ID]:
 		var nodes: Dictionary = _get_plot_nodes(plot_id)
 		if nodes.is_empty():
 			continue
@@ -817,11 +886,18 @@ func _sync_dynamic_actors() -> void:
 		_play_sfx("sfx_hit")
 		var restore_wall: Color = Color(1.0, 0.85, 0.85, 1.0) if building_mgr.state == BuildingManager.WallState.DAMAGED else Color(1.0, 1.0, 1.0, 1.0)
 		_flash_sprite(wall_visual, Color(2.0, 1.2, 1.2, 1.0), restore_wall)
+		_trigger_camera_shake(4.0, 0.14)
 	_prev_wall_hp = building_mgr.durability
 
 	if night_mgr.enemy_active and night_mgr.enemy_hp < _prev_enemy_hp and _prev_enemy_hp > 0:
 		_flash_sprite(enemy_sprite)
 	_prev_enemy_hp = night_mgr.enemy_hp if night_mgr.enemy_active else 0
+
+
+	var west_actor: Node2D = get_node_or_null("WorldObjects/WestEnemyActor") as Node2D
+	if west_actor != null:
+		west_actor.visible = night_mgr.west_enemy_active
+		west_actor.position.x = night_mgr.west_enemy_x
 
 	_sync_follower_nodes()
 	_update_proximity_prompts()
@@ -912,6 +988,7 @@ func build_save_payload() -> Dictionary:
 			"hearth_level": hearth_sys.hearth_level,
 			"shipwreck_stage": shipwreck_stage,
 			"portal_relic_looted": portal_relic_looted,
+			"shrine_offering_used_today": shrine_offering_used_today,
 		},
 	}
 
@@ -955,6 +1032,7 @@ func load_game_state(save_path: String = SaveManager.DEFAULT_SAVE_PATH) -> bool:
 	hearth_sys.apply_save_level(int(flags.get("hearth_level", 1)))
 	shipwreck_stage = clampi(int(flags.get("shipwreck_stage", 0)), 0, 3)
 	portal_relic_looted = bool(flags.get("portal_relic_looted", false))
+	shrine_offering_used_today = bool(flags.get("shrine_offering_used_today", false))
 	resource_mgr.apply_save_state(flags.get("node_states", null), flags.get("collected_nodes", []))
 
 	if time_manager != null:

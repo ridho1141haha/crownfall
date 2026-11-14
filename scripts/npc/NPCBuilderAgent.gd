@@ -248,10 +248,7 @@ func _tick_archer(delta: float, building_mgr: BuildingManager, night_mgr: NightE
 		var attack_range: float = ARCHER_TOWER_RANGE if on_tower else ARCHER_GROUND_RANGE
 		if absf(night_mgr.enemy_x - position_x) <= attack_range:
 			var dmg: int = ARCHER_BASE_DAMAGE * (2 if on_tower else 1)
-			night_mgr.enemy_hp = maxi(0, night_mgr.enemy_hp - dmg)
-			if night_mgr.enemy_hp <= 0:
-				night_mgr.enemy_active = false
-			night_mgr.enemy_updated.emit(night_mgr.enemy_active, night_mgr.enemy_x, night_mgr.enemy_hp, NightEncounterManager.ENEMY_MAX_HP)
+			night_mgr.apply_external_damage(dmg)
 			_archer_cooldown = ARCHER_FIRE_INTERVAL
 			archer_volley_fired.emit(npc_id, dmg, on_tower)
 	_emit_state()

@@ -1,4 +1,4 @@
-[gd_scene load_steps=24 format=3]
+[gd_scene load_steps=29 format=3]
 
 [ext_resource type="PackedScene" path="res://scenes/player/Player.tscn" id="1_player_scene"]
 [ext_resource type="Script" path="res://scripts/world/TimeManager.gd" id="2_time_mgr"]
@@ -19,6 +19,8 @@
 [ext_resource type="Texture2D" path="res://assets/buildings/tool_stands/props_tool_stands.png" id="17_stand_tex"]
 [ext_resource type="Texture2D" path="res://assets/buildings/shipwreck/building_shipwreck_stages.png" id="18_ship_tex"]
 [ext_resource type="Texture2D" path="res://assets/environment/landmarks/env_greed_portal.png" id="19_portal_tex"]
+[ext_resource type="Shader" path="res://shaders/day_night_atmosphere.gdshader" id="20_atmo_shader"]
+[ext_resource type="Shader" path="res://shaders/hit_flash.gdshader" id="21_flash_shader"]
 
 [sub_resource type="Gradient" id="Gradient_fire"]
 offsets = PackedFloat32Array(0, 0.45, 1)
@@ -31,6 +33,21 @@ height = 128
 fill = 1
 fill_from = Vector2(0.5, 0.5)
 fill_to = Vector2(0.5, 0)
+
+[sub_resource type="ShaderMaterial" id="ShaderMaterial_atmo"]
+shader = ExtResource("20_atmo_shader")
+shader_parameter/tint_color = Color(1, 1, 1, 0)
+shader_parameter/vignette_strength = 0.22
+
+[sub_resource type="ShaderMaterial" id="ShaderMaterial_wall_flash"]
+shader = ExtResource("21_flash_shader")
+shader_parameter/flash_amount = 0.0
+shader_parameter/flash_color = Color(1, 0.92, 0.88, 1)
+
+[sub_resource type="ShaderMaterial" id="ShaderMaterial_enemy_flash"]
+shader = ExtResource("21_flash_shader")
+shader_parameter/flash_amount = 0.0
+shader_parameter/flash_color = Color(1, 0.92, 0.88, 1)
 
 [sub_resource type="RectangleShape2D" id="RectangleShape2D_floor"]
 size = Vector2(3200, 120)
@@ -155,6 +172,7 @@ centered = false
 position = Vector2(380, 0)
 
 [node name="WallVisual" type="Sprite2D" parent="WorldObjects/WoodenWallPlot"]
+material = SubResource("ShaderMaterial_wall_flash")
 position = Vector2(-16, -48)
 texture = ExtResource("8_wall_tex")
 centered = false
@@ -169,6 +187,26 @@ text = "Wall Plot [B]
 2G 4W 2S"
 horizontal_alignment = 1
 
+
+
+[node name="WestWallPlot" type="Node2D" parent="WorldObjects"]
+position = Vector2(-400, 0)
+
+[node name="WallVisual" type="Sprite2D" parent="WorldObjects/WestWallPlot"]
+position = Vector2(-16, -48)
+texture = ExtResource("8_wall_tex")
+centered = false
+hframes = 4
+
+[node name="WallLabel" type="Label" parent="WorldObjects/WestWallPlot"]
+visible = false
+offset_left = -70.0
+offset_top = -102.0
+offset_right = 70.0
+offset_bottom = -56.0
+text = "West Wall [E/B]
+2G 4W 2S"
+horizontal_alignment = 1
 
 [node name="WatchtowerPlot" type="Node2D" parent="WorldObjects"]
 position = Vector2(210, 0)
@@ -412,6 +450,7 @@ visible = false
 position = Vector2(820, 0)
 
 [node name="EnemySprite" type="Sprite2D" parent="WorldObjects/NightEnemyActor"]
+material = SubResource("ShaderMaterial_enemy_flash")
 texture = ExtResource("11_raider_tex")
 centered = false
 offset = Vector2(-16, -32)
@@ -425,11 +464,41 @@ offset_bottom = -34.0
 text = "Greedling Raider"
 horizontal_alignment = 1
 
+
+[node name="WestEnemyActor" type="Node2D" parent="WorldObjects"]
+visible = false
+position = Vector2(-820, 0)
+
+[node name="EnemySprite" type="Sprite2D" parent="WorldObjects/WestEnemyActor"]
+texture = ExtResource("11_raider_tex")
+centered = false
+offset = Vector2(-16, -32)
+flip_h = true
+hframes = 4
+
+[node name="EnemyLabel" type="Label" parent="WorldObjects/WestEnemyActor"]
+offset_left = -50.0
+offset_top = -58.0
+offset_right = 50.0
+offset_bottom = -34.0
+text = "West Scout"
+horizontal_alignment = 1
+
 [node name="Player" parent="." instance=ExtResource("1_player_scene")]
 
 [node name="ClockHUD" type="CanvasLayer" parent="." node_paths=PackedStringArray("time_manager")]
 script = ExtResource("4_clock_hud")
 time_manager = NodePath("../TimeManager")
+
+
+[node name="AtmosphereOverlay" type="ColorRect" parent="ClockHUD"]
+material = SubResource("ShaderMaterial_atmo")
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
 
 [node name="MarginContainer" type="MarginContainer" parent="ClockHUD"]
 offset_right = 920.0

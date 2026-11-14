@@ -83,6 +83,35 @@
       "harvest_interval": 60.0,
       "gold_yield": 2,
       "cost_label": "3G 4W"
+    },
+    {
+      "id": "wall_west_01",
+      "title": "West Wall",
+      "type": "wooden_wall",
+      "position_x": -400.0,
+      "build_cost": {
+        "gold": 2,
+        "wood": 4,
+        "stone": 2
+      },
+      "repair_cost": {
+        "wood": 2,
+        "stone": 1
+      },
+      "build_duration": 4.0,
+      "max_durability": 150,
+      "cost_label": "2G 4W 2S",
+      "upgrade": {
+        "target_type": "stone_wall",
+        "cost": {
+          "gold": 3,
+          "wood": 2,
+          "stone": 5
+        },
+        "max_durability": 260,
+        "thorn_damage": 20,
+        "cost_label": "3G 2W 5S"
+      }
     }
   ]
 }

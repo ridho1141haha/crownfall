@@ -11,7 +11,8 @@ static func resolve_nearest(
 	shipwreck_stage: int,
 	shipwreck_x: float,
 	portal_x: float,
-	portal_looted: bool
+	portal_looted: bool,
+	shrine_offering_used: bool = false
 ) -> Dictionary:
 	var best: Dictionary = {
 		"has_target": false,
@@ -38,6 +39,21 @@ static func resolve_nearest(
 					"prompt_text": String(n.get("prompt", "[E] Collect")),
 					"distance": d,
 				}
+
+
+	# 1b. Shrine Offering (4W + 2S -> +2G, 1x/day after shrine_cache_far_west is collected)
+	if resource_mgr != null and resource_mgr.is_collected("shrine_cache_far_west") and not shrine_offering_used:
+		var d_shrine: float = absf(actor_x - (-780.0))
+		if d_shrine <= ResourceNodeManager.INTERACT_RANGE and d_shrine < float(best["distance"]):
+			best = {
+				"has_target": true,
+				"kind": "shrine_offering",
+				"target_id": "shrine_cache_far_west",
+				"primary_command": &"shrine_offering",
+				"upgrade_command": &"",
+				"prompt_text": "[E] Shrine Offering (4W 2S -> +2G)",
+				"distance": d_shrine,
+			}
 
 	# 2. Tool Stands
 	if pop_mgr != null:

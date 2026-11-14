@@ -8,6 +8,7 @@ signal build_wall_requested(player_x: float)
 signal repair_wall_requested(player_x: float)
 signal manual_save_requested()
 signal fast_clock_toggled()
+signal kindle_flare_requested()
 
 @export var move_speed: float = 240.0
 @export var min_bound_x: float = -1540.0
@@ -51,6 +52,8 @@ func _unhandled_input(event: InputEvent) -> void:
 		manual_save_requested.emit()
 	elif event.is_action_pressed("toggle_fast_clock"):
 		fast_clock_toggled.emit()
+	elif event.is_action_pressed("kindle_flare"):
+		kindle_flare_requested.emit()
 
 
 func _update_sprite_animation(delta: float, is_moving: bool) -> void:
