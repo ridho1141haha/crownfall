@@ -566,15 +566,15 @@ func _test_task2_softlock_flare_west_lane() -> bool:
 	if not _check(bm.has_plot(BuildingManager.WEST_WALL_ID), "Task2 West Wall plot registered at x=-400"):
 		return false
 	var night: NightEncounterManager = NightEncounterManagerScript.new()
-	var kill_gold: int = 0
-	night.enemy_defeated.connect(func(_arch: String, rw: int, _px: float) -> void: kill_gold += rw)
+	var kill_gold_box: Array[int] = [0]
+	night.enemy_defeated.connect(func(_arch: String, rw: int, _px: float) -> void: kill_gold_box[0] += rw)
 	night.on_night_started(2)
 	for _s: int in range(30):
 		night.tick(1.0, true, bm, 3, true)
 	if not _check(night.west_spawned_count >= 1, "Task2 Day 2+ spawned West Scout lane"):
 		return false
 	night.apply_external_damage(200)
-	if not _check(kill_gold >= 1, "Task2 enemy defeat awards +1G"):
+	if not _check(kill_gold_box[0] >= 1, "Task2 enemy defeat awards +1G"):
 		return false
 	print("PASS: Task 2 Anti-Softlock, Kindle Flare (+50%), West Wall & Day 2 West Scout")
 	return true
