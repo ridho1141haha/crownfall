@@ -1,12 +1,12 @@
 # CROWNFALL: THE LAST LIGHT
 # ASSET GUIDELINES
 
-**Document Version:** 1.2
-**Baseline:** Revised Project Baseline v1.2
-**Engine:** Godot 4
+**Document Version:** 1.3
+**Baseline:** Revised Project Baseline v1.3 (`docs/DECISIONS_M2_M8.md`)
+**Engine:** Godot 4.7.2.stable
 **Target Platform:** Windows PC
 **Art Direction:** Atmospheric Medieval-Fantasy 2D Pixel Art
-**Status:** Pre-production — Vertical-Slice Asset Scope
+**Status:** M0–M8 Vertical Slice Prototype Implemented (Placeholder Visuals Active)
 
 ---
 
@@ -99,7 +99,7 @@ No second character variant, class-specific costume, attack animation set, or mu
 | Basic idle/walk | Communicate movement and presence | Placeholder is acceptable |
 | Builder work indication | Make construction behavior understandable | May use a simple pose, tool, icon, or effect |
 
-Builder is a gameplay behavior whose internal role/assignment representation is still open. Do not commission a separate full character species before that decision is made.
+Approved representation (`OD-05`): Builder is represented as the persistent `NPCBuilderAgent` (`id="npc_01"`, `role: "villager" -> "builder"`). Reusing the Villager silhouette with a work indicator or tool cue is sufficient for P0.
 
 Farmer, Archer, Knight, Guard, and other professions are deferred.
 
@@ -151,7 +151,7 @@ Required visual scope:
 - Wall-attack indication if the behavior is implemented.
 - Optional damage feedback needed to test the encounter.
 
-The enemy's final name, shape, material language, animation set, and stats remain open design decisions. Do not produce Greedling, Crawler, Brute, and boss asset sets as P0.
+Approved P0 enemy (`OD-06`): **Greedling Raider** (`45 HP`, `15 dmg/hit`, `15 thorn dmg/hit`, `95 px/s`, 3 waves per night). Only the single Greedling Raider visual/placeholder is required in P0; Crawler, Brute, and boss asset sets remain deferred to P1/P2.
 
 ### 3.7 First-Slice Effects
 
@@ -525,4 +525,4 @@ Art direction changes that affect multiple asset classes should be recorded and 
 
 Project: CROWNFALL: THE LAST LIGHT  
 Document: ASSET_GUIDELINES.md  
-Version: 1.2
+Version: 1.3

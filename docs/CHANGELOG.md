@@ -7,6 +7,23 @@ This changelog records repository changes that actually occurred. Planned featur
 
 ---
 
+## [2026-11-14] Baseline v1.3.3 — False-Green CI Elimination, M5/M8 Test Fixes & Full Doc Sync
+
+**Type:** Test Runner Hardening, Bug Fix & Documentation Synchronization  
+**Engine Verified in CI:** `Godot 4.7.2.stable.official.ed1daf0bf`
+
+### Summary
+Eliminated false-green headless test exits by replacing raw `assert()` calls in test suites with fail-fast `_check()` handlers (`quit(1)`) and adding log/exit-code traps in `.github/workflows/godot-ci.yml`. Fixed the M5 movement-vs-construction tick sequence, refactored `test_vertical_slice.gd` to use multi-frame `_initialize()` + `_process()` lifecycle, hardened M9 velocity-based anti-teleport, and synchronized `ASSET_GUIDELINES.md`, `TDD.md` Section 5.1 JSON schema, and `readme.md` to v1.3.
+
+### Key Fixes
+- **Test Runner Reliability (`tests/*.gd`, `.github/workflows/godot-ci.yml`):** Replaced `assert()` in test scripts with `_check()` that prints `TEST FAILURE:` and exits with code `1` immediately. Added `set -o pipefail` and `! grep -E "(SCRIPT ERROR:|Parser Error:|TEST FAILURE:)"` guards to every CI step.
+- **M5 Unit Test Fix (`tests/test_unit_m2_m7.gd`):** Separated the 5-second movement phase (`x=-220` to `x=360`) from the 2-second construction phase (`progress = 0.5`), ensuring dusk safety override and blocked-path checks execute to completion.
+- **Scene Lifecycle Fix (`tests/test_vertical_slice.gd`, `tests/test_integration_m8_slice.gd`):** Removed `_init()` scene instantiation so `@onready var time_manager` is always initialized by Godot before access, with a `MAX_WAIT_FRAMES = 120` timeout guard.
+- **M9 Experimental Anti-Teleport (`scripts/networking/NetworkSessionManager.gd`):** Added `server_clock_sec` velocity bounds (`260 px/s`) and deferred `peer_positions` mutation until after `execute_command()` succeeds.
+- **Documentation Sync (`docs/ASSET_GUIDELINES.md`, `docs/TDD.md`, `readme.md`):** Updated `ASSET_GUIDELINES.md` to v1.3, added `night_encounter` to `TDD.md` Section 5.1 JSON payload, and locked `readme.md` to Godot `4.7.2.stable`.
+
+---
+
 ## [2026-11-14] M0–M8 — Single-Player Vertical Slice Implementation & Automated Test Suite
 
 **Type:** Gameplay Implementation, Code Review & Automated Tests  

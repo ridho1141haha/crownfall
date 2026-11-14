@@ -14,7 +14,7 @@
 
 **Document & Baseline Version:** 1.3  
 **Current Stage:** Runnable Single-Player Vertical Slice Prototype (`M0–M8` Implemented on `main`)  
-**Engine Target:** Godot `4.7.2.stable` (backward-compatible with Godot `4.3+`)
+**Engine Target:** Godot `4.7.2.stable`
 
 This repository contains a runnable Godot 4 project (`project.godot`), playable scenes (`scenes/main/Main.tscn`, `scenes/world/ForgottenShore.tscn`, `scenes/player/Player.tscn`), modular gameplay systems (`scripts/`), and automated unit and scene-integration test suites (`tests/`).
 
@@ -26,7 +26,7 @@ This repository contains a runnable Godot 4 project (`project.godot`), playable 
 ## Running the Game & Automated Tests
 
 ### 1. Run Playable Prototype in Godot Editor
-Open `project.godot` in **Godot `4.7.2.stable`** (or `4.3+`) and press **F5**:
+Open `project.godot` in **Godot `4.7.2.stable`** and press **F5**:
 - **Controls on Forgotten Shore:**
   - `A` / `D` or `Left` / `Right`: Move Monarch horizontally
   - `E`: Collect nearby resource caches (`Gold`, `Wood`, `Stone`) or interact contextually

@@ -234,13 +234,45 @@ Minimum conceptual payload:
   "world_time": 0.0,
   "world_phase": "daylight",
   "resources": {
-    "gold": 0,
-    "wood": 0,
-    "stone": 0
+    "gold": 2,
+    "wood": 2,
+    "stone": 1
   },
-  "buildings": [],
-  "npcs": [],
-  "progression_flags": {}
+  "buildings": [
+    {
+      "id": "wall_east_01",
+      "type": "wooden_wall",
+      "position_x": 360.0,
+      "level": 1,
+      "state": "PLACEHOLDER",
+      "progress": 0.0,
+      "durability": 0,
+      "max_durability": 150
+    }
+  ],
+  "npcs": [
+    {
+      "id": "npc_01",
+      "recruited": false,
+      "role": "villager",
+      "state": "UNRECRUITED",
+      "position_x": -220.0
+    }
+  ],
+  "night_encounter": {
+    "night_active": false,
+    "night_elapsed": 0.0,
+    "spawned_wave_count": 0,
+    "enemy_active": false,
+    "enemy_x": 820.0,
+    "enemy_hp": 0,
+    "settlement_breached": false,
+    "first_night_survived": false
+  },
+  "progression_flags": {
+    "first_night_survived": false,
+    "collected_nodes": []
+  }
 }
 ~~~
 
