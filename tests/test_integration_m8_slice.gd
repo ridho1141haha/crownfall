@@ -148,9 +148,9 @@ func _process(_delta: float) -> bool:
 				return true
 			if not _check(loaded_session.builder_npc.recruited and loaded_session.building_mgr.durability == 15, "Continue loaded Builder and 15 HP wall"):
 				return true
-			if not _check(not loaded_session.collected_node_ids.has("timber_pile_west") and not loaded_session.collected_node_ids.has("stone_outcrop_east"), "Continue restores renewable Wood/Stone nodes as available on Day 2"):
+			if not _check(not bool(loaded_session.collected_node_ids.get("timber_pile_west", false)) and not bool(loaded_session.collected_node_ids.get("stone_outcrop_east", false)), "Continue restores renewable Wood/Stone nodes as available on Day 2"):
 				return true
-			if not _check(loaded_session.collected_node_ids.has("cache_gold_west") and loaded_session.collected_node_ids.has("shrine_cache_far_west"), "Continue keeps non-renewable Gold caches collected"):
+			if not _check(bool(loaded_session.collected_node_ids.get("cache_gold_west", false)) and bool(loaded_session.collected_node_ids.get("shrine_cache_far_west", false)), "Continue keeps non-renewable Gold caches collected"):
 				return true
 			if not _check(loaded_session.execute_command(&"repair_wall", 360.0) and loaded_session.building_mgr.durability == 150, "Day 2 wall repair to 150 HP"):
 				return true
