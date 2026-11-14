@@ -39,7 +39,6 @@ func _run_m8_scene_integration_check() -> void:
 	var test_save_path: String = "user://test_master_slice_save.json"
 	var session: ForgottenShoreSession = ForgottenShoreScene.instantiate() as ForgottenShoreSession
 	root.add_child(session)
-	session._ready()
 	session.time_manager.auto_advance = false
 
 	assert(not session.execute_command(&"interact", 0.0))

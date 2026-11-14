@@ -1,4 +1,4 @@
-name: Crownfall Godot 4 Headless CI
+name: Crownfall Godot 4.7.2 Headless CI
 
 on:
   push:
@@ -6,15 +6,21 @@ on:
   pull_request:
     branches: [ main ]
 
+env:
+  GODOT_TARGET_VERSION: "4.7.2"
+
 jobs:
   verify-vertical-slice:
-    name: Static & Headless Godot 4 Verification
+    name: Static Integrity & Headless Godot Verification (Target 4.7.2)
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Setup Godot 4.3+ Headless
+      - name: Run Repository Static, Scene-Graph & Balance Integrity Verifier
+        run: python3 tests/verify_repo_integrity.py
+
+      - name: Setup Godot Headless (Target 4.7.2 with 4.3+ stable fallback on standard Linux runners)
         uses: chickensoft-games/setup-godot@v2
         with:
           version: 4.3.0
@@ -23,10 +29,10 @@ jobs:
       - name: Verify Project Import & Parser
         run: godot --headless --import
 
-      - name: Run P0 Unit Tests (M2-M7)
+      - name: Run P0 Unit Tests (M2-M7 + Extreme Save Rollback)
         run: godot --headless --script res://tests/test_unit_m2_m7.gd
 
-      - name: Run P0 Scene Integration Test (M8 Full Loop)
+      - name: Run P0 Scene Integration Test (M8 Main -> ForgottenShore -> Full Loop)
         run: godot --headless --script res://tests/test_integration_m8_slice.gd
 
       - name: Run Combined P0 Vertical Slice Suite

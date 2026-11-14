@@ -188,6 +188,16 @@ func _test_m7_atomic_save_and_rollback() -> void:
 
 	var loaded: Dictionary = sm.load_state(test_path)
 	assert(bool(loaded["ok"]) and int(loaded["data"]["day_count"]) == 3)
+	assert(not FileAccess.file_exists(test_path + ".tmp"))
+	assert(not FileAccess.file_exists(test_path + ".old"))
+	assert(not FileAccess.file_exists(test_path + ".bak.tmp"))
+
+	# Extreme Case: Active file completely missing after external crash, leaving only .bak -> load_state self-heals active file
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(test_path))
+	assert(not FileAccess.file_exists(test_path))
+	var healed: Dictionary = sm.load_state(test_path)
+	assert(bool(healed["ok"]) and bool(healed["recovered_from_backup"]))
+	assert(FileAccess.file_exists(test_path))
 
 	# Corrupt active save -> automatic self-healing recovery from verified .bak
 	var corrupt_file: FileAccess = FileAccess.open(test_path, FileAccess.WRITE)
