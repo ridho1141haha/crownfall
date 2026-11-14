@@ -564,7 +564,7 @@ func _on_daylight_started(day_number: int) -> void:
 		shrine_offering_used_today = false
 		shrine_offering_used_today = false
 	resource_mgr.refresh_renewable_nodes()
-		_update_resource_node_visuals()
+	_update_resource_node_visuals()
 	feedback_message.emit("Day %d Daylight — Wood & Stone nodes refreshed! Expand Farms, Watchtower & Stone Wall." % day_number)
 
 
