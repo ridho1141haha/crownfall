@@ -19,7 +19,7 @@
 This repository contains a runnable Godot 4 project (`project.godot`), playable scenes (`scenes/main/Main.tscn`, `scenes/world/ForgottenShore.tscn`, `scenes/player/Player.tscn`), modular gameplay systems (`scripts/`), and automated unit and scene-integration test suites (`tests/`).
 
 - **P0 Vertical Slice (`M0–M8`):** Implemented and integrated on **Forgotten Shore** (player movement, deterministic world clock, atomic Gold/Wood/Stone kingdom ledger, multi-plot Wooden Wall construction/repair, Villager recruitment and Builder priority/safety AI, 3-wave nighttime Greedling Raider survival encounter, and atomic local save/load with backup recovery).
-- **P1 Experimental Skeletons (`M9–M10`):** `scripts/networking/NetworkSessionManager.gd` and `scripts/kingdom/ContentExpansionM10.gd` remains an experimental P1 skeleton for `Archer`/`Farmer` NPC roles and `Crawler`/`Brute` waves, while `Farm Plot`, `Watchtower` plot, `Stone Wall Tier 2`, and renewable Wood/Stone nodes are active in `ForgottenShoreSession.gd`.
+- **P1 Experimental Skeletons (`M9–M10`):** `scripts/networking/NetworkSessionManager.gd` and `scripts/kingdom/ContentExpansionM10.gd` remains an experimental P1 skeleton for `Archer`/`Farmer` NPC roles and `Crawler`/`Brute` waves, while `Farm Plot`, `Watchtower` plot (once built, deals +10 damage to every raider that strikes the wall), `Stone Wall Tier 2`, and renewable Wood/Stone nodes are active in `ForgottenShoreSession.gd`.
 
 ---
 
@@ -46,8 +46,8 @@ godot --headless --script res://tests/test_unit_m2_m7.gd
 # 2. P0 Full Scene & Gameplay Loop Integration Test (M8: Main -> ForgottenShore -> Collect -> Recruit -> Build -> Night -> Sunrise -> Save/Reload)
 godot --headless --script res://tests/test_integration_m8_slice.gd
 
-# 3. Combined P0 Master Suite (Unit + Integration, strictly M0-M8)
-godot --headless --script res://tests/test_vertical_slice.gd
+# 3. Everything below plus the world-clock test, in sequence, with the same log traps as CI
+bash tests/run_all.sh
 
 # 4. Experimental P1 Skeleton Tests (M9 Networking Seams & M10 Content Expansion)
 godot --headless --script res://tests/test_experimental_p1_m9_m10.gd
