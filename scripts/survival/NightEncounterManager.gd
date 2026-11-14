@@ -49,6 +49,8 @@ var west_enemy_x: float = WEST_SPAWN_X
 var west_enemy_hp: int = 0
 var _west_attack_timer: float = 0.0
 var _west_burn_acc: float = 0.0
+var _east_trampled: Array[String] = []
+var _west_trampled: Array[String] = []
 
 
 func _init() -> void:
@@ -128,6 +130,53 @@ func apply_external_damage(amount: int) -> bool:
 	return true
 
 
+func apply_west_external_damage(amount: int) -> bool:
+	if not west_enemy_active or amount <= 0:
+		return false
+	west_enemy_hp = maxi(0, west_enemy_hp - amount)
+	if west_enemy_hp <= 0:
+		west_enemy_active = false
+		enemy_defeated.emit("raider", KILL_GOLD_REWARD, west_enemy_x)
+	return true
+
+
+func get_nearest_active_enemy(from_x: float) -> Dictionary:
+	var best: Dictionary = {}
+	var best_d: float = INF
+	if enemy_active:
+		best_d = absf(enemy_x - from_x)
+		best = {"x": enemy_x, "is_west": false}
+	if west_enemy_active:
+		var d: float = absf(west_enemy_x - from_x)
+		if d < best_d:
+			best_d = d
+			best = {"x": west_enemy_x, "is_west": true}
+	return best
+
+
+func damage_nearest_enemy(from_x: float, max_range: float, amount: int) -> Dictionary:
+	var tgt: Dictionary = get_nearest_active_enemy(from_x)
+	if tgt.is_empty() or amount <= 0:
+		return {"hit": false, "x": 0.0}
+	var tx: float = float(tgt["x"])
+	if absf(tx - from_x) > max_range:
+		return {"hit": false, "x": tx}
+	var ok: bool = apply_west_external_damage(amount) if bool(tgt["is_west"]) else apply_external_damage(amount)
+	return {"hit": ok, "x": tx}
+
+
+func _trample_interior(building_mgr: BuildingManager, enemy_x: float, plot_ids: Array[String], trampled: Array[String], dmg: int) -> void:
+	if building_mgr == null or dmg <= 0:
+		return
+	for pid: String in plot_ids:
+		if trampled.has(pid) or not building_mgr.is_standing(pid):
+			continue
+		var px: float = float((building_mgr.get_plot(pid) as Dictionary)["position_x"])
+		if absf(enemy_x - px) <= ATTACK_RANGE:
+			trampled.append(pid)
+			building_mgr.apply_enemy_damage(dmg, pid)
+
+
 func on_night_started(day_num: int = 1) -> void:
 	current_day_number = maxi(1, day_num)
 	night_active = true
@@ -141,6 +190,8 @@ func on_night_started(day_num: int = 1) -> void:
 	_light_burn_acc = 0.0
 	_west_attack_timer = 0.0
 	_west_burn_acc = 0.0
+	_east_trampled.clear()
+	_west_trampled.clear()
 	_spawn_next_wave()
 
 
@@ -222,6 +273,7 @@ func _tick_east_enemy(delta: float, building_mgr: BuildingManager, hearth_level:
 
 	if enemy_x > TOWN_CENTER_X:
 		enemy_x = maxf(TOWN_CENTER_X, enemy_x - spd * delta)
+		_trample_interior(building_mgr, enemy_x, [BuildingManager.WATCHTOWER_ID, BuildingManager.FARM_EAST_ID], _east_trampled, base_dmg)
 		if enemy_x <= TOWN_CENTER_X + 8.0:
 			settlement_breached = true
 			enemy_active = false
@@ -264,6 +316,7 @@ func _tick_west_enemy(delta: float, building_mgr: BuildingManager, hearth_level:
 
 	if west_enemy_x < TOWN_CENTER_X:
 		west_enemy_x = minf(TOWN_CENTER_X, west_enemy_x + spd * delta)
+		_trample_interior(building_mgr, west_enemy_x, [BuildingManager.FARM_WEST_ID], _west_trampled, base_dmg)
 		if west_enemy_x >= TOWN_CENTER_X - 8.0:
 			settlement_breached = true
 			west_enemy_active = false
@@ -280,6 +333,8 @@ func _spawn_next_wave() -> void:
 	enemy_hp = enemy_max_hp
 	_attack_timer = 0.0
 	_light_burn_acc = 0.0
+	_east_trampled.clear()
+	_west_trampled.clear()
 	wave_spawned.emit(spawned_wave_count, schedule.size())
 	enemy_updated.emit(enemy_active, enemy_x, enemy_hp, enemy_max_hp)
 
@@ -292,6 +347,7 @@ func _spawn_west_scout() -> void:
 	west_enemy_hp = int(stats["hp"])
 	_west_attack_timer = 0.0
 	_west_burn_acc = 0.0
+	_west_trampled.clear()
 
 
 func to_save_dict() -> Dictionary:
@@ -361,5 +417,7 @@ func apply_save_dict(data: Dictionary) -> bool:
 	_light_burn_acc = 0.0
 	_west_attack_timer = 0.0
 	_west_burn_acc = 0.0
+	_east_trampled.clear()
+	_west_trampled.clear()
 	enemy_updated.emit(enemy_active, enemy_x, enemy_hp, enemy_max_hp)
 	return true

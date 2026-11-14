@@ -169,13 +169,23 @@ func get_thorn_damage(plot_id: String = WALL_ID) -> int:
 	if not _plots.has(plot_id):
 		return 15
 	var lvl: int = int(_plots[plot_id].get("level", 1))
-	return 20 if lvl >= 2 else 15
+	return 20 if lvl >= 2 else 5
+
+
+func is_fully_operational(plot_id: String = WALL_ID) -> bool:
+	if not _plots.has(plot_id):
+		return false
+	return int(_plots[plot_id]["state"]) == WallState.COMPLETED
 
 
 func get_watchtower_support_damage() -> int:
-	if is_standing(WATCHTOWER_ID):
+	if is_fully_operational(WATCHTOWER_ID):
 		return WATCHTOWER_SUPPORT_DAMAGE
 	return 0
+
+
+func apply_damage(amount: int, plot_id: String = WALL_ID) -> int:
+	return apply_enemy_damage(amount, plot_id)
 
 
 func get_state_name(plot_id: String = WALL_ID) -> String:

@@ -15,7 +15,7 @@ const TOOL_STANDS: Dictionary = {
 }
 
 var agents: Array[NPCBuilderAgent] = []
-var camp_vagrants_available: int = 1
+var camp_vagrants_available: int = 2
 
 
 func _init() -> void:
@@ -93,7 +93,12 @@ func assign_tool_stand(stand_id: String, ledger: EconomyLedger, building_mgr: Bu
 
 	var stand: Dictionary = TOOL_STANDS[stand_id] as Dictionary
 	var cost: Dictionary = stand["cost"] as Dictionary
-	if not cost.is_empty() and not ledger.try_spend(cost):
+	var first_archer_free: bool = String(stand["role"]) == "archer"
+	for a: NPCBuilderAgent in agents:
+		if a.recruited and a.role == "archer":
+			first_archer_free = false
+			break
+	if not first_archer_free and not cost.is_empty() and not ledger.try_spend(cost):
 		population_action_rejected.emit("Insufficient resources for %s" % stand_id)
 		return null
 
@@ -107,9 +112,9 @@ func set_dusk_or_night_safety(is_unsafe: bool, building_mgr: BuildingManager) ->
 		a.set_dusk_or_night_safety(is_unsafe, building_mgr)
 
 
-func tick_all(delta: float, building_mgr: BuildingManager, night_mgr: NightEncounterManager) -> void:
+func tick_all(delta: float, building_mgr: BuildingManager, night_mgr: NightEncounterManager, resource_mgr: ResourceNodeManager = null, ledger: EconomyLedger = null) -> void:
 	for a: NPCBuilderAgent in agents:
-		a.tick(delta, building_mgr, night_mgr)
+		a.tick(delta, building_mgr, night_mgr, resource_mgr, ledger)
 
 
 func to_save_array() -> Array[Dictionary]:

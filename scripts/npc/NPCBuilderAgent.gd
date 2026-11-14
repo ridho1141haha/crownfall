@@ -6,7 +6,9 @@ signal task_released(npc_id: String, task_id: String, reason: String)
 signal safety_path_failed(npc_id: String, reason: String)
 signal recruitment_rejected(reason: String)
 signal farm_gold_earned(npc_id: String, amount: int)
-signal archer_volley_fired(npc_id: String, damage: int, from_watchtower: bool)
+signal archer_volley_fired(npc_id: String, damage: int, from_watchtower: bool, target_x: float)
+signal tool_confiscated(npc_id: String, former_role: String)
+signal auto_chop_collected(npc_id: String, amount: int)
 
 enum State {
 	UNRECRUITED,
@@ -25,10 +27,11 @@ const WORK_RANGE: float = 28.0
 const REPAIR_RATE_PER_SEC: float = 18.0
 const FARMER_HARVEST_SEC: float = 60.0
 const FARMER_GOLD_YIELD: int = 2
-const ARCHER_FIRE_INTERVAL: float = 1.2
+const ARCHER_FIRE_INTERVAL: float = 1.0
 const ARCHER_BASE_DAMAGE: int = 20
 const ARCHER_GROUND_RANGE: float = 240.0
 const ARCHER_TOWER_RANGE: float = 360.0
+const ENEMY_GRAB_RANGE: float = 24.0
 
 var npc_id: String = NPC_ID
 var recruited: bool = false
@@ -123,13 +126,21 @@ func validate_current_task(building_mgr: BuildingManager) -> bool:
 	return true
 
 
-func tick(delta: float, building_mgr: BuildingManager, night_mgr: NightEncounterManager = null) -> void:
+func tick(delta: float, building_mgr: BuildingManager, night_mgr: NightEncounterManager = null, resource_mgr: ResourceNodeManager = null, ledger: EconomyLedger = null) -> void:
 	if not recruited or delta <= 0.0:
 		return
 
 	if role == "archer":
 		_tick_archer(delta, building_mgr, night_mgr)
 		return
+
+	if night_mgr != null and night_mgr.night_active and role != "villager":
+		var nearest: Dictionary = night_mgr.get_nearest_active_enemy(position_x)
+		if not nearest.is_empty() and absf(float(nearest["x"]) - position_x) <= ENEMY_GRAB_RANGE:
+			var former: String = role
+			set_role("villager", building_mgr)
+			tool_confiscated.emit(npc_id, former)
+			return
 
 	# Priority 1: Immediate Dusk/Night Safety Override for non-combatants
 	if safety_override_active:
@@ -189,7 +200,7 @@ func tick(delta: float, building_mgr: BuildingManager, night_mgr: NightEncounter
 		_emit_state()
 		return
 
-	_move_to_safe_idle(delta)
+	_tick_idle_builder(delta, building_mgr, night_mgr, resource_mgr, ledger)
 
 
 func _tick_farmer(delta: float, building_mgr: BuildingManager) -> void:
@@ -223,11 +234,32 @@ func _tick_farmer(delta: float, building_mgr: BuildingManager) -> void:
 	_move_to_safe_idle(delta)
 
 
+func _tick_idle_builder(delta: float, building_mgr: BuildingManager, night_mgr: NightEncounterManager, resource_mgr: ResourceNodeManager, ledger: EconomyLedger) -> void:
+	var can_chop: bool = resource_mgr != null and ledger != null and night_mgr != null and not night_mgr.night_active and not safety_override_active
+	if can_chop:
+		var node: Dictionary = resource_mgr.find_nearest_available(position_x, ResourceNodeManager.INTERACT_RANGE, &"wood", true)
+		if not node.is_empty():
+			var nx: float = float(node["x"])
+			cached_target_x = nx
+			if absf(position_x - nx) > WORK_RANGE:
+				state = State.MOVING_TO_TASK
+				_move_toward(nx, delta)
+				_emit_state()
+				return
+			var res: Dictionary = resource_mgr.try_collect(String(node["id"]), position_x, ledger)
+			if bool(res.get("ok", false)):
+				auto_chop_collected.emit(npc_id, int(node["amount"]))
+			state = State.IDLE
+			_emit_state()
+			return
+	_move_to_safe_idle(delta)
+
+
 func _tick_archer(delta: float, building_mgr: BuildingManager, night_mgr: NightEncounterManager) -> void:
 	var on_tower: bool = false
 	var guard_x: float = SAFE_ZONE_X
 	if building_mgr != null:
-		if building_mgr.has_plot(BuildingManager.WATCHTOWER_ID) and building_mgr.is_standing(BuildingManager.WATCHTOWER_ID):
+		if building_mgr.has_plot(BuildingManager.WATCHTOWER_ID) and building_mgr.is_fully_operational(BuildingManager.WATCHTOWER_ID):
 			var owner: String = building_mgr.get_plot_claimant(BuildingManager.WATCHTOWER_ID)
 			if owner.is_empty() or owner == npc_id:
 				building_mgr.claim_plot(BuildingManager.WATCHTOWER_ID, npc_id)
@@ -244,13 +276,15 @@ func _tick_archer(delta: float, building_mgr: BuildingManager, night_mgr: NightE
 		state = State.WORKING if (night_mgr != null and night_mgr.night_active) else State.IDLE
 
 	_archer_cooldown = maxf(0.0, _archer_cooldown - delta)
-	if night_mgr != null and night_mgr.enemy_active and _archer_cooldown <= 0.0:
+	if night_mgr != null and _archer_cooldown <= 0.0:
 		var attack_range: float = ARCHER_TOWER_RANGE if on_tower else ARCHER_GROUND_RANGE
-		if absf(night_mgr.enemy_x - position_x) <= attack_range:
+		var tgt: Dictionary = night_mgr.get_nearest_active_enemy(position_x)
+		if not tgt.is_empty() and absf(float(tgt["x"]) - position_x) <= attack_range:
 			var dmg: int = ARCHER_BASE_DAMAGE * (2 if on_tower else 1)
-			night_mgr.apply_external_damage(dmg)
-			_archer_cooldown = ARCHER_FIRE_INTERVAL
-			archer_volley_fired.emit(npc_id, dmg, on_tower)
+			var res: Dictionary = night_mgr.damage_nearest_enemy(position_x, attack_range, dmg)
+			if bool(res["hit"]):
+				_archer_cooldown = ARCHER_FIRE_INTERVAL
+				archer_volley_fired.emit(npc_id, dmg, on_tower, float(res["x"]))
 	_emit_state()
 
 

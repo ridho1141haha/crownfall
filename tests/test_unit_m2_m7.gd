@@ -206,7 +206,7 @@ func _test_m5_npc_builder_and_safety() -> bool:
 
 
 func _test_m6_three_balance_scenarios() -> bool:
-	# Scenario A: Completed Wall (150 HP) holds against all 3 waves across 180s night and ends DAMAGED (15 HP left)
+	# Scenario A: Passive thorn alone (5 dmg/hit) no longer holds Night 1 — wall falls during wave 2 and settlement breaches
 	var ledger_a: EconomyLedger = EconomyLedgerScript.new({"gold": 2, "wood": 4, "stone": 2})
 	var bm_a: BuildingManager = BuildingManagerScript.new()
 	var night_a: NightEncounterManager = NightEncounterManagerScript.new()
@@ -215,12 +215,14 @@ func _test_m6_three_balance_scenarios() -> bool:
 	night_a.on_night_started()
 	for _sec: int in range(180):
 		night_a.tick(1.0, true, bm_a)
-	if not _check(night_a.spawned_wave_count == 3, "M6 Scenario A spawned all 3 waves"):
+	if not _check(night_a.spawned_wave_count == 2, "M6 Scenario A passive-only defense falls during wave 2 (wave 3 blocked after breach)"):
 		return false
-	if not _check(bm_a.is_standing() and bm_a.durability == 15, "M6 Scenario A wall survives with 15 HP"):
+	if not _check(not bm_a.is_standing() and not bm_a.has_defensive_barrier(), "M6 Scenario A wooden wall destroyed without active defense"):
+		return false
+	if not _check(night_a.settlement_breached, "M6 Scenario A settlement breached when relying on thorn alone"):
 		return false
 	night_a.on_sunrise_reached(bm_a)
-	if not _check(night_a.first_night_survived and not night_a.settlement_breached, "M6 Scenario A sunrise survived"):
+	if not _check(not night_a.first_night_survived, "M6 Scenario A first night NOT survived without active defense"):
 		return false
 
 	# Scenario B: Partially Built Wall (50% progress -> 40 HP makeshift barricade) absorbs Wave 1 hits before breaking
@@ -270,12 +272,12 @@ func _test_m6_watchtower_support() -> bool:
 		night.tick(1.0, true, bm)
 	if not _check(night.spawned_wave_count == 3, "M6 Scenario D spawned all 3 waves"):
 		return false
-	if not _check(bm.is_standing() and bm.durability == 60, "M6 Scenario D wall ends with 60 HP thanks to Watchtower"):
+	if not _check(bm.is_standing() and bm.durability == 15, "M6 Scenario D wall ends with 15 HP thanks to Watchtower support (5 thorn + 10 support kills raiders in 3 hits)"):
 		return false
 	night.on_sunrise_reached(bm)
 	if not _check(night.first_night_survived and not night.settlement_breached, "M6 Scenario D sunrise survived"):
 		return false
-	print("PASS: M6 Watchtower Support Damage (wall 60 HP vs 15 HP without tower)")
+	print("PASS: M6 Watchtower Support Damage (wall 15 HP with tower vs passive-only breach)")
 	return true
 
 

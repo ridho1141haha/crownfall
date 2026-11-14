@@ -66,15 +66,19 @@ func _process(_delta: float) -> bool:
 
 			if not _check(not session.execute_command(&"recruit", 100.0), "Out-of-range recruit rejected"):
 				return true
-			if not _check(session.execute_command(&"recruit", -220.0), "Recruit Villager at Camp"):
+			if not _check(session.execute_command(&"recruit", -220.0), "Recruit Builder at Camp"):
 				return true
-			if not _check(not session.execute_command(&"recruit", -220.0), "Duplicate recruit rejected"):
+			if not _check(session.execute_command(&"recruit", -220.0), "Recruit second Vagrant as Villager"):
+				return true
+			if not _check(not session.execute_command(&"recruit", -220.0), "Recruit rejected when no Vagrants remain"):
 				return true
 			if not _check(not session.execute_command(&"build_wall", 0.0), "Out-of-range build_wall rejected"):
 				return true
 			if not _check(session.execute_command(&"build_wall", 360.0), "Fund Wooden Wall at x=360"):
 				return true
 			if not _check(not session.execute_command(&"build_wall", 360.0), "Duplicate build_wall rejected"):
+				return true
+			if not _check(session.execute_command(&"assign_tool", 45.0), "Assign Villager as Archer via Bow Stand"):
 				return true
 
 			for _step: int in range(12):
@@ -103,7 +107,7 @@ func _process(_delta: float) -> bool:
 			for _step: int in range(174):
 				session._process(1.0)
 			session.time_manager.advance_time(180.0)
-			if not _check(session.time_manager.current_day == 2 and session.night_mgr.first_night_survived and session.building_mgr.durability == 15, "Survived 3-wave Night 1 with 15 HP wall"):
+			if not _check(session.time_manager.current_day == 2 and session.night_mgr.first_night_survived and session.building_mgr.durability == 150, "Archer-defended wall survives 3-wave Night 1 at full 150 HP"):
 				return true
 
 			if not _check(session.load_game_state(TEST_SAVE_PATH), "Mid-night state reload succeeded"):
@@ -146,7 +150,11 @@ func _process(_delta: float) -> bool:
 				return true
 			if not _check(is_equal_approx(loaded_session.player.global_position.x, 340.0), "Continue restored player position_x == 340.0"):
 				return true
-			if not _check(loaded_session.builder_npc.recruited and loaded_session.building_mgr.durability == 15, "Continue loaded Builder and 15 HP wall"):
+			if not _check(loaded_session.builder_npc.recruited and loaded_session.building_mgr.durability == 150, "Continue loaded Builder and 150 HP wall"):
+				return true
+			if not _check(loaded_session.pop_mgr.agents.size() == 2 and loaded_session.pop_mgr.agents[1].role == "archer", "Continue restores recruited Archer"):
+				return true
+			if not _check(loaded_session.building_mgr.apply_damage(30) == 30 and loaded_session.building_mgr.durability == 120, "Simulated raid damage sets wall to DAMAGED"):
 				return true
 			if not _check(loaded_session.execute_command(&"repair_wall", 360.0) and loaded_session.building_mgr.durability == 150, "Day 2 wall repair to 150 HP"):
 				return true

@@ -43,6 +43,10 @@ func get_amount(resource_id: StringName) -> int:
 	return int(_balances[resource_id])
 
 
+func get_balance(resource_id: StringName) -> int:
+	return get_amount(resource_id)
+
+
 func get_all_balances() -> Dictionary:
 	return {
 		"gold": int(_balances[&"gold"]),

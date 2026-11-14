@@ -8,6 +8,7 @@ const INTERACT_RANGE: float = 72.0
 const DEFAULT_NODES: Array[Dictionary] = [
 	{"id": "cache_gold_west", "resource": &"gold", "amount": 4, "x": -480.0, "renewable": false, "label": "Ancient Coin Chest (+4 Gold)", "prompt": "[E] Chest +4G"},
 	{"id": "timber_pile_west", "resource": &"wood", "amount": 5, "x": -110.0, "renewable": true, "label": "Fallen Timber (+5 Wood)", "prompt": "[E] Timber +5W"},
+	{"id": "stone_deposit_west", "resource": &"stone", "amount": 3, "x": -600.0, "renewable": true, "label": "Stone Quarry (+3 Stone)", "prompt": "[E] Quarry +3S"},
 	{"id": "stone_outcrop_east", "resource": &"stone", "amount": 3, "x": 190.0, "renewable": true, "label": "Ruined Masonry (+3 Stone)", "prompt": "[E] Masonry +3S"},
 	{"id": "shrine_cache_far_west", "resource": &"gold", "amount": 3, "x": -780.0, "renewable": false, "label": "Forgotten Shrine (+3 Gold)", "prompt": "[E] Shrine +3G"},
 ]
@@ -60,12 +61,16 @@ func get_node_def(node_id: String) -> Dictionary:
 	return {}
 
 
-func find_nearest_available(actor_x: float, max_range: float = INTERACT_RANGE) -> Dictionary:
+func find_nearest_available(actor_x: float, max_range: float = INTERACT_RANGE, resource_filter: StringName = &"", renewable_only: bool = false) -> Dictionary:
 	var best: Dictionary = {}
 	var best_dist: float = max_range + 0.001
 	for n: Dictionary in nodes:
 		var nid: String = String(n["id"])
 		if is_collected(nid):
+			continue
+		if resource_filter != &"" and (n["resource"] as StringName) != resource_filter:
+			continue
+		if renewable_only and not bool(n.get("renewable", false)):
 			continue
 		var dist: float = absf(actor_x - float(n["x"]))
 		if dist < best_dist:

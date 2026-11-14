@@ -19,6 +19,15 @@
       "prompt": "[E] Timber +5W"
     },
     {
+      "id": "stone_deposit_west",
+      "resource": "stone",
+      "amount": 3,
+      "x": -600.0,
+      "renewable": true,
+      "label": "Stone Quarry (+3 Stone)",
+      "prompt": "[E] Quarry +3S"
+    },
+    {
       "id": "stone_outcrop_east",
       "resource": "stone",
       "amount": 3,

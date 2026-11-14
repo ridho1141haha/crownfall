@@ -110,7 +110,7 @@ func _process(delta: float) -> void:
 	var sim_delta: float = delta * (time_manager.time_scale if time_manager != null else 1.0)
 	var is_night: bool = time_manager != null and time_manager.current_phase == TimeManager.Phase.NIGHT
 	var is_daylight: bool = time_manager == null or time_manager.current_phase == TimeManager.Phase.DAYLIGHT
-	pop_mgr.tick_all(sim_delta, building_mgr, night_mgr)
+	pop_mgr.tick_all(sim_delta, building_mgr, night_mgr, resource_mgr, economy)
 	flare_active_timer = maxf(0.0, flare_active_timer - sim_delta)
 	flare_cooldown_timer = maxf(0.0, flare_cooldown_timer - sim_delta)
 	night_mgr.tick(sim_delta, is_night, building_mgr, hearth_sys.hearth_level, flare_active_timer > 0.0)
@@ -158,6 +158,7 @@ func _wire_signals() -> void:
 	building_mgr.wall_state_changed.connect(_on_wall_state_changed)
 	builder_npc.recruitment_rejected.connect(_record_rejection)
 	builder_npc.npc_state_changed.connect(_on_npc_state_changed)
+	_wire_follower_signals(builder_npc)
 	pop_mgr.population_action_rejected.connect(_record_rejection)
 	pop_mgr.roster_changed.connect(_sync_follower_nodes)
 	night_mgr.night_encounter_resolved.connect(_on_night_resolved)
@@ -278,7 +279,10 @@ func execute_world_command(actor_id: String, command: StringName, target_id: Str
 			if ok:
 				resolved_target = agent.npc_id
 				_wire_follower_signals(agent)
-				feedback_message.emit("Recruited %s (%s)! Total NPCs: %d" % [agent.npc_id, agent.role.capitalize(), pop_mgr.get_recruited_count()])
+				if agent.role == "villager":
+					feedback_message.emit("Recruited Villager! Assign a role at the Hammer/Scythe/Bow Stand near Town Center. Total NPCs: %d" % pop_mgr.get_recruited_count())
+				else:
+					feedback_message.emit("Recruited %s (%s)! Total NPCs: %d" % [agent.npc_id, agent.role.capitalize(), pop_mgr.get_recruited_count()])
 
 		&"build":
 			if resolved_target.is_empty():
@@ -469,6 +473,8 @@ func _on_player_interact_shipwreck(player_x: float) -> bool:
 		reign_state = ReignState.ISLAND_CLEARED
 		save_game_state()
 		_play_sfx("sfx_coin")
+		if slice_hud != null and slice_hud.has_method("show_victory_banner"):
+			slice_hud.call("show_victory_banner", "ISLAND CLEARED", "The vessel sets sail from Forgotten Shore toward Eldergrove Forest!")
 		feedback_message.emit("Ship repaired! Setting sail from Forgotten Shore toward Eldergrove Forest!")
 		return true
 	var cost: Dictionary = SHIPWRECK_COSTS[shipwreck_stage]
@@ -516,18 +522,41 @@ func _wire_follower_signals(agent: NPCBuilderAgent) -> void:
 		agent.farm_gold_earned.connect(_on_farmer_gold_earned)
 	if not agent.archer_volley_fired.is_connected(_on_archer_volley_fired):
 		agent.archer_volley_fired.connect(_on_archer_volley_fired)
+	if not agent.auto_chop_collected.is_connected(_on_auto_chop_collected):
+		agent.auto_chop_collected.connect(_on_auto_chop_collected)
+	if not agent.tool_confiscated.is_connected(_on_tool_confiscated):
+		agent.tool_confiscated.connect(_on_tool_confiscated)
+
+
+func _get_agent_position(npc_id: String) -> float:
+	for a: NPCBuilderAgent in pop_mgr.agents:
+		if a.npc_id == npc_id:
+			return a.position_x
+	return 0.0
 
 
 func _on_farmer_gold_earned(npc_id: String, amount: int) -> void:
 	if economy.try_add(&"gold", amount):
 		_play_sfx("sfx_coin")
-		_spawn_floating_text(player.global_position.x if player != null else 0.0, "+%d Gold" % amount)
+		_spawn_floating_text(_get_agent_position(npc_id), "+%d Gold" % amount)
 		feedback_message.emit("Farmer %s harvested +%d Gold!" % [npc_id, amount])
 
 
-func _on_archer_volley_fired(_npc_id: String, damage: int, from_tower: bool) -> void:
+func _on_auto_chop_collected(npc_id: String, amount: int) -> void:
+	_play_sfx("sfx_coin")
+	_spawn_floating_text(_get_agent_position(npc_id), "+%d Wood" % amount)
+	feedback_message.emit("Builder %s chopped +%d Wood while idle!" % [npc_id, amount])
+
+
+func _on_tool_confiscated(npc_id: String, former_role: String) -> void:
+	_play_sfx("sfx_hit")
+	_spawn_floating_text(_get_agent_position(npc_id), "-%s!" % former_role.capitalize(), Color(1.0, 0.5, 0.4, 1.0))
+	feedback_message.emit("Greedlings caught %s outside the walls — %s tools lost! Re-assign at the Tool Stands tomorrow." % [npc_id, former_role.capitalize()])
+
+
+func _on_archer_volley_fired(_npc_id: String, damage: int, from_tower: bool, target_x: float = 0.0) -> void:
 	_play_sfx("sfx_bow")
-	_spawn_floating_text(night_mgr.enemy_x, "-%d" % damage, Color(1.0, 0.45, 0.45, 1.0))
+	_spawn_floating_text(target_x, "-%d" % damage, Color(1.0, 0.45, 0.45, 1.0))
 	feedback_message.emit("Archer volley (%d dmg%s)!" % [damage, " from Watchtower" if from_tower else ""])
 
 
@@ -570,9 +599,7 @@ func _on_sunrise_reached(completed_day: int) -> void:
 		var penalty: int = cur_gold / 2
 		if penalty > 0:
 			economy.try_spend({"gold": penalty})
-	elif completed_day >= 2:
-		reign_state = ReignState.ISLAND_CLEARED
-	else:
+	elif reign_state != ReignState.ISLAND_CLEARED:
 		reign_state = ReignState.ACTIVE
 	resource_mgr.refresh_renewable_nodes()
 	_update_resource_node_visuals()
@@ -597,6 +624,25 @@ func _on_night_resolved(survived: bool, wall_held: bool) -> void:
 		feedback_message.emit("Sunrise reached! The wall fell, but dawn broke in time. Auto-saved!")
 	else:
 		feedback_message.emit("Raiders breached Town Center! Half your Gold was lost; rebuild before next dusk.")
+
+
+func _build_population_summary() -> String:
+	var role_counts: Dictionary = {}
+	var idle: int = 0
+	var recruited: int = 0
+	for a: NPCBuilderAgent in pop_mgr.agents:
+		if not a.recruited:
+			continue
+		recruited += 1
+		role_counts[a.role] = int(role_counts.get(a.role, 0)) + 1
+		if a.state == NPCBuilderAgent.State.IDLE:
+			idle += 1
+	var parts: Array[String] = []
+	for role_name: String in ["builder", "farmer", "archer", "villager"]:
+		if role_counts.has(role_name):
+			parts.append("%d %s" % [int(role_counts[role_name]), role_name.capitalize()])
+	var detail: String = ", ".join(parts) if not parts.is_empty() else "none"
+	return "NPCs: %d (%s) | Idle: %d" % [recruited, detail, idle]
 
 
 func _sync_hearth_visuals() -> void:
@@ -857,10 +903,16 @@ func _sync_dynamic_actors() -> void:
 
 	if slice_hud != null and slice_hud.has_method("set_forecast_text"):
 		var day_n: int = time_manager.current_day if time_manager != null else 1
-		if night_mgr.enemy_active:
-			slice_hud.call("set_forecast_text", "ALERT: %s (%d/%d HP) at x=%.0f" % [night_mgr.get_enemy_display_name(), night_mgr.enemy_hp, night_mgr.enemy_max_hp, night_mgr.enemy_x])
+		if night_mgr.enemy_active or night_mgr.west_enemy_active:
+			var alert: String = "ALERT: %s (%d/%d HP) at x=%.0f" % [night_mgr.get_enemy_display_name(), night_mgr.enemy_hp, night_mgr.enemy_max_hp, night_mgr.enemy_x] if night_mgr.enemy_active else "ALERT: West flank!"
+			if night_mgr.west_enemy_active:
+				alert += " | West Scout at x=%.0f" % night_mgr.west_enemy_x
+			slice_hud.call("set_forecast_text", alert)
 		else:
 			slice_hud.call("set_forecast_text", NightEncounterManager.get_night_forecast(day_n))
+
+	if slice_hud != null and slice_hud.has_method("set_population_text"):
+		slice_hud.call("set_population_text", _build_population_summary())
 
 	if building_mgr.durability < _prev_wall_hp and _prev_wall_hp > 0:
 		_play_sfx("sfx_hit")
