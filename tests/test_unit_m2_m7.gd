@@ -379,7 +379,7 @@ func _test_m7_schema_v1_migration() -> bool:
 
 
 func _test_p3_multi_npc_tool_stands_and_lock() -> bool:
-	var ledger: EconomyLedger = EconomyLedgerScript.new({"gold": 12, "wood": 12, "stone": 12})
+	var ledger: EconomyLedger = EconomyLedgerScript.new({"gold": 15, "wood": 12, "stone": 12})
 	var bm: BuildingManager = BuildingManagerScript.new()
 	bm.register_forgotten_shore_expansion_plots()
 	var pop: NPCPopulationManager = NPCPopulationManagerScript.new()
@@ -407,7 +407,8 @@ func _test_p3_multi_npc_tool_stands_and_lock() -> bool:
 	if not _check(a3 != null and archer != null and archer.role == "archer", "P3 assigned archer via bow_stand"):
 		return false
 
-	bm.request_start_construction(BuildingManager.WATCHTOWER_POSITION_X, ledger, BuildingManager.WATCHTOWER_ID)
+	if not _check(bm.request_start_construction(BuildingManager.WATCHTOWER_POSITION_X, ledger, BuildingManager.WATCHTOWER_ID), "P3 fund Watchtower"):
+		return false
 	bm.advance_construction(3.5, BuildingManager.WATCHTOWER_ID)
 	var night: NightEncounterManager = NightEncounterManagerScript.new()
 	night.on_night_started()
