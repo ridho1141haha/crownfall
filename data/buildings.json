@@ -1,0 +1,88 @@
+{
+  "plots": [
+    {
+      "id": "wall_east_01",
+      "title": "Wall Plot",
+      "type": "wooden_wall",
+      "position_x": 360.0,
+      "build_cost": {
+        "gold": 2,
+        "wood": 4,
+        "stone": 2
+      },
+      "repair_cost": {
+        "wood": 2,
+        "stone": 1
+      },
+      "build_duration": 4.0,
+      "max_durability": 150,
+      "cost_label": "2G 4W 2S",
+      "upgrade": {
+        "target_type": "stone_wall",
+        "cost": {
+          "gold": 3,
+          "wood": 2,
+          "stone": 5
+        },
+        "max_durability": 260,
+        "thorn_damage": 20,
+        "cost_label": "3G 2W 5S"
+      }
+    },
+    {
+      "id": "watchtower_east_01",
+      "title": "Watchtower",
+      "type": "watchtower",
+      "position_x": 290.0,
+      "build_cost": {
+        "gold": 3,
+        "wood": 3,
+        "stone": 3
+      },
+      "repair_cost": {
+        "wood": 2,
+        "stone": 1
+      },
+      "build_duration": 3.5,
+      "max_durability": 120,
+      "support_damage": 10,
+      "cost_label": "3G 3W 3S"
+    },
+    {
+      "id": "farm_west_01",
+      "title": "Farm Plot",
+      "type": "farm_plot",
+      "position_x": -310.0,
+      "build_cost": {
+        "gold": 3,
+        "wood": 4
+      },
+      "repair_cost": {
+        "wood": 2
+      },
+      "build_duration": 3.5,
+      "max_durability": 80,
+      "harvest_interval": 60.0,
+      "gold_yield": 2,
+      "cost_label": "3G 4W"
+    },
+    {
+      "id": "farm_east_01",
+      "title": "Farm Plot",
+      "type": "farm_plot",
+      "position_x": 120.0,
+      "build_cost": {
+        "gold": 3,
+        "wood": 4
+      },
+      "repair_cost": {
+        "wood": 2
+      },
+      "build_duration": 3.5,
+      "max_durability": 80,
+      "harvest_interval": 60.0,
+      "gold_yield": 2,
+      "cost_label": "3G 4W"
+    }
+  ]
+}

@@ -79,12 +79,34 @@ func _init() -> void:
 
 
 func register_forgotten_shore_expansion_plots() -> void:
-	if not has_plot(WATCHTOWER_ID):
-		register_plot(WATCHTOWER_ID, "watchtower", WATCHTOWER_POSITION_X, WATCHTOWER_BUILD_COST, WALL_REPAIR_COST, 3.5, WATCHTOWER_MAX_DURABILITY)
-	if not has_plot(FARM_WEST_ID):
-		register_plot(FARM_WEST_ID, "farm_plot", FARM_WEST_POSITION_X, FARM_BUILD_COST, FARM_REPAIR_COST, 3.5, FARM_MAX_DURABILITY)
-	if not has_plot(FARM_EAST_ID):
-		register_plot(FARM_EAST_ID, "farm_plot", FARM_EAST_POSITION_X, FARM_BUILD_COST, FARM_REPAIR_COST, 3.5, FARM_MAX_DURABILITY)
+	var loaded_from_data: bool = false
+	if FileAccess.file_exists("res://data/buildings.json"):
+		var parsed: Variant = JSON.parse_string(FileAccess.get_file_as_string("res://data/buildings.json"))
+		if typeof(parsed) == TYPE_DICTIONARY and (parsed as Dictionary).has("plots"):
+			loaded_from_data = true
+			for entry: Variant in (parsed as Dictionary)["plots"]:
+				if typeof(entry) != TYPE_DICTIONARY:
+					continue
+				var d: Dictionary = entry as Dictionary
+				var pid: String = String(d.get("id", ""))
+				if pid.is_empty() or has_plot(pid):
+					continue
+				register_plot(
+					pid,
+					String(d.get("type", "wooden_wall")),
+					float(d.get("position_x", 0.0)),
+					d.get("build_cost", WALL_BUILD_COST) as Dictionary,
+					d.get("repair_cost", WALL_REPAIR_COST) as Dictionary,
+					float(d.get("build_duration", BUILD_DURATION)),
+					int(d.get("max_durability", REINFORCED_MAX_DURABILITY))
+				)
+	if not loaded_from_data:
+		if not has_plot(WATCHTOWER_ID):
+			register_plot(WATCHTOWER_ID, "watchtower", WATCHTOWER_POSITION_X, WATCHTOWER_BUILD_COST, WALL_REPAIR_COST, 3.5, WATCHTOWER_MAX_DURABILITY)
+		if not has_plot(FARM_WEST_ID):
+			register_plot(FARM_WEST_ID, "farm_plot", FARM_WEST_POSITION_X, FARM_BUILD_COST, FARM_REPAIR_COST, 3.5, FARM_MAX_DURABILITY)
+		if not has_plot(FARM_EAST_ID):
+			register_plot(FARM_EAST_ID, "farm_plot", FARM_EAST_POSITION_X, FARM_BUILD_COST, FARM_REPAIR_COST, 3.5, FARM_MAX_DURABILITY)
 
 
 func register_plot(

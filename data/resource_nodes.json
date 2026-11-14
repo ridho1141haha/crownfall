@@ -1,0 +1,40 @@
+{
+  "nodes": [
+    {
+      "id": "cache_gold_west",
+      "resource": "gold",
+      "amount": 4,
+      "x": -480.0,
+      "renewable": false,
+      "label": "Ancient Coin Chest (+4 Gold)",
+      "prompt": "[E] Chest +4G"
+    },
+    {
+      "id": "timber_pile_west",
+      "resource": "wood",
+      "amount": 5,
+      "x": -110.0,
+      "renewable": true,
+      "label": "Fallen Timber (+5 Wood)",
+      "prompt": "[E] Timber +5W"
+    },
+    {
+      "id": "stone_outcrop_east",
+      "resource": "stone",
+      "amount": 3,
+      "x": 190.0,
+      "renewable": true,
+      "label": "Ruined Masonry (+3 Stone)",
+      "prompt": "[E] Masonry +3S"
+    },
+    {
+      "id": "shrine_cache_far_west",
+      "resource": "gold",
+      "amount": 3,
+      "x": -780.0,
+      "renewable": false,
+      "label": "Forgotten Shrine (+3 Gold)",
+      "prompt": "[E] Shrine +3G"
+    }
+  ]
+}

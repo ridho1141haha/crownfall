@@ -45,7 +45,36 @@ var _prev_builder_x: float = NPCBuilderAgent.CAMP_POSITION_X
 @onready var slice_hud: CanvasLayer = $ClockHUD as CanvasLayer
 
 
+var _active_resource_nodes: Array[Dictionary] = []
+
+
+func _load_resource_nodes_from_data() -> void:
+	_active_resource_nodes.clear()
+	if FileAccess.file_exists("res://data/resource_nodes.json"):
+		var parsed: Variant = JSON.parse_string(FileAccess.get_file_as_string("res://data/resource_nodes.json"))
+		if typeof(parsed) == TYPE_DICTIONARY and (parsed as Dictionary).has("nodes"):
+			for item: Variant in (parsed as Dictionary)["nodes"]:
+				if typeof(item) != TYPE_DICTIONARY:
+					continue
+				var d: Dictionary = item as Dictionary
+				_active_resource_nodes.append({
+					"id": String(d["id"]),
+					"resource": StringName(String(d["resource"])),
+					"amount": int(d["amount"]),
+					"x": float(d["x"]),
+					"renewable": bool(d.get("renewable", false)),
+					"label": String(d.get("label", "")),
+					"prompt": String(d.get("prompt", "")),
+				})
+				var lbl: Label = get_node_or_null("WorldObjects/ResourceNodes/%s/Label" % String(d["id"])) as Label
+				if lbl != null and d.has("prompt"):
+					lbl.text = String(d["prompt"])
+	if _active_resource_nodes.is_empty():
+		_active_resource_nodes = RESOURCE_NODES.duplicate()
+
+
 func _ready() -> void:
+	_load_resource_nodes_from_data()
 	building_mgr.register_forgotten_shore_expansion_plots()
 	_wire_signals()
 	_consume_pending_load_if_requested()
@@ -117,7 +146,7 @@ func _record_rejection(reason: String) -> void:
 
 func _on_player_interact(player_x: float) -> bool:
 	_last_rejection_reason = ""
-	for node_def: Dictionary in RESOURCE_NODES:
+	for node_def: Dictionary in _active_resource_nodes:
 		var node_id: String = String(node_def["id"])
 		if collected_node_ids.get(node_id, false):
 			continue
@@ -251,7 +280,7 @@ func _on_daylight_started(day_number: int) -> void:
 
 
 func _refresh_renewable_nodes() -> void:
-	for node_def: Dictionary in RESOURCE_NODES:
+	for node_def: Dictionary in _active_resource_nodes:
 		if bool(node_def.get("renewable", false)):
 			collected_node_ids.erase(String(node_def["id"]))
 	_update_resource_node_visuals()
@@ -390,7 +419,7 @@ func _update_proximity_prompts() -> void:
 
 	var nodes_root: Node = get_node_or_null("WorldObjects/ResourceNodes")
 	if nodes_root != null:
-		for node_def: Dictionary in RESOURCE_NODES:
+		for node_def: Dictionary in _active_resource_nodes:
 			var node_id: String = String(node_def["id"])
 			var lbl: Label = nodes_root.get_node_or_null(node_id + "/Label") as Label
 			if lbl != null:
@@ -444,7 +473,7 @@ func _update_resource_node_visuals() -> void:
 	var nodes_root: Node = get_node_or_null("WorldObjects/ResourceNodes")
 	if nodes_root == null:
 		return
-	for node_def: Dictionary in RESOURCE_NODES:
+	for node_def: Dictionary in _active_resource_nodes:
 		var node_id: String = String(node_def["id"])
 		var marker: CanvasItem = nodes_root.get_node_or_null(node_id) as CanvasItem
 		if marker != null:

@@ -5,7 +5,8 @@ signal save_completed(path: String)
 signal save_failed(reason: String)
 signal load_recovered_from_backup(path: String)
 
-const SCHEMA_VERSION: int = 1
+const MIN_SCHEMA_VERSION: int = 1
+const SCHEMA_VERSION: int = 2
 const DEFAULT_SAVE_PATH: String = "user://save_slot_0.json"
 
 const REQUIRED_KEYS: Array[String] = [
@@ -131,6 +132,33 @@ func load_state(save_path: String = DEFAULT_SAVE_PATH) -> Dictionary:
 	}
 
 
+
+static func migrate_payload(data: Variant) -> Variant:
+	if typeof(data) != TYPE_DICTIONARY:
+		return data
+	var d: Dictionary = (data as Dictionary).duplicate(true)
+	if not d.has("schema_version") or not EconomyLedger.is_exact_int_value(d["schema_version"]):
+		return d
+	var ver: int = int(roundf(float(d["schema_version"])))
+	if ver == 1:
+		if not d.has("player") or typeof(d["player"]) != TYPE_DICTIONARY:
+			d["player"] = {"position_x": 0.0, "facing_direction": 1}
+		if d.has("progression_flags") and typeof(d["progression_flags"]) == TYPE_DICTIONARY:
+			var pf: Dictionary = d["progression_flags"] as Dictionary
+			if not pf.has("reign_state"):
+				pf["reign_state"] = 0
+		if d.has("buildings") and typeof(d["buildings"]) == TYPE_ARRAY:
+			for b: Variant in (d["buildings"] as Array):
+				if typeof(b) == TYPE_DICTIONARY:
+					var bd: Dictionary = b as Dictionary
+					if not bd.has("level"):
+						bd["level"] = 1
+					if not bd.has("type"):
+						bd["type"] = "wooden_wall"
+		d["schema_version"] = 2
+	return d
+
+
 func validate_payload(data: Variant) -> bool:
 	if typeof(data) != TYPE_DICTIONARY:
 		return false
@@ -141,7 +169,8 @@ func validate_payload(data: Variant) -> bool:
 
 	if not EconomyLedger.is_exact_int_value(dict["schema_version"]):
 		return false
-	if int(roundf(float(dict["schema_version"]))) != SCHEMA_VERSION:
+	var ver: int = int(roundf(float(dict["schema_version"])))
+	if ver < MIN_SCHEMA_VERSION or ver > SCHEMA_VERSION:
 		return false
 	if String(dict["world_id"]).strip_edges().is_empty() or String(dict["island_id"]).strip_edges().is_empty():
 		return false
@@ -273,7 +302,7 @@ func _read_and_validate_file(path: String) -> Dictionary:
 	if raw_text.strip_edges().is_empty():
 		return {"ok": false, "error": "Empty save file: %s" % path}
 
-	var parsed: Variant = JSON.parse_string(raw_text)
+	var parsed: Variant = migrate_payload(JSON.parse_string(raw_text))
 	if not validate_payload(parsed):
 		return {"ok": false, "error": "Invalid schema or corrupt payload in %s" % path}
 	return {"ok": true, "data": parsed}
