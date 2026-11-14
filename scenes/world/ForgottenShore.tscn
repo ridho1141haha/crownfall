@@ -1,10 +1,28 @@
-[gd_scene load_steps=8 format=3]
+[gd_scene load_steps=16 format=3]
 
 [ext_resource type="PackedScene" path="res://scenes/player/Player.tscn" id="1_player_scene"]
 [ext_resource type="Script" path="res://scripts/world/TimeManager.gd" id="2_time_mgr"]
 [ext_resource type="Script" path="res://scripts/world/SkyAtmosphere.gd" id="3_sky_atmo"]
 [ext_resource type="Script" path="res://scripts/ui/ClockHUD.gd" id="4_clock_hud"]
 [ext_resource type="Script" path="res://scripts/world/ForgottenShoreSession.gd" id="5_session"]
+[ext_resource type="Texture2D" path="res://assets/environment/terrain/terrain_shore_tile.png" id="6_ground_tex"]
+[ext_resource type="Texture2D" path="res://assets/buildings/town_center/building_town_center_sheet.png" id="7_town_tex"]
+[ext_resource type="Texture2D" path="res://assets/buildings/wooden_wall/building_wooden_wall_states.png" id="8_wall_tex"]
+[ext_resource type="Texture2D" path="res://assets/items/resources/items_resources_sheet.png" id="9_res_tex"]
+[ext_resource type="Texture2D" path="res://assets/characters/npc/npc_builder_sheet.png" id="10_builder_tex"]
+[ext_resource type="Texture2D" path="res://assets/enemies/first_enemy/enemy_greedling_raider_sheet.png" id="11_raider_tex"]
+
+[sub_resource type="Gradient" id="Gradient_fire"]
+offsets = PackedFloat32Array(0, 0.45, 1)
+colors = PackedColorArray(1, 0.92, 0.72, 1, 0.96, 0.62, 0.25, 0.45, 0, 0, 0, 0)
+
+[sub_resource type="GradientTexture2D" id="GradientTexture2D_fire"]
+gradient = SubResource("Gradient_fire")
+width = 128
+height = 128
+fill = 1
+fill_from = Vector2(0.5, 0.5)
+fill_to = Vector2(0.5, 0)
 
 [sub_resource type="RectangleShape2D" id="RectangleShape2D_floor"]
 size = Vector2(2400, 120)
@@ -18,7 +36,10 @@ script = ExtResource("5_session")
 [node name="TimeManager" type="Node" parent="."]
 script = ExtResource("2_time_mgr")
 
-[node name="SkyBackground" type="ColorRect" parent="." node_paths=PackedStringArray("time_manager")]
+[node name="DayNightModulate" type="CanvasModulate" parent="."]
+color = Color(1, 1, 1, 1)
+
+[node name="SkyBackground" type="ColorRect" parent="." node_paths=PackedStringArray("time_manager", "canvas_modulate", "campfire_light")]
 offset_left = -1400.0
 offset_top = -800.0
 offset_right = 1400.0
@@ -26,14 +47,25 @@ offset_bottom = 200.0
 color = Color(0.22, 0.42, 0.62, 1)
 script = ExtResource("3_sky_atmo")
 time_manager = NodePath("../TimeManager")
+canvas_modulate = NodePath("../DayNightModulate")
+campfire_light = NodePath("../WorldObjects/TownCenterAnchor/CampfireLight")
 
 [node name="Ground" type="StaticBody2D" parent="."]
 
-[node name="GroundVisual" type="ColorRect" parent="Ground"]
+[node name="DeepSoil" type="ColorRect" parent="Ground"]
 offset_left = -1200.0
+offset_top = 32.0
 offset_right = 1200.0
-offset_bottom = 120.0
-color = Color(0.184314, 0.266667, 0.215686, 1)
+offset_bottom = 160.0
+color = Color(0.219608, 0.156863, 0.12549, 1)
+
+[node name="GroundSprite" type="Sprite2D" parent="Ground"]
+texture_repeat = 2
+position = Vector2(-1200, 0)
+texture = ExtResource("6_ground_tex")
+centered = false
+region_enabled = true
+region_rect = Rect2(0, 0, 2400, 32)
 
 [node name="CollisionShape2D" type="CollisionShape2D" parent="Ground"]
 position = Vector2(0, 60)
@@ -53,23 +85,24 @@ shape = SubResource("RectangleShape2D_wall")
 
 [node name="TownCenterAnchor" type="Node2D" parent="WorldObjects"]
 
-[node name="KeepVisual" type="ColorRect" parent="WorldObjects/TownCenterAnchor"]
-offset_left = -36.0
-offset_top = -64.0
-offset_right = 36.0
-color = Color(0.38, 0.32, 0.26, 1)
+[node name="TownCenterSprite" type="Sprite2D" parent="WorldObjects/TownCenterAnchor"]
+position = Vector2(-24, -48)
+texture = ExtResource("7_town_tex")
+centered = false
+hframes = 4
 
-[node name="CampfireGlow" type="ColorRect" parent="WorldObjects/TownCenterAnchor"]
-offset_left = -10.0
-offset_top = -18.0
-offset_right = 10.0
-color = Color(0.95, 0.55, 0.18, 1)
+[node name="CampfireLight" type="PointLight2D" parent="WorldObjects/TownCenterAnchor"]
+position = Vector2(0, -14)
+color = Color(1, 0.72, 0.35, 1)
+energy = 1.2
+texture = SubResource("GradientTexture2D_fire")
+texture_scale = 2.6
 
 [node name="TownLabel" type="Label" parent="WorldObjects/TownCenterAnchor"]
-offset_left = -64.0
-offset_top = -92.0
-offset_right = 64.0
-offset_bottom = -66.0
+offset_left = -74.0
+offset_top = -78.0
+offset_right = 74.0
+offset_bottom = -52.0
 text = "Town Center (Safe Zone)"
 horizontal_alignment = 1
 
@@ -85,85 +118,100 @@ color = Color(0.42, 0.36, 0.28, 1)
 [node name="WoodenWallPlot" type="Node2D" parent="WorldObjects"]
 position = Vector2(360, 0)
 
-[node name="WallVisual" type="ColorRect" parent="WorldObjects/WoodenWallPlot"]
-offset_left = -14.0
-offset_top = -56.0
-offset_right = 14.0
-color = Color(0.55, 0.55, 0.55, 0.45)
+[node name="WallVisual" type="Sprite2D" parent="WorldObjects/WoodenWallPlot"]
+position = Vector2(-16, -48)
+texture = ExtResource("8_wall_tex")
+centered = false
+hframes = 4
 
 [node name="WallLabel" type="Label" parent="WorldObjects/WoodenWallPlot"]
 offset_left = -70.0
-offset_top = -104.0
+offset_top = -98.0
 offset_right = 70.0
-offset_bottom = -58.0
+offset_bottom = -52.0
 text = "Wall Plot [B]
 2G 4W 2S"
 horizontal_alignment = 1
 
 [node name="ResourceNodes" type="Node2D" parent="WorldObjects"]
 
-[node name="cache_gold_west" type="ColorRect" parent="WorldObjects/ResourceNodes"]
-offset_left = -492.0
-offset_top = -20.0
-offset_right = -468.0
-color = Color(0.92, 0.76, 0.2, 1)
+[node name="cache_gold_west" type="Sprite2D" parent="WorldObjects/ResourceNodes"]
+position = Vector2(-480, 0)
+texture = ExtResource("9_res_tex")
+centered = false
+offset = Vector2(-16, -32)
+hframes = 4
 
 [node name="Label" type="Label" parent="WorldObjects/ResourceNodes/cache_gold_west"]
-offset_left = -48.0
-offset_top = -28.0
-offset_right = 72.0
+offset_left = -56.0
+offset_top = -54.0
+offset_right = 56.0
+offset_bottom = -30.0
 text = "[E] Chest +4G"
+horizontal_alignment = 1
 
-[node name="timber_pile_west" type="ColorRect" parent="WorldObjects/ResourceNodes"]
-offset_left = -124.0
-offset_top = -18.0
-offset_right = -96.0
-color = Color(0.52, 0.34, 0.18, 1)
+[node name="timber_pile_west" type="Sprite2D" parent="WorldObjects/ResourceNodes"]
+position = Vector2(-110, 0)
+texture = ExtResource("9_res_tex")
+centered = false
+offset = Vector2(-16, -32)
+hframes = 4
+frame = 1
 
 [node name="Label" type="Label" parent="WorldObjects/ResourceNodes/timber_pile_west"]
-offset_left = -42.0
-offset_top = -28.0
-offset_right = 74.0
+offset_left = -56.0
+offset_top = -54.0
+offset_right = 56.0
+offset_bottom = -30.0
 text = "[E] Timber +5W"
+horizontal_alignment = 1
 
-[node name="stone_outcrop_east" type="ColorRect" parent="WorldObjects/ResourceNodes"]
-offset_left = 176.0
-offset_top = -22.0
-offset_right = 204.0
-color = Color(0.56, 0.6, 0.64, 1)
+[node name="stone_outcrop_east" type="Sprite2D" parent="WorldObjects/ResourceNodes"]
+position = Vector2(190, 0)
+texture = ExtResource("9_res_tex")
+centered = false
+offset = Vector2(-16, -32)
+hframes = 4
+frame = 2
 
 [node name="Label" type="Label" parent="WorldObjects/ResourceNodes/stone_outcrop_east"]
-offset_left = -42.0
-offset_top = -28.0
-offset_right = 74.0
+offset_left = -56.0
+offset_top = -54.0
+offset_right = 56.0
+offset_bottom = -30.0
 text = "[E] Masonry +3S"
+horizontal_alignment = 1
 
-[node name="shrine_cache_far_west" type="ColorRect" parent="WorldObjects/ResourceNodes"]
-offset_left = -792.0
-offset_top = -28.0
-offset_right = -768.0
-color = Color(0.45, 0.78, 0.88, 1)
+[node name="shrine_cache_far_west" type="Sprite2D" parent="WorldObjects/ResourceNodes"]
+position = Vector2(-780, 0)
+texture = ExtResource("9_res_tex")
+centered = false
+offset = Vector2(-16, -32)
+hframes = 4
+frame = 3
 
 [node name="Label" type="Label" parent="WorldObjects/ResourceNodes/shrine_cache_far_west"]
-offset_left = -48.0
-offset_top = -28.0
-offset_right = 80.0
+offset_left = -56.0
+offset_top = -54.0
+offset_right = 56.0
+offset_bottom = -30.0
 text = "[E] Shrine +3G"
+horizontal_alignment = 1
 
 [node name="BuilderActor" type="Node2D" parent="WorldObjects"]
 position = Vector2(-220, 0)
 
-[node name="BodyRect" type="ColorRect" parent="WorldObjects/BuilderActor"]
-offset_left = -8.0
-offset_top = -26.0
-offset_right = 8.0
-color = Color(0.32, 0.75, 0.45, 1)
+[node name="BuilderSprite" type="Sprite2D" parent="WorldObjects/BuilderActor"]
+texture = ExtResource("10_builder_tex")
+centered = false
+offset = Vector2(-16, -32)
+hframes = 8
 
 [node name="NPCLabel" type="Label" parent="WorldObjects/BuilderActor"]
 offset_left = -60.0
-offset_top = -52.0
+offset_top = -56.0
 offset_right = 60.0
-offset_bottom = -28.0
+offset_bottom = -32.0
 text = "Vagrant [R: 2G]"
 horizontal_alignment = 1
 
@@ -171,17 +219,17 @@ horizontal_alignment = 1
 visible = false
 position = Vector2(820, 0)
 
-[node name="EnemyRect" type="ColorRect" parent="WorldObjects/NightEnemyActor"]
-offset_left = -10.0
-offset_top = -28.0
-offset_right = 10.0
-color = Color(0.82, 0.18, 0.24, 1)
+[node name="EnemySprite" type="Sprite2D" parent="WorldObjects/NightEnemyActor"]
+texture = ExtResource("11_raider_tex")
+centered = false
+offset = Vector2(-16, -32)
+hframes = 4
 
 [node name="EnemyLabel" type="Label" parent="WorldObjects/NightEnemyActor"]
 offset_left = -50.0
-offset_top = -52.0
+offset_top = -56.0
 offset_right = 50.0
-offset_bottom = -28.0
+offset_bottom = -32.0
 text = "Greedling Raider"
 horizontal_alignment = 1
 

@@ -21,7 +21,12 @@ var _signals_wired: bool = false
 
 @onready var time_manager: TimeManager = $TimeManager as TimeManager
 @onready var player: PlayerController = $Player as PlayerController
-@onready var wall_visual: ColorRect = $WorldObjects/WoodenWallPlot/WallVisual as ColorRect
+@onready var wall_visual: Sprite2D = $WorldObjects/WoodenWallPlot/WallVisual as Sprite2D
+@onready var town_center_sprite: Sprite2D = get_node_or_null("WorldObjects/TownCenterAnchor/TownCenterSprite") as Sprite2D
+@onready var builder_sprite: Sprite2D = get_node_or_null("WorldObjects/BuilderActor/BuilderSprite") as Sprite2D
+@onready var enemy_sprite: Sprite2D = get_node_or_null("WorldObjects/NightEnemyActor/EnemySprite") as Sprite2D
+var _anim_clock: float = 0.0
+var _prev_builder_x: float = NPCBuilderAgent.CAMP_POSITION_X
 @onready var wall_label: Label = $WorldObjects/WoodenWallPlot/WallLabel as Label
 @onready var npc_visual: Node2D = $WorldObjects/BuilderActor as Node2D
 @onready var npc_label: Label = $WorldObjects/BuilderActor/NPCLabel as Label
@@ -37,6 +42,7 @@ func _ready() -> void:
 
 
 func _process(delta: float) -> void:
+	_anim_clock += delta
 	var sim_delta: float = delta * (time_manager.time_scale if time_manager != null else 1.0)
 	var is_night: bool = time_manager != null and time_manager.current_phase == TimeManager.Phase.NIGHT
 	builder_npc.tick(sim_delta, building_mgr)
@@ -210,19 +216,24 @@ func _on_wall_state_changed(wall_id: String, new_state: String, progress: float,
 		return
 	match new_state:
 		"PLACEHOLDER":
-			wall_visual.color = Color(0.55, 0.55, 0.55, 0.45)
+			wall_visual.frame = 0
+			wall_visual.modulate = Color(1.0, 1.0, 1.0, 0.75)
 			wall_label.text = "Wall Plot [B]\n2G 4W 2S"
 		"UNDER_CONSTRUCTION":
-			wall_visual.color = Color(0.78, 0.62, 0.28, 0.8)
+			wall_visual.frame = 1
+			wall_visual.modulate = Color(1.0, 1.0, 1.0, 1.0)
 			wall_label.text = "Building Wall...\n%d%%" % int(roundf(progress * 100.0))
 		"COMPLETED":
-			wall_visual.color = Color(0.48, 0.34, 0.2, 1.0)
+			wall_visual.frame = 2
+			wall_visual.modulate = Color(1.0, 1.0, 1.0, 1.0)
 			wall_label.text = "Wooden Wall\nHP %d/%d" % [durability, max_dur]
 		"DAMAGED":
-			wall_visual.color = Color(0.72, 0.36, 0.2, 1.0)
+			wall_visual.frame = 3
+			wall_visual.modulate = Color(1.0, 0.85, 0.85, 1.0)
 			wall_label.text = "Damaged Wall [F]\nHP %d/%d" % [durability, max_dur]
 		"DESTROYED":
-			wall_visual.color = Color(0.35, 0.18, 0.18, 0.55)
+			wall_visual.frame = 0
+			wall_visual.modulate = Color(0.75, 0.4, 0.4, 0.65)
 			wall_label.text = "Destroyed Wall [B]\nRebuild: 2G 4W 2S"
 
 
@@ -234,11 +245,28 @@ func _on_npc_state_changed(_npc_id: String, _role: String, state_name: String, p
 
 
 func _sync_dynamic_actors() -> void:
+	if town_center_sprite != null:
+		town_center_sprite.frame = int(floorf(_anim_clock * 6.0)) % 4
+
 	if npc_visual != null:
 		npc_visual.position.x = builder_npc.position_x
+		if builder_sprite != null:
+			var dx: float = builder_npc.position_x - _prev_builder_x
+			if absf(dx) > 0.05:
+				builder_sprite.flip_h = dx < 0.0
+			_prev_builder_x = builder_npc.position_x
+			if builder_npc.state == NPCBuilderAgent.State.WORKING:
+				builder_sprite.frame = 4 + (int(floorf(_anim_clock * 8.0)) % 4)
+			elif builder_npc.state == NPCBuilderAgent.State.MOVING_TO_TASK or builder_npc.state == NPCBuilderAgent.State.RETURNING_TO_SAFETY:
+				builder_sprite.frame = int(floorf(_anim_clock * 8.0)) % 4
+			else:
+				builder_sprite.frame = 0
+
 	if enemy_visual != null:
 		enemy_visual.visible = night_mgr.enemy_active
 		enemy_visual.position.x = night_mgr.enemy_x
+		if enemy_sprite != null and night_mgr.enemy_active:
+			enemy_sprite.frame = int(floorf(_anim_clock * 8.0)) % 4
 
 
 func _update_resource_node_visuals() -> void:

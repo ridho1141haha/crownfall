@@ -14,10 +14,9 @@ signal fast_clock_toggled()
 
 var gravity: float = ProjectSettings.get_setting("physics/2d/default_gravity") as float
 var facing_direction: int = 1
-var _walk_bob_time: float = 0.0
+var _anim_time: float = 0.0
 
-@onready var visual_rect: ColorRect = get_node_or_null("VisualPlaceholder") as ColorRect
-@onready var crown_rect: ColorRect = get_node_or_null("CrownVisual") as ColorRect
+@onready var sprite: Sprite2D = get_node_or_null("Sprite2D") as Sprite2D
 
 
 func _physics_process(delta: float) -> void:
@@ -33,7 +32,7 @@ func _physics_process(delta: float) -> void:
 
 	move_and_slide()
 	global_position.x = clampf(global_position.x, min_bound_x, max_bound_x)
-	_update_visual_feedback(delta, absf(direction) > 0.05)
+	_update_sprite_animation(delta, absf(direction) > 0.05)
 
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -51,17 +50,14 @@ func _unhandled_input(event: InputEvent) -> void:
 		fast_clock_toggled.emit()
 
 
-func _update_visual_feedback(delta: float, is_moving: bool) -> void:
-	if visual_rect == null:
+func _update_sprite_animation(delta: float, is_moving: bool) -> void:
+	if sprite == null:
 		return
+	sprite.flip_h = (facing_direction < 0)
+	_anim_time += delta
 	if is_moving and is_on_floor():
-		_walk_bob_time += delta * 14.0
-		var bob_offset: float = sin(_walk_bob_time) * 2.0
-		visual_rect.position.y = -32.0 + bob_offset
-		if crown_rect != null:
-			crown_rect.position.y = -38.0 + bob_offset
+		# Frames 4..7 = walk cycle at 10 FPS
+		sprite.frame = 4 + (int(floorf(_anim_time * 10.0)) % 4)
 	else:
-		_walk_bob_time = 0.0
-		visual_rect.position.y = -32.0
-		if crown_rect != null:
-			crown_rect.position.y = -38.0
+		# Frames 0..3 = idle breathing cycle at 5 FPS
+		sprite.frame = int(floorf(_anim_time * 5.0)) % 4
