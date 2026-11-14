@@ -3,11 +3,20 @@ extends Node2D
 
 signal feedback_message(text: String)
 
+enum ReignState {
+	ACTIVE,
+	BREACH_PENALTY,
+	ISLAND_CLEARED,
+}
+
+const FARM_HARVEST_INTERVAL: float = 10.0
+const FARM_GOLD_YIELD: int = 2
+
 const RESOURCE_NODES: Array[Dictionary] = [
-	{"id": "cache_gold_west", "resource": &"gold", "amount": 4, "x": -480.0, "label": "Ancient Coin Chest (+4 Gold)"},
-	{"id": "timber_pile_west", "resource": &"wood", "amount": 5, "x": -110.0, "label": "Fallen Timber (+5 Wood)"},
-	{"id": "stone_outcrop_east", "resource": &"stone", "amount": 3, "x": 190.0, "label": "Ruined Masonry (+3 Stone)"},
-	{"id": "shrine_cache_far_west", "resource": &"gold", "amount": 3, "x": -780.0, "label": "Forgotten Shrine (+3 Gold)"},
+	{"id": "cache_gold_west", "resource": &"gold", "amount": 4, "x": -480.0, "renewable": false, "label": "Ancient Coin Chest (+4 Gold)"},
+	{"id": "timber_pile_west", "resource": &"wood", "amount": 5, "x": -110.0, "renewable": true, "label": "Fallen Timber (+5 Wood)"},
+	{"id": "stone_outcrop_east", "resource": &"stone", "amount": 3, "x": 190.0, "renewable": true, "label": "Ruined Masonry (+3 Stone)"},
+	{"id": "shrine_cache_far_west", "resource": &"gold", "amount": 3, "x": -780.0, "renewable": false, "label": "Forgotten Shrine (+3 Gold)"},
 ]
 
 var economy: EconomyLedger = EconomyLedger.new({"gold": 2, "wood": 2, "stone": 1})
@@ -16,6 +25,8 @@ var builder_npc: NPCBuilderAgent = NPCBuilderAgent.new()
 var night_mgr: NightEncounterManager = NightEncounterManager.new()
 var save_mgr: SaveManager = SaveManager.new()
 var collected_node_ids: Dictionary = {}
+var reign_state: ReignState = ReignState.ACTIVE
+var _farm_timers: Dictionary = {}
 var _last_rejection_reason: String = ""
 var _signals_wired: bool = false
 
@@ -35,19 +46,39 @@ var _prev_builder_x: float = NPCBuilderAgent.CAMP_POSITION_X
 
 
 func _ready() -> void:
+	building_mgr.register_forgotten_shore_expansion_plots()
 	_wire_signals()
 	_consume_pending_load_if_requested()
 	_sync_all_presentations()
-	feedback_message.emit("Forgotten Shore: [A/D] Move | [E] Collect/Interact | [R] Recruit (2G) | [B] Build Wall (2G,4W,2S) | [F] Repair | [T] 20x Clock | [K] Save")
+	feedback_message.emit("Forgotten Shore: [A/D] Move | [E] Interact | [R] Recruit (2G) | [B] Build/Upgrade | [F] Repair | [T] 20x | [K] Save")
 
 
 func _process(delta: float) -> void:
 	_anim_clock += delta
 	var sim_delta: float = delta * (time_manager.time_scale if time_manager != null else 1.0)
 	var is_night: bool = time_manager != null and time_manager.current_phase == TimeManager.Phase.NIGHT
+	var is_daylight: bool = time_manager == null or time_manager.current_phase == TimeManager.Phase.DAYLIGHT
 	builder_npc.tick(sim_delta, building_mgr)
 	night_mgr.tick(sim_delta, is_night, building_mgr)
+	_tick_farm_plots(sim_delta, is_daylight)
 	_sync_dynamic_actors()
+
+
+func _tick_farm_plots(sim_delta: float, is_daylight: bool) -> void:
+	if not is_daylight or sim_delta <= 0.0:
+		return
+	for farm_id: String in [BuildingManager.FARM_WEST_ID, BuildingManager.FARM_EAST_ID]:
+		if not building_mgr.has_plot(farm_id):
+			continue
+		var plot: Dictionary = building_mgr.get_plot(farm_id)
+		if int(plot["state"]) != BuildingManager.WallState.COMPLETED:
+			continue
+		var t: float = float(_farm_timers.get(farm_id, 0.0)) + sim_delta
+		while t >= FARM_HARVEST_INTERVAL:
+			t -= FARM_HARVEST_INTERVAL
+			if economy.try_add(&"gold", FARM_GOLD_YIELD):
+				feedback_message.emit("Farm Harvest (%s): +%d Gold" % [farm_id, FARM_GOLD_YIELD])
+		_farm_timers[farm_id] = t
 
 
 func _wire_signals() -> void:
@@ -101,14 +132,19 @@ func _on_player_interact(player_x: float) -> bool:
 				return true
 			return false
 
-	# Contextual interaction fallback near Camp or Wall returns actual operation result
 	if not builder_npc.recruited and absf(player_x - NPCBuilderAgent.CAMP_POSITION_X) <= 90.0:
 		return _on_player_recruit(player_x)
-	if absf(player_x - building_mgr.position_x) <= 90.0:
-		if building_mgr.state == BuildingManager.WallState.DAMAGED:
-			return _on_player_repair_wall(player_x)
-		elif building_mgr.state == BuildingManager.WallState.PLACEHOLDER or building_mgr.state == BuildingManager.WallState.DESTROYED:
-			return _on_player_build_wall(player_x)
+
+	var near_plot: String = building_mgr.get_nearest_plot_id(player_x, BuildingManager.INTERACT_RANGE)
+	if not near_plot.is_empty():
+		var plot: Dictionary = building_mgr.get_plot(near_plot)
+		var st: int = int(plot["state"])
+		if st == BuildingManager.WallState.DAMAGED:
+			return _on_player_repair_wall(player_x, near_plot)
+		elif st == BuildingManager.WallState.PLACEHOLDER or st == BuildingManager.WallState.DESTROYED:
+			return _on_player_build_wall(player_x, near_plot)
+		elif building_mgr.can_upgrade_wall(player_x, near_plot):
+			return _on_player_upgrade_wall(player_x, near_plot)
 
 	_record_rejection("Nothing to collect or interact with at x=%.0f." % player_x)
 	return false
@@ -117,23 +153,43 @@ func _on_player_interact(player_x: float) -> bool:
 func _on_player_recruit(player_x: float) -> bool:
 	_last_rejection_reason = ""
 	if builder_npc.request_recruit(player_x, economy):
-		feedback_message.emit("Villager recruited as Builder! Will construct/repair walls and retreat at Sunset.")
+		feedback_message.emit("Villager recruited as Builder! Will construct/repair structures and retreat at Sunset.")
 		return true
 	return false
 
 
-func _on_player_build_wall(player_x: float, plot_id: String = BuildingManager.WALL_ID) -> bool:
+func _on_player_build_wall(player_x: float, plot_id: String = "") -> bool:
 	_last_rejection_reason = ""
-	if building_mgr.request_start_construction(player_x, economy, plot_id):
-		feedback_message.emit("Wooden Wall blueprint funded! Builder will construct it.")
+	var target_id: String = plot_id
+	if target_id.is_empty():
+		target_id = building_mgr.get_nearest_plot_id(player_x, BuildingManager.INTERACT_RANGE)
+	if target_id.is_empty():
+		target_id = BuildingManager.WALL_ID
+	if building_mgr.can_upgrade_wall(player_x, target_id):
+		return _on_player_upgrade_wall(player_x, target_id)
+	if building_mgr.request_start_construction(player_x, economy, target_id):
+		feedback_message.emit("%s blueprint funded! Builder will construct it." % target_id)
 		return true
 	return false
 
 
-func _on_player_repair_wall(player_x: float, plot_id: String = BuildingManager.WALL_ID) -> bool:
+func _on_player_upgrade_wall(player_x: float, plot_id: String = BuildingManager.WALL_ID) -> bool:
 	_last_rejection_reason = ""
-	if building_mgr.request_repair(player_x, economy, plot_id):
-		feedback_message.emit("Wooden Wall repaired to full durability!")
+	if building_mgr.request_upgrade_wall(player_x, economy, plot_id):
+		feedback_message.emit("Upgraded to Stone Wall Tier 2 (260 HP, 20 thorn dmg)!")
+		return true
+	return false
+
+
+func _on_player_repair_wall(player_x: float, plot_id: String = "") -> bool:
+	_last_rejection_reason = ""
+	var target_id: String = plot_id
+	if target_id.is_empty():
+		target_id = building_mgr.get_nearest_plot_id(player_x, BuildingManager.INTERACT_RANGE)
+	if target_id.is_empty():
+		target_id = BuildingManager.WALL_ID
+	if building_mgr.request_repair(player_x, economy, target_id):
+		feedback_message.emit("Structure (%s) repaired to full durability!" % target_id)
 		return true
 	return false
 
@@ -148,7 +204,7 @@ func _on_manual_save() -> bool:
 
 
 func execute_command(command_id: StringName, actor_x: float, params: Dictionary = {}) -> bool:
-	var plot_id: String = String(params.get("plot_id", BuildingManager.WALL_ID))
+	var plot_id: String = String(params.get("plot_id", ""))
 	match command_id:
 		&"interact":
 			return _on_player_interact(actor_x)
@@ -156,6 +212,8 @@ func execute_command(command_id: StringName, actor_x: float, params: Dictionary 
 			return _on_player_recruit(actor_x)
 		&"build_wall":
 			return _on_player_build_wall(actor_x, plot_id)
+		&"upgrade_wall":
+			return _on_player_upgrade_wall(actor_x, BuildingManager.WALL_ID if plot_id.is_empty() else plot_id)
 		&"repair_wall":
 			return _on_player_repair_wall(actor_x, plot_id)
 		&"save_game":
@@ -182,7 +240,13 @@ func _on_toggle_fast_clock() -> void:
 
 func _on_daylight_started(day_number: int) -> void:
 	builder_npc.set_dusk_or_night_safety(false)
-	feedback_message.emit("Day %d Daylight — Explore, gather resources, recruit Builder, and prepare the East Wall." % day_number)
+	# Regenerate renewable Wood & Stone nodes on Day 2+
+	if day_number > 1:
+		for node_def: Dictionary in RESOURCE_NODES:
+			if bool(node_def.get("renewable", false)):
+				collected_node_ids.erase(String(node_def["id"]))
+		_update_resource_node_visuals()
+	feedback_message.emit("Day %d Daylight — Wood & Stone nodes refreshed! Expand Farms, Watchtower & Stone Wall." % day_number)
 
 
 func _on_sunset_started(_day_number: int) -> void:
@@ -197,44 +261,100 @@ func _on_night_started(_day_number: int) -> void:
 	feedback_message.emit("Night has fallen! Greedling Raiders approach from the East Shore!")
 
 
-func _on_sunrise_reached(_completed_day: int) -> void:
+func _on_sunrise_reached(completed_day: int) -> void:
 	night_mgr.on_sunrise_reached(building_mgr)
+	if night_mgr.settlement_breached:
+		reign_state = ReignState.BREACH_PENALTY
+		var cur_gold: int = economy.get_amount(&"gold")
+		var penalty: int = cur_gold / 2
+		if penalty > 0:
+			economy.try_spend({"gold": penalty})
+	elif completed_day >= 2:
+		reign_state = ReignState.ISLAND_CLEARED
+	else:
+		reign_state = ReignState.ACTIVE
 	save_game_state()
 
 
 func _on_night_resolved(survived: bool, wall_held: bool) -> void:
-	if survived and wall_held:
-		feedback_message.emit("Sunrise reached! Your Wooden Wall held the line. Kingdom state auto-saved!")
+	if reign_state == ReignState.ISLAND_CLEARED:
+		feedback_message.emit("Dawn of Day 3+! Forgotten Shore secured. State auto-saved!")
+	elif survived and wall_held:
+		feedback_message.emit("Sunrise reached! Your defenses held the line. Kingdom state auto-saved!")
 	elif survived:
 		feedback_message.emit("Sunrise reached! The wall fell, but dawn broke in time. Auto-saved!")
 	else:
-		feedback_message.emit("Raiders breached the Town Center during the night! Rebuild and reinforce before next dusk.")
+		feedback_message.emit("Raiders breached Town Center! Half your Gold was lost; rebuild before next dusk.")
+
+
+func _get_plot_nodes(plot_id: String) -> Dictionary:
+	match plot_id:
+		BuildingManager.WALL_ID:
+			return {"sprite": wall_visual, "label": wall_label, "title": "Wall Plot", "cost": "2G 4W 2S"}
+		BuildingManager.WATCHTOWER_ID:
+			return {
+				"sprite": get_node_or_null("WorldObjects/WatchtowerPlot/WatchtowerVisual") as Sprite2D,
+				"label": get_node_or_null("WorldObjects/WatchtowerPlot/WatchtowerLabel") as Label,
+				"title": "Watchtower",
+				"cost": "3G 3W 3S",
+			}
+		BuildingManager.FARM_WEST_ID:
+			return {
+				"sprite": get_node_or_null("WorldObjects/FarmWestPlot/FarmVisual") as Sprite2D,
+				"label": get_node_or_null("WorldObjects/FarmWestPlot/FarmLabel") as Label,
+				"title": "Farm Plot",
+				"cost": "2G 3W",
+			}
+		BuildingManager.FARM_EAST_ID:
+			return {
+				"sprite": get_node_or_null("WorldObjects/FarmEastPlot/FarmVisual") as Sprite2D,
+				"label": get_node_or_null("WorldObjects/FarmEastPlot/FarmLabel") as Label,
+				"title": "Farm Plot",
+				"cost": "2G 3W",
+				}
+	return {}
 
 
 func _on_wall_state_changed(wall_id: String, new_state: String, progress: float, durability: int, max_dur: int) -> void:
-	if wall_id != BuildingManager.WALL_ID or wall_visual == null or wall_label == null:
+	var nodes: Dictionary = _get_plot_nodes(wall_id)
+	if nodes.is_empty():
 		return
+	var spr: Sprite2D = nodes["sprite"] as Sprite2D
+	var lbl: Label = nodes["label"] as Label
+	if spr == null or lbl == null:
+		return
+	var plot: Dictionary = building_mgr.get_plot(wall_id)
+	var lvl: int = int(plot.get("level", 1))
+	var title: String = String(nodes["title"])
+	var cost_txt: String = String(nodes["cost"])
 	match new_state:
 		"PLACEHOLDER":
-			wall_visual.frame = 0
-			wall_visual.modulate = Color(1.0, 1.0, 1.0, 0.75)
-			wall_label.text = "Wall Plot [B]\n2G 4W 2S"
+			spr.frame = 0
+			spr.modulate = Color(1.0, 1.0, 1.0, 0.75)
+			lbl.text = "%s [B]\n%s" % [title, cost_txt]
 		"UNDER_CONSTRUCTION":
-			wall_visual.frame = 1
-			wall_visual.modulate = Color(1.0, 1.0, 1.0, 1.0)
-			wall_label.text = "Building Wall...\n%d%%" % int(roundf(progress * 100.0))
+			spr.frame = 1
+			spr.modulate = Color(1.0, 1.0, 1.0, 1.0)
+			lbl.text = "Building %s...\n%d%%" % [title, int(roundf(progress * 100.0))]
 		"COMPLETED":
-			wall_visual.frame = 2
-			wall_visual.modulate = Color(1.0, 1.0, 1.0, 1.0)
-			wall_label.text = "Wooden Wall\nHP %d/%d" % [durability, max_dur]
+			spr.frame = 2
+			if wall_id == BuildingManager.WALL_ID and lvl >= 2:
+				spr.modulate = Color(0.78, 0.86, 1.0, 1.0)
+				lbl.text = "Stone Wall Lv.2\nHP %d/%d" % [durability, max_dur]
+			elif wall_id == BuildingManager.WALL_ID:
+				spr.modulate = Color(1.0, 1.0, 1.0, 1.0)
+				lbl.text = "Wooden Wall [B: Stone Lv2]\nHP %d/%d (3G 2W 5S)" % [durability, max_dur]
+			else:
+				spr.modulate = Color(1.0, 1.0, 1.0, 1.0)
+				lbl.text = "%s\nHP %d/%d" % [title, durability, max_dur]
 		"DAMAGED":
-			wall_visual.frame = 3
-			wall_visual.modulate = Color(1.0, 0.85, 0.85, 1.0)
-			wall_label.text = "Damaged Wall [F]\nHP %d/%d" % [durability, max_dur]
+			spr.frame = 3
+			spr.modulate = Color(1.0, 0.85, 0.85, 1.0)
+			lbl.text = "Damaged %s [F]\nHP %d/%d" % [title, durability, max_dur]
 		"DESTROYED":
-			wall_visual.frame = 0
-			wall_visual.modulate = Color(0.75, 0.4, 0.4, 0.65)
-			wall_label.text = "Destroyed Wall [B]\nRebuild: 2G 4W 2S"
+			spr.frame = 0
+			spr.modulate = Color(0.75, 0.4, 0.4, 0.65)
+			lbl.text = "Destroyed %s [B]\nRebuild: %s" % [title, cost_txt]
 
 
 func _on_npc_state_changed(_npc_id: String, _role: String, state_name: String, pos_x: float) -> void:
@@ -259,7 +379,6 @@ func _update_proximity_prompts() -> void:
 		return
 	var px: float = player.global_position.x
 
-	# Show [E] resource cache prompts only when Monarch is within 80 px and cache is uncollected
 	var nodes_root: Node = get_node_or_null("WorldObjects/ResourceNodes")
 	if nodes_root != null:
 		for node_def: Dictionary in RESOURCE_NODES:
@@ -269,14 +388,20 @@ func _update_proximity_prompts() -> void:
 				var collected: bool = bool(collected_node_ids.get(node_id, false))
 				lbl.visible = (not collected) and (absf(px - float(node_def["x"])) <= 80.0)
 
-	# Show Vagrant [R: 2G] prompt only when nearby and unrecruited
 	if npc_label != null and not builder_npc.recruited:
 		npc_label.visible = absf(px - builder_npc.position_x) <= 105.0
 
-	# Show Wall [B]/[F] prompt only when nearby (or always show live HP/progress during work/damage)
-	if wall_label != null:
-		var show_wall_info: bool = absf(px - building_mgr.position_x) <= 120.0 or building_mgr.state == BuildingManager.WallState.UNDER_CONSTRUCTION or building_mgr.state == BuildingManager.WallState.DAMAGED
-		wall_label.visible = show_wall_info
+	for plot_id: String in [BuildingManager.WALL_ID, BuildingManager.WATCHTOWER_ID, BuildingManager.FARM_WEST_ID, BuildingManager.FARM_EAST_ID]:
+		var nodes: Dictionary = _get_plot_nodes(plot_id)
+		if nodes.is_empty():
+			continue
+		var lbl: Label = nodes["label"] as Label
+		if lbl == null or not building_mgr.has_plot(plot_id):
+			continue
+		var plot: Dictionary = building_mgr.get_plot(plot_id)
+		var st: int = int(plot["state"])
+		var near: bool = absf(px - float(plot["position_x"])) <= 120.0
+		lbl.visible = near or st == BuildingManager.WallState.UNDER_CONSTRUCTION or st == BuildingManager.WallState.DAMAGED
 
 
 func _sync_dynamic_actors() -> void:
@@ -318,13 +443,15 @@ func _update_resource_node_visuals() -> void:
 
 
 func _sync_all_presentations() -> void:
-	_on_wall_state_changed(
-		BuildingManager.WALL_ID,
-		building_mgr.get_state_name(),
-		building_mgr.construction_progress,
-		building_mgr.durability,
-		building_mgr.max_durability
-	)
+	for plot_id: String in building_mgr.get_all_plot_ids():
+		var p: Dictionary = building_mgr.get_plot(plot_id)
+		_on_wall_state_changed(
+			plot_id,
+			building_mgr.get_state_name(plot_id),
+			float(p["progress"]),
+			int(p["durability"]),
+			int(p["max_durability"])
+		)
 	_on_npc_state_changed(
 		NPCBuilderAgent.NPC_ID,
 		builder_npc.role,
@@ -361,6 +488,7 @@ func build_save_payload() -> Dictionary:
 		"progression_flags": {
 			"first_night_survived": night_mgr.first_night_survived,
 			"collected_nodes": collected_node_ids.keys(),
+			"reign_state": int(reign_state),
 		},
 	}
 
@@ -375,14 +503,12 @@ func load_game_state(save_path: String = SaveManager.DEFAULT_SAVE_PATH) -> bool:
 		return false
 	var data: Dictionary = res["data"]
 
-	# Restore Player position and facing direction if saved
 	if player != null and data.has("player") and typeof(data["player"]) == TYPE_DICTIONARY:
 		var p_dict: Dictionary = data["player"]
 		var saved_px: float = float(p_dict.get("position_x", 0.0))
 		player.global_position.x = clampf(saved_px, player.min_bound_x, player.max_bound_x)
 		player.facing_direction = 1 if int(p_dict.get("facing_direction", 1)) >= 0 else -1
 
-	# Restore NightEncounterManager BEFORE TimeManager emits night_started so mid-night state is not overwritten
 	if data.has("night_encounter") and typeof(data["night_encounter"]) == TYPE_DICTIONARY:
 		night_mgr.apply_save_dict(data["night_encounter"])
 
@@ -399,6 +525,7 @@ func load_game_state(save_path: String = SaveManager.DEFAULT_SAVE_PATH) -> bool:
 
 	var flags: Dictionary = data["progression_flags"]
 	night_mgr.first_night_survived = bool(flags.get("first_night_survived", night_mgr.first_night_survived))
+	reign_state = int(flags.get("reign_state", ReignState.ACTIVE)) as ReignState
 	collected_node_ids.clear()
 	var saved_nodes: Variant = flags.get("collected_nodes", [])
 	if typeof(saved_nodes) == TYPE_ARRAY:

@@ -1,4 +1,4 @@
-[gd_scene load_steps=19 format=3]
+[gd_scene load_steps=21 format=3]
 
 [ext_resource type="PackedScene" path="res://scenes/player/Player.tscn" id="1_player_scene"]
 [ext_resource type="Script" path="res://scripts/world/TimeManager.gd" id="2_time_mgr"]
@@ -14,6 +14,8 @@
 [ext_resource type="Texture2D" path="res://assets/buildings/camp/building_vagrant_tent.png" id="12_tent_tex"]
 [ext_resource type="Texture2D" path="res://assets/environment/backgrounds/bg_mountains_far.png" id="13_mtn_tex"]
 [ext_resource type="Texture2D" path="res://assets/environment/backgrounds/bg_forest_mid.png" id="14_forest_tex"]
+[ext_resource type="Texture2D" path="res://assets/buildings/watchtower/building_watchtower_states.png" id="15_tower_tex"]
+[ext_resource type="Texture2D" path="res://assets/buildings/farm_plot/building_farm_plot_states.png" id="16_farm_tex"]
 
 [sub_resource type="Gradient" id="Gradient_fire"]
 offsets = PackedFloat32Array(0, 0.45, 1)
@@ -162,6 +164,64 @@ offset_right = 70.0
 offset_bottom = -56.0
 text = "Wall Plot [B]
 2G 4W 2S"
+horizontal_alignment = 1
+
+
+[node name="WatchtowerPlot" type="Node2D" parent="WorldObjects"]
+position = Vector2(290, 0)
+
+[node name="WatchtowerVisual" type="Sprite2D" parent="WorldObjects/WatchtowerPlot"]
+position = Vector2(-16, -48)
+texture = ExtResource("15_tower_tex")
+centered = false
+hframes = 4
+
+[node name="WatchtowerLabel" type="Label" parent="WorldObjects/WatchtowerPlot"]
+visible = false
+offset_left = -74.0
+offset_top = -102.0
+offset_right = 74.0
+offset_bottom = -56.0
+text = "Watchtower [B]
+3G 3W 3S"
+horizontal_alignment = 1
+
+[node name="FarmWestPlot" type="Node2D" parent="WorldObjects"]
+position = Vector2(-310, 0)
+
+[node name="FarmVisual" type="Sprite2D" parent="WorldObjects/FarmWestPlot"]
+position = Vector2(-16, -32)
+texture = ExtResource("16_farm_tex")
+centered = false
+hframes = 4
+
+[node name="FarmLabel" type="Label" parent="WorldObjects/FarmWestPlot"]
+visible = false
+offset_left = -74.0
+offset_top = -86.0
+offset_right = 74.0
+offset_bottom = -40.0
+text = "Farm Plot [B]
+2G 3W"
+horizontal_alignment = 1
+
+[node name="FarmEastPlot" type="Node2D" parent="WorldObjects"]
+position = Vector2(120, 0)
+
+[node name="FarmVisual" type="Sprite2D" parent="WorldObjects/FarmEastPlot"]
+position = Vector2(-16, -32)
+texture = ExtResource("16_farm_tex")
+centered = false
+hframes = 4
+
+[node name="FarmLabel" type="Label" parent="WorldObjects/FarmEastPlot"]
+visible = false
+offset_left = -74.0
+offset_top = -86.0
+offset_right = 74.0
+offset_bottom = -40.0
+text = "Farm Plot [B]
+2G 3W"
 horizontal_alignment = 1
 
 [node name="ResourceNodes" type="Node2D" parent="WorldObjects"]

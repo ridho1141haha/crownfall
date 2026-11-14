@@ -24,9 +24,9 @@ def resolve_repo_root() -> Path:
     if colab_root.exists():
         return colab_root
     if "__file__" in globals():
-        candidate = Path(__file__).resolve().parent
-        if (candidate / "project.godot").exists():
-            return candidate
+        for cand in [Path(__file__).resolve().parent, Path(__file__).resolve().parents[2]]:
+            if (cand / "project.godot").exists():
+                return cand
     return Path(os.getcwd()).resolve()
 
 
@@ -394,6 +394,81 @@ def build_forest_mid() -> Image.Image:
     return img
 
 
+
+
+def build_farm_plot_states() -> Image.Image:
+    sheet = new_canvas(32 * 4, 32)
+    # 0: PLACEHOLDER (Wooden fence posts)
+    f0 = new_canvas(32, 32)
+    rect(f0, 4, 22, 2, 8, WOOD_D)
+    rect(f0, 26, 22, 2, 8, WOOD_D)
+    rect(f0, 6, 26, 20, 2, GOLD_D)
+    sheet.paste(add_outline(f0), (0, 0))
+
+    # 1: UNDER_CONSTRUCTION (Tilled soil + irrigation border)
+    f1 = new_canvas(32, 32)
+    rect(f1, 2, 24, 28, 6, DIRT_D)
+    rect(f1, 4, 22, 24, 3, DIRT)
+    rect(f1, 3, 20, 2, 10, WOOD)
+    rect(f1, 27, 20, 2, 10, WOOD)
+    sheet.paste(add_outline(f1), (32, 0))
+
+    # 2: COMPLETED (Golden wheat stalks + soil)
+    f2 = new_canvas(32, 32)
+    rect(f2, 2, 25, 28, 5, DIRT_D)
+    for wx in [5, 10, 15, 20, 25]:
+        rect(f2, wx, 14, 2, 11, GOLD_D)
+        rect(f2, wx, 11, 3, 4, GOLD_L)
+    rect(f2, 2, 22, 28, 2, WOOD)
+    sheet.paste(add_outline(f2), (64, 0))
+
+    # 3: DAMAGED (Trampled crops)
+    f3 = new_canvas(32, 32)
+    rect(f3, 2, 25, 28, 5, DIRT_D)
+    rect(f3, 6, 20, 4, 5, GOLD_D)
+    rect(f3, 18, 21, 5, 4, GOLD_D)
+    rect(f3, 3, 24, 10, 2, WOOD_D)
+    sheet.paste(add_outline(f3), (96, 0))
+    return sheet
+
+
+def build_watchtower_states() -> Image.Image:
+    sheet = new_canvas(32 * 4, 48)
+    # 0: PLACEHOLDER (Stone foundation markers)
+    f0 = new_canvas(32, 48)
+    rect(f0, 6, 40, 6, 6, STONE_D)
+    rect(f0, 20, 40, 6, 6, STONE_D)
+    rect(f0, 10, 42, 12, 2, GOLD_D)
+    sheet.paste(add_outline(f0), (0, 0))
+
+    # 1: UNDER_CONSTRUCTION (Timber scaffolding)
+    f1 = new_canvas(32, 48)
+    rect(f1, 6, 40, 20, 6, STONE_D)
+    rect(f1, 7, 18, 3, 24, WOOD)
+    rect(f1, 22, 18, 3, 24, WOOD)
+    rect(f1, 7, 28, 18, 2, WOOD_D)
+    sheet.paste(add_outline(f1), (32, 0))
+
+    # 2: COMPLETED (Tall wooden/stone watchtower with crenelations)
+    f2 = new_canvas(32, 48)
+    rect(f2, 5, 38, 22, 8, STONE)
+    rect(f2, 7, 14, 18, 24, WOOD)
+    rect(f2, 9, 14, 4, 24, WOOD_L)
+    rect(f2, 5, 10, 22, 5, WOOD_D)
+    rect(f2, 5, 6, 4, 4, WOOD_L)
+    rect(f2, 14, 6, 4, 4, WOOD_L)
+    rect(f2, 23, 6, 4, 4, WOOD_L)
+    sheet.paste(add_outline(f2), (64, 0))
+
+    # 3: DAMAGED (Broken parapet)
+    f3 = new_canvas(32, 48)
+    rect(f3, 5, 38, 22, 8, STONE_D)
+    rect(f3, 7, 18, 18, 20, WOOD_D)
+    rect(f3, 5, 14, 12, 4, WOOD)
+    sheet.paste(add_outline(f3), (96, 0))
+    return sheet
+
+
 def main() -> None:
     outputs = {
         "characters/player/player_monarch_sheet.png": build_monarch_sheet(),
@@ -406,6 +481,8 @@ def main() -> None:
         "buildings/camp/building_vagrant_tent.png": build_vagrant_tent(),
         "environment/backgrounds/bg_mountains_far.png": build_mountains_far(),
         "environment/backgrounds/bg_forest_mid.png": build_forest_mid(),
+        "buildings/farm_plot/building_farm_plot_states.png": build_farm_plot_states(),
+        "buildings/watchtower/building_watchtower_states.png": build_watchtower_states(),
     }
 
     for rel_path, img in outputs.items():

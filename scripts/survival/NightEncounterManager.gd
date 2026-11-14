@@ -72,7 +72,7 @@ func tick(delta: float, is_night: bool, building_mgr: BuildingManager) -> void:
 			while _attack_timer >= ATTACK_INTERVAL and building_mgr.has_defensive_barrier() and enemy_active:
 				_attack_timer -= ATTACK_INTERVAL
 				building_mgr.apply_enemy_damage(ATTACK_DAMAGE)
-				enemy_hp = maxi(0, enemy_hp - WALL_THORN_DAMAGE)
+				enemy_hp = maxi(0, enemy_hp - building_mgr.get_thorn_damage())
 				if enemy_hp <= 0:
 					enemy_active = false
 		enemy_updated.emit(enemy_active, enemy_x, enemy_hp, ENEMY_MAX_HP)
