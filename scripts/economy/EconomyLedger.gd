@@ -73,6 +73,41 @@ func try_add(resource_id: StringName, amount: Variant) -> bool:
 	return true
 
 
+func try_add_bundle(rewards: Dictionary) -> bool:
+	if rewards.is_empty():
+		transaction_rejected.emit("Empty reward dictionary")
+		return false
+
+	var normalized_rewards: Dictionary = {}
+	for raw_key: Variant in rewards.keys():
+		var res_id: StringName = StringName(String(raw_key))
+		if not is_valid_resource(res_id):
+			transaction_rejected.emit("Unknown resource ID in bundle: %s" % String(res_id))
+			return false
+		var raw_val: Variant = rewards[raw_key]
+		if not is_exact_int_value(raw_val):
+			transaction_rejected.emit("Invalid non-integer bundle amount for %s" % String(res_id))
+			return false
+		var amount: int = int(roundf(float(raw_val)))
+		if amount <= 0:
+			transaction_rejected.emit("Bundle add amount must be positive for %s" % String(res_id))
+			return false
+		var total_for_res: int = int(normalized_rewards.get(res_id, 0)) + amount
+		if int(_balances[res_id]) + total_for_res > MAX_RESOURCE_CAP:
+			transaction_rejected.emit("Resource cap exceeded for %s" % String(res_id))
+			return false
+		normalized_rewards[res_id] = total_for_res
+
+	var payload: Dictionary = {}
+	for res_id: StringName in normalized_rewards.keys():
+		var amount: int = int(normalized_rewards[res_id])
+		_balances[res_id] = int(_balances[res_id]) + amount
+		balance_changed.emit(res_id, int(_balances[res_id]))
+		payload[String(res_id)] = amount
+	transaction_committed.emit("add_bundle", payload)
+	return true
+
+
 func can_afford(costs: Dictionary) -> bool:
 	if costs.is_empty():
 		return false

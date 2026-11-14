@@ -54,6 +54,8 @@ func _init() -> void:
 		return
 	if not _test_task2_softlock_flare_west_lane():
 		return
+	if not _test_p0_atomicity_and_bounds():
+		return
 	if _failures > 0:
 		quit(1)
 		return
@@ -577,4 +579,33 @@ func _test_task2_softlock_flare_west_lane() -> bool:
 	if not _check(kill_gold_box[0] >= 1, "Task2 enemy defeat awards +1G"):
 		return false
 	print("PASS: Task 2 Anti-Softlock, Kindle Flare (+50%), West Wall & Day 2 West Scout")
+	return true
+
+
+func _test_p0_atomicity_and_bounds() -> bool:
+	var cap_ledger: EconomyLedger = EconomyLedgerScript.new({"gold": 10, "wood": 0, "stone": EconomyLedger.MAX_RESOURCE_CAP})
+	if not _check(not cap_ledger.try_add_bundle({"gold": 3, "stone": 2}), "P0 atomic bundle fails when stone at cap"):
+		return false
+	if not _check(cap_ledger.get_balance(&"gold") == 10 and cap_ledger.get_balance(&"stone") == EconomyLedger.MAX_RESOURCE_CAP, "P0 atomic bundle keeps balances unchanged on failure"):
+		return false
+	var rep_ledger: EconomyLedger = EconomyLedgerScript.new({"gold": 4, "wood": 10, "stone": 5})
+	var bm: BuildingManager = BuildingManagerScript.new()
+	bm.request_start_construction(BuildingManager.WALL_POSITION_X, rep_ledger)
+	bm.advance_construction(4.0)
+	bm.apply_damage(30)
+	var wood_before: int = rep_ledger.get_balance(&"wood")
+	if not _check(not bm.request_repair(0.0, rep_ledger, BuildingManager.WALL_ID, {"wood": 1}), "P0 repair fails when out of range"):
+		return false
+	if not _check(rep_ledger.get_balance(&"wood") == wood_before, "P0 out-of-range night repair does not deduct extra wood"):
+		return false
+	var pop: NPCPopulationManager = NPCPopulationManagerScript.new()
+	if not _check(not pop.apply_save_array(["corrupt_entry"]), "P0 NPCPopulationManager rejects corrupt entry"):
+		return false
+	if not _check(pop.agents.size() == 1, "P0 NPCPopulationManager preserves active roster on failed load"):
+		return false
+	var net_script = load("res://scripts/networking/NetworkSessionManager.gd")
+	var net = net_script.new()
+	if not _check(is_equal_approx(net.MIN_WORLD_X, -1540.0) and is_equal_approx(net.MAX_WORLD_X, 1540.0), "P0 NetworkSessionManager bounds synced to +-1540"):
+		return false
+	print("PASS: P0 Atomicity, Night Repair, Strict NPC Load & Bounds Sync")
 	return true

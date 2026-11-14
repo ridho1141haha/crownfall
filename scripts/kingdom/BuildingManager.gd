@@ -349,7 +349,7 @@ func apply_enemy_damage(amount: int, plot_id: String = WALL_ID) -> int:
 	return applied
 
 
-func request_repair(candidate_x: float, ledger: EconomyLedger, plot_id: String = WALL_ID) -> bool:
+func request_repair(candidate_x: float, ledger: EconomyLedger, plot_id: String = WALL_ID, extra_cost: Dictionary = {}) -> bool:
 	if ledger == null or not _plots.has(plot_id):
 		return false
 	var plot: Dictionary = _plots[plot_id]
@@ -359,7 +359,11 @@ func request_repair(candidate_x: float, ledger: EconomyLedger, plot_id: String =
 	if absf(candidate_x - float(plot["position_x"])) > INTERACT_RANGE:
 		building_action_rejected.emit("Move closer to the damaged structure to repair")
 		return false
-	if not ledger.try_spend(plot["repair_cost"]):
+	var total_cost: Dictionary = (plot["repair_cost"] as Dictionary).duplicate()
+	for k: Variant in extra_cost.keys():
+		var key_str: String = String(k)
+		total_cost[key_str] = int(total_cost.get(key_str, 0)) + int(extra_cost[k])
+	if not ledger.try_spend(total_cost):
 		building_action_rejected.emit("Insufficient repair resources")
 		return false
 

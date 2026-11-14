@@ -2,6 +2,7 @@ class_name ForgottenShoreSession
 extends Node2D
 
 signal feedback_message(text: String)
+signal load_failed(reason: String)
 
 enum ReignState {
 	ACTIVE,
@@ -113,26 +114,8 @@ func _process(delta: float) -> void:
 	flare_active_timer = maxf(0.0, flare_active_timer - sim_delta)
 	flare_cooldown_timer = maxf(0.0, flare_cooldown_timer - sim_delta)
 	night_mgr.tick(sim_delta, is_night, building_mgr, hearth_sys.hearth_level, flare_active_timer > 0.0)
-	_tick_farm_plots(sim_delta, is_daylight)
 	_tick_monarch_light_risk(sim_delta, is_night)
 	_sync_dynamic_actors()
-
-
-func _tick_farm_plots(sim_delta: float, is_daylight: bool) -> void:
-	if not is_daylight or sim_delta <= 0.0:
-		return
-	for farm_id: String in [BuildingManager.FARM_WEST_ID, BuildingManager.FARM_EAST_ID]:
-		if not building_mgr.has_plot(farm_id):
-			continue
-		var plot: Dictionary = building_mgr.get_plot(farm_id)
-		if int(plot["state"]) != BuildingManager.WallState.COMPLETED:
-			continue
-		var t: float = float(_farm_timers.get(farm_id, 0.0)) + sim_delta
-		while t >= FARM_HARVEST_INTERVAL:
-			t -= FARM_HARVEST_INTERVAL
-			if economy.try_add(&"gold", FARM_GOLD_YIELD):
-				feedback_message.emit("Farm Harvest (%s): +%d Gold" % [farm_id, FARM_GOLD_YIELD])
-		_farm_timers[farm_id] = t
 
 
 func _wire_signals() -> void:
@@ -312,11 +295,8 @@ func execute_world_command(actor_id: String, command: StringName, target_id: Str
 				resolved_target = building_mgr.get_nearest_plot_id(actor_x, BuildingManager.INTERACT_RANGE)
 			if resolved_target.is_empty():
 				resolved_target = BuildingManager.WALL_ID
-			if time_manager != null and time_manager.current_phase == TimeManager.Phase.NIGHT:
-				if not economy.try_spend({"wood": 1}):
-					_record_rejection("Night panic repair costs +1 extra Wood!")
-					return {"ok": false, "actor_id": actor_id, "command": String(command), "target_id": resolved_target, "reason": _last_rejection_reason}
-			ok = building_mgr.request_repair(actor_x, economy, resolved_target)
+			var extra_repair_cost: Dictionary = {"wood": 1} if (time_manager != null and time_manager.current_phase == TimeManager.Phase.NIGHT) else {}
+			ok = building_mgr.request_repair(actor_x, economy, resolved_target, extra_repair_cost)
 			if ok:
 				_play_sfx("sfx_build")
 				feedback_message.emit("Structure (%s) repaired to full durability!" % resolved_target)
@@ -507,7 +487,7 @@ func _on_player_loot_portal_relic() -> bool:
 	if portal_relic_looted:
 		_record_rejection("Portal Relic already scavenged")
 		return false
-	if economy.try_add(&"gold", 3) and economy.try_add(&"stone", 2):
+	if economy.try_add_bundle({"gold": 3, "stone": 2}):
 		portal_relic_looted = true
 		_sync_landmark_visuals()
 		_play_sfx("sfx_coin")
@@ -1011,17 +991,27 @@ func load_game_state(save_path: String = SaveManager.DEFAULT_SAVE_PATH) -> bool:
 		set_actor_position("player_1", player.global_position.x)
 
 	if data.has("night_encounter") and typeof(data["night_encounter"]) == TYPE_DICTIONARY:
-		night_mgr.apply_save_dict(data["night_encounter"])
+		if not night_mgr.apply_save_dict(data["night_encounter"]):
+			load_failed.emit("Failed to restore night_encounter state")
+			return false
 
 	if time_manager != null:
-		time_manager.apply_save_dict(data)
-	economy.set_balances_from_dict(data["resources"])
+		if not time_manager.apply_save_dict(data):
+			load_failed.emit("Failed to restore time_manager state")
+			return false
+	if not economy.set_balances_from_dict(data["resources"]):
+		load_failed.emit("Failed to restore economy balances")
+		return false
 
 	var b_arr: Array = data["buildings"]
-	building_mgr.apply_save_array(b_arr)
+	if not building_mgr.apply_save_array(b_arr):
+		load_failed.emit("Failed to restore buildings state")
+		return false
 
 	var n_arr: Array = data["npcs"]
-	pop_mgr.apply_save_array(n_arr)
+	if not pop_mgr.apply_save_array(n_arr):
+		load_failed.emit("Failed to restore NPC population state")
+		return false
 	for a: NPCBuilderAgent in pop_mgr.agents:
 		_wire_follower_signals(a)
 	_sync_follower_nodes()

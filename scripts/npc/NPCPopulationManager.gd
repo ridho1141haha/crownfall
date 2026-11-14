@@ -120,18 +120,24 @@ func to_save_array() -> Array[Dictionary]:
 
 
 func apply_save_array(npcs_arr: Array) -> bool:
-	if npcs_arr.is_empty():
+	if npcs_arr.is_empty() or agents.is_empty():
 		return false
-	var primary: NPCBuilderAgent = agents[0]
-	agents.clear()
-	agents.append(primary)
+	var staged_agents: Array[NPCBuilderAgent] = []
 	for i: int in range(npcs_arr.size()):
 		var raw: Variant = npcs_arr[i]
 		if typeof(raw) != TYPE_DICTIONARY:
-			continue
+			return false
 		var d: Dictionary = raw as Dictionary
-		var agent: NPCBuilderAgent = primary if i == 0 else NPCBuilderAgent.new(String(d.get("id", "npc_%02d" % (i + 1))))
-		if agent.apply_save_dict(d) and i > 0:
-			agents.append(agent)
+		var probe: NPCBuilderAgent = NPCBuilderAgent.new(String(d.get("id", "npc_%02d" % (i + 1))))
+		if not probe.apply_save_dict(d):
+			return false
+		staged_agents.append(probe)
+	var primary: NPCBuilderAgent = agents[0]
+	if not primary.apply_save_dict(npcs_arr[0] as Dictionary):
+		return false
+	agents.clear()
+	agents.append(primary)
+	for i: int in range(1, staged_agents.size()):
+		agents.append(staged_agents[i])
 	roster_changed.emit()
 	return true

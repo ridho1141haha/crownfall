@@ -16,8 +16,8 @@ const ALLOWED_COMMANDS: Array[StringName] = [
 	&"build_wall",
 	&"repair_wall",
 ]
-const MIN_WORLD_X: float = -1200.0
-const MAX_WORLD_X: float = 1200.0
+const MIN_WORLD_X: float = WorldConstants.MIN_PLAYABLE_X
+const MAX_WORLD_X: float = WorldConstants.MAX_PLAYABLE_X
 const MAX_PEER_SPEED_PX_PER_SEC: float = 260.0
 const BASE_JITTER_ALLOWANCE_PX: float = 24.0
 

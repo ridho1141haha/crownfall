@@ -31,7 +31,7 @@ Open `project.godot` in **Godot `4.7.2.stable`** and press **F5**:
   - `A` / `D` or `Left` / `Right`: Move Monarch horizontally
   - `E`: Collect nearby resource caches (`Gold`, `Wood`, `Stone`) or interact contextually
   - `R`: Recruit Villager as Builder at Vagrant Camp (`x = -220`, cost: `2 Gold`)
-  - `B`: Fund Wooden Wall construction at Eastern Wall Plot (`x = 360`, cost: `2 Gold, 4 Wood, 2 Stone`)
+  - `B`: Fund Wooden Wall construction at Eastern Wall Plot (`x = 380`, cost: `2 Gold, 4 Wood, 2 Stone`)
   - `F`: Fund instant wall repair when damaged (`cost: 2 Wood, 1 Stone`)
   - `T`: Toggle `1x` / `20x` clock speed for testing phase transitions
   - `K`: Trigger manual local save (`user://save_slot_0.json`, disabled during active Night combat)

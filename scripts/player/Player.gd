@@ -11,8 +11,8 @@ signal fast_clock_toggled()
 signal kindle_flare_requested()
 
 @export var move_speed: float = 240.0
-@export var min_bound_x: float = -1540.0
-@export var max_bound_x: float = 1540.0
+@export var min_bound_x: float = WorldConstants.MIN_PLAYABLE_X
+@export var max_bound_x: float = WorldConstants.MAX_PLAYABLE_X
 
 var gravity: float = ProjectSettings.get_setting("physics/2d/default_gravity") as float
 var facing_direction: int = 1
