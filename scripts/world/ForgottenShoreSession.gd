@@ -241,7 +241,42 @@ func _on_npc_state_changed(_npc_id: String, _role: String, state_name: String, p
 	if npc_visual != null:
 		npc_visual.position.x = pos_x
 	if npc_label != null:
-		npc_label.text = "Vagrant [R: 2G]" if not builder_npc.recruited else "Builder (%s)" % state_name
+		if not builder_npc.recruited:
+			npc_label.text = "Vagrant [R: 2G]"
+		else:
+			match state_name:
+				"WORKING":
+					npc_label.text = "Builder: Working"
+				"RETURNING_TO_SAFETY":
+					npc_label.text = "Retreating!"
+				_:
+					npc_label.text = ""
+			npc_label.visible = not npc_label.text.is_empty()
+
+
+func _update_proximity_prompts() -> void:
+	if player == null:
+		return
+	var px: float = player.global_position.x
+
+	# Show [E] resource cache prompts only when Monarch is within 80 px and cache is uncollected
+	var nodes_root: Node = get_node_or_null("WorldObjects/ResourceNodes")
+	if nodes_root != null:
+		for node_def: Dictionary in RESOURCE_NODES:
+			var node_id: String = String(node_def["id"])
+			var lbl: Label = nodes_root.get_node_or_null(node_id + "/Label") as Label
+			if lbl != null:
+				var collected: bool = bool(collected_node_ids.get(node_id, false))
+				lbl.visible = (not collected) and (absf(px - float(node_def["x"])) <= 80.0)
+
+	# Show Vagrant [R: 2G] prompt only when nearby and unrecruited
+	if npc_label != null and not builder_npc.recruited:
+		npc_label.visible = absf(px - builder_npc.position_x) <= 105.0
+
+	# Show Wall [B]/[F] prompt only when nearby (or always show live HP/progress during work/damage)
+	if wall_label != null:
+		var show_wall_info: bool = absf(px - building_mgr.position_x) <= 120.0 or building_mgr.state == BuildingManager.WallState.UNDER_CONSTRUCTION or building_mgr.state == BuildingManager.WallState.DAMAGED
+		wall_label.visible = show_wall_info
 
 
 func _sync_dynamic_actors() -> void:
@@ -267,6 +302,8 @@ func _sync_dynamic_actors() -> void:
 		enemy_visual.position.x = night_mgr.enemy_x
 		if enemy_sprite != null and night_mgr.enemy_active:
 			enemy_sprite.frame = int(floorf(_anim_clock * 8.0)) % 4
+
+	_update_proximity_prompts()
 
 
 func _update_resource_node_visuals() -> void:

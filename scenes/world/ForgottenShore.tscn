@@ -1,4 +1,4 @@
-[gd_scene load_steps=16 format=3]
+[gd_scene load_steps=19 format=3]
 
 [ext_resource type="PackedScene" path="res://scenes/player/Player.tscn" id="1_player_scene"]
 [ext_resource type="Script" path="res://scripts/world/TimeManager.gd" id="2_time_mgr"]
@@ -11,6 +11,9 @@
 [ext_resource type="Texture2D" path="res://assets/items/resources/items_resources_sheet.png" id="9_res_tex"]
 [ext_resource type="Texture2D" path="res://assets/characters/npc/npc_builder_sheet.png" id="10_builder_tex"]
 [ext_resource type="Texture2D" path="res://assets/enemies/first_enemy/enemy_greedling_raider_sheet.png" id="11_raider_tex"]
+[ext_resource type="Texture2D" path="res://assets/buildings/camp/building_vagrant_tent.png" id="12_tent_tex"]
+[ext_resource type="Texture2D" path="res://assets/environment/backgrounds/bg_mountains_far.png" id="13_mtn_tex"]
+[ext_resource type="Texture2D" path="res://assets/environment/backgrounds/bg_forest_mid.png" id="14_forest_tex"]
 
 [sub_resource type="Gradient" id="Gradient_fire"]
 offsets = PackedFloat32Array(0, 0.45, 1)
@@ -49,6 +52,31 @@ script = ExtResource("3_sky_atmo")
 time_manager = NodePath("../TimeManager")
 canvas_modulate = NodePath("../DayNightModulate")
 campfire_light = NodePath("../WorldObjects/TownCenterAnchor/CampfireLight")
+
+[node name="ParallaxBackground" type="ParallaxBackground" parent="."]
+
+[node name="MountainsLayer" type="ParallaxLayer" parent="ParallaxBackground"]
+motion_scale = Vector2(0.18, 1)
+
+[node name="MountainsSprite" type="Sprite2D" parent="ParallaxBackground/MountainsLayer"]
+texture_repeat = 2
+position = Vector2(-1400, -130)
+scale = Vector2(1.4, 1.4)
+texture = ExtResource("13_mtn_tex")
+centered = false
+region_enabled = true
+region_rect = Rect2(0, 0, 2200, 96)
+
+[node name="ForestLayer" type="ParallaxLayer" parent="ParallaxBackground"]
+motion_scale = Vector2(0.42, 1)
+
+[node name="ForestSprite" type="Sprite2D" parent="ParallaxBackground/ForestLayer"]
+texture_repeat = 2
+position = Vector2(-1400, -96)
+texture = ExtResource("14_forest_tex")
+centered = false
+region_enabled = true
+region_rect = Rect2(0, 0, 2800, 96)
 
 [node name="Ground" type="StaticBody2D" parent="."]
 
@@ -100,20 +128,19 @@ texture_scale = 2.6
 
 [node name="TownLabel" type="Label" parent="WorldObjects/TownCenterAnchor"]
 offset_left = -74.0
-offset_top = -78.0
+offset_top = -102.0
 offset_right = 74.0
-offset_bottom = -52.0
-text = "Town Center (Safe Zone)"
+offset_bottom = -76.0
+text = "Town Center"
 horizontal_alignment = 1
 
 [node name="VagrantCamp" type="Node2D" parent="WorldObjects"]
 position = Vector2(-220, 0)
 
-[node name="TentVisual" type="ColorRect" parent="WorldObjects/VagrantCamp"]
-offset_left = -22.0
-offset_top = -36.0
-offset_right = 22.0
-color = Color(0.42, 0.36, 0.28, 1)
+[node name="TentSprite" type="Sprite2D" parent="WorldObjects/VagrantCamp"]
+position = Vector2(-24, -32)
+texture = ExtResource("12_tent_tex")
+centered = false
 
 [node name="WoodenWallPlot" type="Node2D" parent="WorldObjects"]
 position = Vector2(360, 0)
@@ -126,9 +153,9 @@ hframes = 4
 
 [node name="WallLabel" type="Label" parent="WorldObjects/WoodenWallPlot"]
 offset_left = -70.0
-offset_top = -98.0
+offset_top = -102.0
 offset_right = 70.0
-offset_bottom = -52.0
+offset_bottom = -56.0
 text = "Wall Plot [B]
 2G 4W 2S"
 horizontal_alignment = 1
@@ -143,10 +170,11 @@ offset = Vector2(-16, -32)
 hframes = 4
 
 [node name="Label" type="Label" parent="WorldObjects/ResourceNodes/cache_gold_west"]
+visible = false
 offset_left = -56.0
-offset_top = -54.0
+offset_top = -58.0
 offset_right = 56.0
-offset_bottom = -30.0
+offset_bottom = -34.0
 text = "[E] Chest +4G"
 horizontal_alignment = 1
 
@@ -159,10 +187,11 @@ hframes = 4
 frame = 1
 
 [node name="Label" type="Label" parent="WorldObjects/ResourceNodes/timber_pile_west"]
+visible = false
 offset_left = -56.0
-offset_top = -54.0
+offset_top = -58.0
 offset_right = 56.0
-offset_bottom = -30.0
+offset_bottom = -34.0
 text = "[E] Timber +5W"
 horizontal_alignment = 1
 
@@ -175,10 +204,11 @@ hframes = 4
 frame = 2
 
 [node name="Label" type="Label" parent="WorldObjects/ResourceNodes/stone_outcrop_east"]
+visible = false
 offset_left = -56.0
-offset_top = -54.0
+offset_top = -58.0
 offset_right = 56.0
-offset_bottom = -30.0
+offset_bottom = -34.0
 text = "[E] Masonry +3S"
 horizontal_alignment = 1
 
@@ -191,10 +221,11 @@ hframes = 4
 frame = 3
 
 [node name="Label" type="Label" parent="WorldObjects/ResourceNodes/shrine_cache_far_west"]
+visible = false
 offset_left = -56.0
-offset_top = -54.0
+offset_top = -58.0
 offset_right = 56.0
-offset_bottom = -30.0
+offset_bottom = -34.0
 text = "[E] Shrine +3G"
 horizontal_alignment = 1
 
@@ -209,9 +240,9 @@ hframes = 8
 
 [node name="NPCLabel" type="Label" parent="WorldObjects/BuilderActor"]
 offset_left = -60.0
-offset_top = -56.0
+offset_top = -62.0
 offset_right = 60.0
-offset_bottom = -32.0
+offset_bottom = -38.0
 text = "Vagrant [R: 2G]"
 horizontal_alignment = 1
 
@@ -227,9 +258,9 @@ hframes = 4
 
 [node name="EnemyLabel" type="Label" parent="WorldObjects/NightEnemyActor"]
 offset_left = -50.0
-offset_top = -56.0
+offset_top = -58.0
 offset_right = 50.0
-offset_bottom = -32.0
+offset_bottom = -34.0
 text = "Greedling Raider"
 horizontal_alignment = 1
 

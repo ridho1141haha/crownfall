@@ -343,6 +343,57 @@ def build_shore_tile() -> Image.Image:
     return tile
 
 
+
+
+def build_vagrant_tent() -> Image.Image:
+    f = new_canvas(48, 32)
+    # Wooden support poles
+    rect(f, 22, 4, 4, 26, WOOD_D)
+    # Sloped canvas tent body
+    for row in range(20):
+        half_w = 2 + row
+        x_start = 24 - half_w
+        w = half_w * 2
+        col = (146, 122, 92, 255) if row < 14 else (118, 96, 72, 255)
+        rect(f, x_start, 8 + row, w, 1, col)
+    # Dark tent entrance
+    rect(f, 20, 18, 8, 10, OUT)
+    rect(f, 21, 16, 6, 2, WOOD_D)
+    return add_outline(f)
+
+
+def build_mountains_far() -> Image.Image:
+    img = new_canvas(256, 96)
+    col_far = (34, 48, 72, 210)
+    col_hi = (48, 66, 94, 210)
+    # Seamless periodic mountain ridge across 256px width
+    import math
+    for x in range(256):
+        h1 = 36 + int(22 * math.sin((x / 256.0) * 2.0 * math.pi * 2.0) + 12 * math.cos((x / 256.0) * 2.0 * math.pi * 3.0))
+        y_top = 96 - max(18, min(78, h1))
+        rect(img, x, y_top, 1, 96 - y_top, col_far)
+        rect(img, x, y_top, 1, 3, col_hi)
+    return img
+
+
+def build_forest_mid() -> Image.Image:
+    img = new_canvas(256, 96)
+    col_tree = (26, 44, 42, 240)
+    col_tree_d = (18, 32, 32, 245)
+    # Base bush line
+    rect(img, 0, 78, 256, 18, col_tree_d)
+    # Repeating pine & oak silhouettes
+    for tx in [16, 48, 86, 124, 158, 198, 234]:
+        h = 34 + (tx % 17)
+        for row in range(h):
+            w = 2 + (row // 2) * 2
+            x0 = (tx - w // 2) % 256
+            for dx in range(w):
+                put(img, (x0 + dx) % 256, 82 - h + row, col_tree if dx < w - 2 else col_tree_d)
+        rect(img, tx % 256, 80, 3, 16, col_tree_d)
+    return img
+
+
 def main() -> None:
     outputs = {
         "characters/player/player_monarch_sheet.png": build_monarch_sheet(),
@@ -352,6 +403,9 @@ def main() -> None:
         "buildings/wooden_wall/building_wooden_wall_states.png": build_wooden_wall_states(),
         "items/resources/items_resources_sheet.png": build_resources_sheet(),
         "environment/terrain/terrain_shore_tile.png": build_shore_tile(),
+        "buildings/camp/building_vagrant_tent.png": build_vagrant_tent(),
+        "environment/backgrounds/bg_mountains_far.png": build_mountains_far(),
+        "environment/backgrounds/bg_forest_mid.png": build_forest_mid(),
     }
 
     for rel_path, img in outputs.items():
