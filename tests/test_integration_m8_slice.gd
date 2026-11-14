@@ -143,6 +143,8 @@ func _process(_delta: float) -> bool:
 				return true
 			if not _check(loaded_session.time_manager.current_day == 2 and loaded_session.night_mgr.first_night_survived, "Continue loaded Day 2 survived state"):
 				return true
+			if not _check(is_equal_approx(loaded_session.player.global_position.x, 340.0), "Continue restored player position_x == 340.0"):
+				return true
 			if not _check(loaded_session.builder_npc.recruited and loaded_session.building_mgr.durability == 15, "Continue loaded Builder and 15 HP wall"):
 				return true
 			if not _check(loaded_session.execute_command(&"repair_wall", 360.0) and loaded_session.building_mgr.durability == 150, "Day 2 wall repair to 150 HP"):
