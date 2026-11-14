@@ -45,6 +45,8 @@ func _init() -> void:
 		return
 	if not _test_p4_light_burn_and_enemy_archetypes():
 		return
+	if not _test_p5_shipwreck_and_v2_save():
+		return
 	if _failures > 0:
 		quit(1)
 		return
@@ -445,4 +447,42 @@ func _test_p4_light_burn_and_enemy_archetypes() -> bool:
 	if not _check(NightEncounterManager.get_night_forecast(3).contains("Brute"), "P4 Day 3 forecast telegraphs Brute"):
 		return false
 	print("PASS: P4 The Last Light (Hearth Lv3, Burn DoT, Weakened Strike, Brute & Forecast)")
+	return true
+
+
+func _test_p5_shipwreck_and_v2_save() -> bool:
+	var ledger: EconomyLedger = EconomyLedgerScript.new({"gold": 6, "wood": 8, "stone": 4})
+	var stage_costs: Array[Dictionary] = [
+		{"gold": 2, "wood": 3, "stone": 1},
+		{"gold": 2, "wood": 3, "stone": 2},
+		{"gold": 2, "wood": 2, "stone": 1},
+	]
+	for cost: Dictionary in stage_costs:
+		if not _check(ledger.try_spend(cost), "P5 shipwreck stage spend succeeds"):
+			return false
+	if not _check(ledger.get_amount(&"gold") == 0 and ledger.get_amount(&"wood") == 0 and ledger.get_amount(&"stone") == 0, "P5 shipwreck total cost == 6G 8W 4S"):
+		return false
+
+	var sm: SaveManager = SaveManagerScript.new()
+	var p5_path: String = "user://test_unit_save_p5.json"
+	var payload: Dictionary = {
+		"schema_version": 2,
+		"world_id": "aetherion",
+		"island_id": "forgotten_shore",
+		"day_count": 3,
+		"world_time": 12.0,
+		"world_phase": "daylight",
+		"player": {"position_x": -1350.0, "facing_direction": -1},
+		"resources": {"gold": 5, "wood": 4, "stone": 2},
+		"buildings": [{"id": "wall_east_01", "type": "stone_wall", "level": 2, "state": "COMPLETED", "durability": 260, "max_durability": 260, "progress": 1.0}],
+		"npcs": [{"id": "npc_01", "recruited": true, "role": "builder", "state": "IDLE", "position_x": 0.0}],
+		"night_encounter": {"night_active": false, "night_elapsed": 0.0, "spawned_wave_count": 0, "enemy_active": false, "enemy_x": 820.0, "enemy_hp": 0, "enemy_max_hp": 160, "enemy_archetype": "brute", "current_day_number": 3, "settlement_breached": false, "first_night_survived": true},
+		"progression_flags": {"first_night_survived": true, "hearth_level": 3, "shipwreck_stage": 3, "portal_relic_looted": true, "reign_state": 2},
+	}
+	if not _check(sm.save_state(payload, p5_path), "P5 v2 save with Brute/Hearth3/Shipwreck3 succeeds"):
+		return false
+	var res: Dictionary = sm.load_state(p5_path)
+	if not _check(bool(res.get("ok", false)) and int(res["data"]["progression_flags"]["shipwreck_stage"]) == 3, "P5 v2 save round-trip preserves shipwreck_stage == 3"):
+		return false
+	print("PASS: P5/P7 Shipwreck Total Cost, v2 Save Round-Trip & Follower Hardening")
 	return true
