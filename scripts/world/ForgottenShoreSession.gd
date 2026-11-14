@@ -191,12 +191,12 @@ func _spawn_floating_text(world_x: float, text: String, col: Color = Color(1.0, 
 	tw.chain().tween_callback(lbl.queue_free)
 
 
-func _flash_sprite(spr: CanvasItem, flash_col: Color = Color(2.0, 1.2, 1.2, 1.0)) -> void:
+func _flash_sprite(spr: CanvasItem, flash_col: Color = Color(2.0, 1.2, 1.2, 1.0), restore_col: Color = Color(1.0, 1.0, 1.0, 1.0)) -> void:
 	if spr == null or not is_inside_tree():
 		return
 	spr.modulate = flash_col
 	var tw: Tween = create_tween()
-	tw.tween_property(spr, "modulate", Color(1.0, 1.0, 1.0, 1.0), 0.12)
+	tw.tween_property(spr, "modulate", restore_col, 0.12)
 
 
 func _record_rejection(reason: String) -> void:
@@ -343,6 +343,8 @@ func _on_player_interact_shipwreck(player_x: float) -> bool:
 		return false
 	shipwreck_stage += 1
 	_sync_landmark_visuals()
+	_play_sfx("sfx_build")
+	_spawn_floating_text(SHIPWRECK_X, "Ship Stage %d/3" % shipwreck_stage)
 	feedback_message.emit("Shipwreck repaired to Stage %d/3!" % shipwreck_stage)
 	return true
 
@@ -354,6 +356,8 @@ func _on_player_loot_portal_relic() -> bool:
 	if economy.try_add(&"gold", 3) and economy.try_add(&"stone", 2):
 		portal_relic_looted = true
 		_sync_landmark_visuals()
+		_play_sfx("sfx_coin")
+		_spawn_floating_text(PORTAL_X, "+3G +2S Relic")
 		feedback_message.emit("Scavenged Ancient Relic near Greed Portal (+3 Gold, +2 Stone)!")
 		return true
 	return false
@@ -393,6 +397,8 @@ func _on_player_upgrade_hearth(player_x: float) -> bool:
 	hearth_level += 1
 	_sync_hearth_visuals()
 	_sync_landmark_visuals()
+	_play_sfx("sfx_build")
+	_spawn_floating_text(0.0, "Hearth Lv.%d!" % hearth_level, Color(1.0, 0.78, 0.35, 1.0))
 	feedback_message.emit("Hearth upgraded to Lv.%d (Light radius: %.0f px)!" % [hearth_level, NightEncounterManager.get_hearth_radius(hearth_level)])
 	return true
 
@@ -658,7 +664,16 @@ func _sync_follower_nodes() -> void:
 			tex_path = "res://assets/characters/npc/npc_archer_sheet.png"
 		if ResourceLoader.exists(tex_path):
 			s.texture = load(tex_path)
+		var dx: float = agent.position_x - s.position.x
+		if absf(dx) > 0.05:
+			s.flip_h = dx < 0.0
 		s.position.x = agent.position_x
+		if agent.state == NPCBuilderAgent.State.WORKING:
+			s.frame = 4 + (int(floorf(_anim_clock * 8.0)) % 4)
+		elif agent.state == NPCBuilderAgent.State.MOVING_TO_TASK or agent.state == NPCBuilderAgent.State.RETURNING_TO_SAFETY:
+			s.frame = int(floorf(_anim_clock * 8.0)) % 4
+		else:
+			s.frame = 0
 
 
 func _update_proximity_prompts() -> void:
@@ -748,7 +763,8 @@ func _sync_dynamic_actors() -> void:
 
 	if building_mgr.durability < _prev_wall_hp and _prev_wall_hp > 0:
 		_play_sfx("sfx_hit")
-		_flash_sprite(wall_visual)
+		var restore_wall: Color = Color(1.0, 0.85, 0.85, 1.0) if building_mgr.state == BuildingManager.WallState.DAMAGED else Color(1.0, 1.0, 1.0, 1.0)
+		_flash_sprite(wall_visual, Color(2.0, 1.2, 1.2, 1.0), restore_wall)
 	_prev_wall_hp = building_mgr.durability
 
 	if night_mgr.enemy_active and night_mgr.enemy_hp < _prev_enemy_hp and _prev_enemy_hp > 0:
