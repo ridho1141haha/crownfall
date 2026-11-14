@@ -304,6 +304,8 @@ func build_save_payload() -> Dictionary:
 		"world_time": 0.0,
 		"world_phase": "daylight",
 	}
+	var player_x: float = snappedf(player.global_position.x, 0.1) if player != null else 0.0
+	var player_facing: int = player.facing_direction if player != null else 1
 	return {
 		"schema_version": SaveManager.SCHEMA_VERSION,
 		"world_id": "aetherion",
@@ -311,6 +313,10 @@ func build_save_payload() -> Dictionary:
 		"day_count": int(clock_dict["day_count"]),
 		"world_time": float(clock_dict["world_time"]),
 		"world_phase": String(clock_dict["world_phase"]),
+		"player": {
+			"position_x": player_x,
+			"facing_direction": player_facing,
+		},
 		"resources": economy.get_all_balances(),
 		"buildings": building_mgr.to_save_array(),
 		"npcs": [builder_npc.to_save_dict()],
@@ -331,6 +337,13 @@ func load_game_state(save_path: String = SaveManager.DEFAULT_SAVE_PATH) -> bool:
 	if not bool(res.get("ok", false)):
 		return false
 	var data: Dictionary = res["data"]
+
+	# Restore Player position and facing direction if saved
+	if player != null and data.has("player") and typeof(data["player"]) == TYPE_DICTIONARY:
+		var p_dict: Dictionary = data["player"]
+		var saved_px: float = float(p_dict.get("position_x", 0.0))
+		player.global_position.x = clampf(saved_px, player.min_bound_x, player.max_bound_x)
+		player.facing_direction = 1 if int(p_dict.get("facing_direction", 1)) >= 0 else -1
 
 	# Restore NightEncounterManager BEFORE TimeManager emits night_started so mid-night state is not overwritten
 	if data.has("night_encounter") and typeof(data["night_encounter"]) == TYPE_DICTIONARY:

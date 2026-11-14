@@ -185,6 +185,14 @@ func validate_payload(data: Variant) -> bool:
 	if not NightEncounterManager.is_valid_saved_encounter_dict(dict["night_encounter"]):
 		return false
 
+	if dict.has("player"):
+		if typeof(dict["player"]) != TYPE_DICTIONARY:
+			return false
+		var p_dict: Dictionary = dict["player"]
+		var px: float = float(p_dict.get("position_x", 0.0))
+		if is_nan(px) or is_inf(px):
+			return false
+
 	if typeof(dict["progression_flags"]) != TYPE_DICTIONARY:
 		return false
 
