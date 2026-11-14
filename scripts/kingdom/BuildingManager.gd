@@ -169,11 +169,29 @@ func advance_construction(work_seconds: float, plot_id: String = WALL_ID) -> boo
 	return true
 
 
+func has_defensive_barrier(plot_id: String = WALL_ID) -> bool:
+	if not _plots.has(plot_id):
+		return false
+	var plot: Dictionary = _plots[plot_id]
+	var st: int = int(plot["state"])
+	if st == WallState.COMPLETED or st == WallState.DAMAGED:
+		return int(plot["durability"]) > 0
+	if st == WallState.UNDER_CONSTRUCTION and float(plot["progress"]) >= 0.25:
+		return true
+	return false
+
+
 func apply_enemy_damage(amount: int, plot_id: String = WALL_ID) -> int:
 	if amount <= 0 or not _plots.has(plot_id):
 		return 0
 	var plot: Dictionary = _plots[plot_id]
 	var st: int = int(plot["state"])
+	# Non-binary preparation: if attacked while partially constructed (>=25%), convert to makeshift barricade
+	if st == WallState.UNDER_CONSTRUCTION and float(plot["progress"]) >= 0.25:
+		var makeshift_hp: int = maxi(15, int(roundf(float(plot["progress"]) * 80.0)))
+		plot["durability"] = makeshift_hp
+		plot["state"] = WallState.DAMAGED
+		st = WallState.DAMAGED
 	if st != WallState.COMPLETED and st != WallState.DAMAGED:
 		return 0
 
@@ -331,6 +349,19 @@ static func is_valid_saved_building_dict(data: Variant) -> bool:
 	var prog: float = float(d.get("progress", 0.0))
 	if is_nan(prog) or is_inf(prog) or prog < 0.0 or prog > 1.0:
 		return false
+	return true
+
+
+func apply_save_array(buildings_arr: Array) -> bool:
+	if buildings_arr.is_empty():
+		return false
+	for item: Variant in buildings_arr:
+		if not is_valid_saved_building_dict(item):
+			return false
+	for item: Variant in buildings_arr:
+		var d: Dictionary = item as Dictionary
+		if not apply_save_dict(d):
+			return false
 	return true
 
 

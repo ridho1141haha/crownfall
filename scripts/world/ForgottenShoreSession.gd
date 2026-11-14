@@ -16,6 +16,7 @@ var builder_npc: NPCBuilderAgent = NPCBuilderAgent.new()
 var night_mgr: NightEncounterManager = NightEncounterManager.new()
 var save_mgr: SaveManager = SaveManager.new()
 var collected_node_ids: Dictionary = {}
+var _last_rejection_reason: String = ""
 
 @onready var time_manager: TimeManager = $TimeManager as TimeManager
 @onready var player: PlayerController = $Player as PlayerController
@@ -50,17 +51,17 @@ func _wire_signals() -> void:
 		time_manager.sunrise_reached.connect(_on_sunrise_reached)
 
 	if player != null:
-		player.interaction_requested.connect(_on_player_interact)
-		player.recruit_requested.connect(_on_player_recruit)
-		player.build_wall_requested.connect(_on_player_build_wall)
-		player.repair_wall_requested.connect(_on_player_repair_wall)
-		player.manual_save_requested.connect(_on_manual_save)
+		player.interaction_requested.connect(func(px: float) -> void: _on_player_interact(px))
+		player.recruit_requested.connect(func(px: float) -> void: _on_player_recruit(px))
+		player.build_wall_requested.connect(func(px: float) -> void: _on_player_build_wall(px))
+		player.repair_wall_requested.connect(func(px: float) -> void: _on_player_repair_wall(px))
+		player.manual_save_requested.connect(func() -> void: _on_manual_save())
 		player.fast_clock_toggled.connect(_on_toggle_fast_clock)
 
-	economy.transaction_rejected.connect(func(reason: String) -> void: feedback_message.emit(reason))
-	building_mgr.building_action_rejected.connect(func(reason: String) -> void: feedback_message.emit(reason))
+	economy.transaction_rejected.connect(_record_rejection)
+	building_mgr.building_action_rejected.connect(_record_rejection)
 	building_mgr.wall_state_changed.connect(_on_wall_state_changed)
-	builder_npc.recruitment_rejected.connect(func(reason: String) -> void: feedback_message.emit(reason))
+	builder_npc.recruitment_rejected.connect(_record_rejection)
 	builder_npc.npc_state_changed.connect(_on_npc_state_changed)
 	night_mgr.night_encounter_resolved.connect(_on_night_resolved)
 
@@ -68,7 +69,13 @@ func _wire_signals() -> void:
 		slice_hud.call("bind_session", self)
 
 
-func _on_player_interact(player_x: float) -> void:
+func _record_rejection(reason: String) -> void:
+	_last_rejection_reason = reason
+	feedback_message.emit(reason)
+
+
+func _on_player_interact(player_x: float) -> bool:
+	_last_rejection_reason = ""
 	for node_def: Dictionary in RESOURCE_NODES:
 		var node_id: String = String(node_def["id"])
 		if collected_node_ids.get(node_id, false):
@@ -81,40 +88,79 @@ func _on_player_interact(player_x: float) -> void:
 				collected_node_ids[node_id] = true
 				_update_resource_node_visuals()
 				feedback_message.emit("Collected: %s" % String(node_def["label"]))
-				return
+				return true
+			return false
 
-	# Contextual fallback if pressing E near camp or wall
+	# Contextual interaction fallback near Camp or Wall returns actual operation result
 	if not builder_npc.recruited and absf(player_x - NPCBuilderAgent.CAMP_POSITION_X) <= 90.0:
-		_on_player_recruit(player_x)
-		return
+		return _on_player_recruit(player_x)
 	if absf(player_x - building_mgr.position_x) <= 90.0:
 		if building_mgr.state == BuildingManager.WallState.DAMAGED:
-			_on_player_repair_wall(player_x)
-		else:
-			_on_player_build_wall(player_x)
-		return
+			return _on_player_repair_wall(player_x)
+		elif building_mgr.state == BuildingManager.WallState.PLACEHOLDER or building_mgr.state == BuildingManager.WallState.DESTROYED:
+			return _on_player_build_wall(player_x)
 
-	feedback_message.emit("Nothing to collect here. Explore West/East or approach Camp (x=-220) / Wall (x=360).")
+	_record_rejection("Nothing to collect or interact with at x=%.0f." % player_x)
+	return false
 
 
-func _on_player_recruit(player_x: float) -> void:
+func _on_player_recruit(player_x: float) -> bool:
+	_last_rejection_reason = ""
 	if builder_npc.request_recruit(player_x, economy):
 		feedback_message.emit("Villager recruited as Builder! Will construct/repair walls and retreat at Sunset.")
+		return true
+	return false
 
 
-func _on_player_build_wall(player_x: float) -> void:
-	if building_mgr.request_start_construction(player_x, economy):
-		feedback_message.emit("Wooden Wall blueprint funded! Builder will construct it (or recruit one at Camp).")
+func _on_player_build_wall(player_x: float, plot_id: String = BuildingManager.WALL_ID) -> bool:
+	_last_rejection_reason = ""
+	if building_mgr.request_start_construction(player_x, economy, plot_id):
+		feedback_message.emit("Wooden Wall blueprint funded! Builder will construct it.")
+		return true
+	return false
 
 
-func _on_player_repair_wall(player_x: float) -> void:
-	if building_mgr.request_repair(player_x, economy):
+func _on_player_repair_wall(player_x: float, plot_id: String = BuildingManager.WALL_ID) -> bool:
+	_last_rejection_reason = ""
+	if building_mgr.request_repair(player_x, economy, plot_id):
 		feedback_message.emit("Wooden Wall repaired to full durability!")
+		return true
+	return false
 
 
-func _on_manual_save() -> void:
+func _on_manual_save() -> bool:
+	_last_rejection_reason = ""
 	if save_game_state():
 		feedback_message.emit("Kingdom state saved to user://save_slot_0.json")
+		return true
+	_record_rejection("Manual save failed")
+	return false
+
+
+func execute_command(command_id: StringName, actor_x: float, params: Dictionary = {}) -> bool:
+	var plot_id: String = String(params.get("plot_id", BuildingManager.WALL_ID))
+	match command_id:
+		&"interact":
+			return _on_player_interact(actor_x)
+		&"recruit":
+			return _on_player_recruit(actor_x)
+		&"build_wall":
+			return _on_player_build_wall(actor_x, plot_id)
+		&"repair_wall":
+			return _on_player_repair_wall(actor_x, plot_id)
+		&"save_game":
+			return _on_manual_save()
+	_record_rejection("Unknown command: %s" % String(command_id))
+	return false
+
+
+func execute_command_detailed(command_id: StringName, actor_x: float, params: Dictionary = {}) -> Dictionary:
+	var ok: bool = execute_command(command_id, actor_x, params)
+	return {
+		"ok": ok,
+		"command": String(command_id),
+		"reason": "" if ok else _last_rejection_reason,
+	}
 
 
 func _on_toggle_fast_clock() -> void:
@@ -136,8 +182,9 @@ func _on_sunset_started(_day_number: int) -> void:
 
 func _on_night_started(_day_number: int) -> void:
 	builder_npc.set_dusk_or_night_safety(true)
-	night_mgr.on_night_started()
-	feedback_message.emit("Night has fallen! A Greedling Raider approaches from the East Shore!")
+	if not night_mgr.night_active:
+		night_mgr.on_night_started()
+	feedback_message.emit("Night has fallen! Greedling Raiders approach from the East Shore!")
 
 
 func _on_sunrise_reached(_completed_day: int) -> void:
@@ -151,33 +198,28 @@ func _on_night_resolved(survived: bool, wall_held: bool) -> void:
 	elif survived:
 		feedback_message.emit("Sunrise reached! The wall fell, but dawn broke in time. Auto-saved!")
 	else:
-		feedback_message.emit("The raider breached the Town Center during the night! Rebuild and reinforce before next dusk.")
+		feedback_message.emit("Raiders breached the Town Center during the night! Rebuild and reinforce before next dusk.")
 
 
-func _on_wall_state_changed(_wall_id: String, new_state: String, progress: float, durability: int, max_dur: int) -> void:
-	if wall_visual == null or wall_label == null:
+func _on_wall_state_changed(wall_id: String, new_state: String, progress: float, durability: int, max_dur: int) -> void:
+	if wall_id != BuildingManager.WALL_ID or wall_visual == null or wall_label == null:
 		return
 	match new_state:
 		"PLACEHOLDER":
 			wall_visual.color = Color(0.55, 0.55, 0.55, 0.45)
-			wall_label.text = "Wall Plot [B]
-2G 4W 2S"
+			wall_label.text = "Wall Plot [B]\n2G 4W 2S"
 		"UNDER_CONSTRUCTION":
 			wall_visual.color = Color(0.78, 0.62, 0.28, 0.8)
-			wall_label.text = "Building Wall...
-%d%%" % int(round(progress * 100.0))
+			wall_label.text = "Building Wall...\n%d%%" % int(roundf(progress * 100.0))
 		"COMPLETED":
 			wall_visual.color = Color(0.48, 0.34, 0.2, 1.0)
-			wall_label.text = "Wooden Wall
-HP %d/%d" % [durability, max_dur]
+			wall_label.text = "Wooden Wall\nHP %d/%d" % [durability, max_dur]
 		"DAMAGED":
 			wall_visual.color = Color(0.72, 0.36, 0.2, 1.0)
-			wall_label.text = "Damaged Wall [F]
-HP %d/%d" % [durability, max_dur]
+			wall_label.text = "Damaged Wall [F]\nHP %d/%d" % [durability, max_dur]
 		"DESTROYED":
 			wall_visual.color = Color(0.35, 0.18, 0.18, 0.55)
-			wall_label.text = "Destroyed Wall [B]
-Rebuild: 2G 4W 2S"
+			wall_label.text = "Destroyed Wall [B]\nRebuild: 2G 4W 2S"
 
 
 func _on_npc_state_changed(_npc_id: String, _role: String, state_name: String, pos_x: float) -> void:
@@ -238,8 +280,9 @@ func build_save_payload() -> Dictionary:
 		"world_time": float(clock_dict["world_time"]),
 		"world_phase": String(clock_dict["world_phase"]),
 		"resources": economy.get_all_balances(),
-		"buildings": [building_mgr.to_save_dict()],
+		"buildings": building_mgr.to_save_array(),
 		"npcs": [builder_npc.to_save_dict()],
+		"night_encounter": night_mgr.to_save_dict(),
 		"progression_flags": {
 			"first_night_survived": night_mgr.first_night_survived,
 			"collected_nodes": collected_node_ids.keys(),
@@ -251,44 +294,29 @@ func save_game_state(save_path: String = SaveManager.DEFAULT_SAVE_PATH) -> bool:
 	return save_mgr.save_state(build_save_payload(), save_path)
 
 
-func execute_command(command_id: StringName, actor_x: float, _params: Dictionary = {}) -> bool:
-	match command_id:
-		&"interact":
-			_on_player_interact(actor_x)
-			return true
-		&"recruit":
-			_on_player_recruit(actor_x)
-			return builder_npc.recruited
-		&"build_wall":
-			_on_player_build_wall(actor_x)
-			return building_mgr.state != BuildingManager.WallState.PLACEHOLDER
-		&"repair_wall":
-			_on_player_repair_wall(actor_x)
-			return building_mgr.state == BuildingManager.WallState.COMPLETED
-		&"save_game":
-			return save_game_state()
-	return false
-
-
 func load_game_state(save_path: String = SaveManager.DEFAULT_SAVE_PATH) -> bool:
 	var res: Dictionary = save_mgr.load_state(save_path)
 	if not bool(res.get("ok", false)):
 		return false
 	var data: Dictionary = res["data"]
+
+	# Restore NightEncounterManager BEFORE TimeManager emits night_started so mid-night state is not overwritten
+	if data.has("night_encounter") and typeof(data["night_encounter"]) == TYPE_DICTIONARY:
+		night_mgr.apply_save_dict(data["night_encounter"])
+
 	if time_manager != null:
 		time_manager.apply_save_dict(data)
 	economy.set_balances_from_dict(data["resources"])
 
 	var b_arr: Array = data["buildings"]
-	if not b_arr.is_empty() and typeof(b_arr[0]) == TYPE_DICTIONARY:
-		building_mgr.apply_save_dict(b_arr[0])
+	building_mgr.apply_save_array(b_arr)
 
 	var n_arr: Array = data["npcs"]
 	if not n_arr.is_empty() and typeof(n_arr[0]) == TYPE_DICTIONARY:
 		builder_npc.apply_save_dict(n_arr[0])
 
 	var flags: Dictionary = data["progression_flags"]
-	night_mgr.first_night_survived = bool(flags.get("first_night_survived", false))
+	night_mgr.first_night_survived = bool(flags.get("first_night_survived", night_mgr.first_night_survived))
 	collected_node_ids.clear()
 	var saved_nodes: Variant = flags.get("collected_nodes", [])
 	if typeof(saved_nodes) == TYPE_ARRAY:
@@ -298,8 +326,7 @@ func load_game_state(save_path: String = SaveManager.DEFAULT_SAVE_PATH) -> bool:
 	if time_manager != null:
 		var is_unsafe: bool = time_manager.current_phase != TimeManager.Phase.DAYLIGHT
 		builder_npc.set_dusk_or_night_safety(is_unsafe)
-		if time_manager.current_phase == TimeManager.Phase.NIGHT and not night_mgr.enemy_active and not night_mgr.first_night_survived:
-			night_mgr.on_night_started()
+
 	_sync_all_presentations()
 	return true
 
