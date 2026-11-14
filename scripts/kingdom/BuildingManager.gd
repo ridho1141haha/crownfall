@@ -28,6 +28,7 @@ const REINFORCED_MAX_DURABILITY: int = 150
 const STONE_WALL_MAX_DURABILITY: int = 260
 const WATCHTOWER_MAX_DURABILITY: int = 120
 const FARM_MAX_DURABILITY: int = 80
+const WATCHTOWER_SUPPORT_DAMAGE: int = 10
 const INTERACT_RANGE: float = 96.0
 
 const WALL_BUILD_COST: Dictionary = {
@@ -144,6 +145,12 @@ func get_thorn_damage(plot_id: String = WALL_ID) -> int:
 		return 15
 	var lvl: int = int(_plots[plot_id].get("level", 1))
 	return 20 if lvl >= 2 else 15
+
+
+func get_watchtower_support_damage() -> int:
+	if is_standing(WATCHTOWER_ID):
+		return WATCHTOWER_SUPPORT_DAMAGE
+	return 0
 
 
 func get_state_name(plot_id: String = WALL_ID) -> String:

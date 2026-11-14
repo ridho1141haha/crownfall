@@ -245,11 +245,16 @@ func _on_daylight_started(day_number: int) -> void:
 	builder_npc.set_dusk_or_night_safety(false)
 	# Regenerate renewable Wood & Stone nodes on Day 2+
 	if day_number > 1:
-		for node_def: Dictionary in RESOURCE_NODES:
-			if bool(node_def.get("renewable", false)):
-				collected_node_ids.erase(String(node_def["id"]))
-		_update_resource_node_visuals()
+		_refresh_renewable_nodes()
 	feedback_message.emit("Day %d Daylight — Wood & Stone nodes refreshed! Expand Farms, Watchtower & Stone Wall." % day_number)
+
+
+
+func _refresh_renewable_nodes() -> void:
+	for node_def: Dictionary in RESOURCE_NODES:
+		if bool(node_def.get("renewable", false)):
+			collected_node_ids.erase(String(node_def["id"]))
+	_update_resource_node_visuals()
 
 
 func _on_sunset_started(_day_number: int) -> void:
@@ -276,6 +281,7 @@ func _on_sunrise_reached(completed_day: int) -> void:
 		reign_state = ReignState.ISLAND_CLEARED
 	else:
 		reign_state = ReignState.ACTIVE
+	_refresh_renewable_nodes()
 	save_game_state()
 
 
