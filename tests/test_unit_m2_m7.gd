@@ -32,6 +32,8 @@ func _init() -> void:
 		return
 	if not _test_m6_three_balance_scenarios():
 		return
+	if not _test_m6_watchtower_support():
+		return
 	if not _test_m7_atomic_save_and_rollback():
 		return
 	if not _test_p1_p2_farm_watchtower_stone_wall():
@@ -226,6 +228,36 @@ func _test_m6_three_balance_scenarios() -> bool:
 	if not _check(night_c.settlement_breached, "M6 Scenario C unbuilt wall breaches Town Center"):
 		return false
 	print("PASS: M6 Night Encounter Balance (Completed Wall, Partial Barricade, Unbuilt Breach)")
+	return true
+
+
+
+func _test_m6_watchtower_support() -> bool:
+	var ledger: EconomyLedger = EconomyLedgerScript.new({"gold": 5, "wood": 7, "stone": 5})
+	var bm: BuildingManager = BuildingManagerScript.new()
+	bm.register_forgotten_shore_expansion_plots()
+	var night: NightEncounterManager = NightEncounterManagerScript.new()
+	if not _check(bm.get_watchtower_support_damage() == 0, "M6 Scenario D no tower support before Watchtower is built"):
+		return false
+	if not _check(bm.request_start_construction(BuildingManager.WALL_POSITION_X, ledger), "M6 Scenario D fund wall"):
+		return false
+	if not _check(bm.request_start_construction(BuildingManager.WATCHTOWER_POSITION_X, ledger, BuildingManager.WATCHTOWER_ID), "M6 Scenario D fund Watchtower"):
+		return false
+	bm.advance_construction(4.0)
+	bm.advance_construction(3.5, BuildingManager.WATCHTOWER_ID)
+	if not _check(bm.get_watchtower_support_damage() == BuildingManager.WATCHTOWER_SUPPORT_DAMAGE, "M6 Scenario D completed Watchtower grants support damage"):
+		return false
+	night.on_night_started()
+	for _sec: int in range(180):
+		night.tick(1.0, true, bm)
+	if not _check(night.spawned_wave_count == 3, "M6 Scenario D spawned all 3 waves"):
+		return false
+	if not _check(bm.is_standing() and bm.durability == 60, "M6 Scenario D wall ends with 60 HP thanks to Watchtower"):
+		return false
+	night.on_sunrise_reached(bm)
+	if not _check(night.first_night_survived and not night.settlement_breached, "M6 Scenario D sunrise survived"):
+		return false
+	print("PASS: M6 Watchtower Support Damage (wall 60 HP vs 15 HP without tower)")
 	return true
 
 
