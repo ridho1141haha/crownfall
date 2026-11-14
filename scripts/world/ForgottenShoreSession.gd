@@ -156,6 +156,7 @@ func _wire_signals() -> void:
 	economy.transaction_rejected.connect(_record_rejection)
 	building_mgr.building_action_rejected.connect(_record_rejection)
 	building_mgr.wall_state_changed.connect(_on_wall_state_changed)
+	night_mgr.building_attacked.connect(_on_building_attacked)
 	builder_npc.recruitment_rejected.connect(_record_rejection)
 	builder_npc.npc_state_changed.connect(_on_npc_state_changed)
 	_wire_follower_signals(builder_npc)
@@ -560,6 +561,18 @@ func _on_archer_volley_fired(_npc_id: String, damage: int, from_tower: bool, tar
 	feedback_message.emit("Archer volley (%d dmg%s)!" % [damage, " from Watchtower" if from_tower else ""])
 
 
+func _on_building_attacked(plot_id: String, damage: int, enemy_x: float) -> void:
+	_play_sfx("sfx_hit")
+	var label: String = "Farm" if plot_id.contains("farm") else "Wall"
+	_spawn_floating_text(enemy_x, "-%d %s!" % [damage, label], Color(1.0, 0.35, 0.3, 1.0))
+	if plot_id == BuildingManager.WEST_WALL_ID:
+		feedback_message.emit("West Wall is under attack by a West Scout!")
+	elif label == "Farm":
+		feedback_message.emit("Greedlings trampled one of our Farms! Repair it at dawn.")
+	else:
+		feedback_message.emit("Our East Wall is under attack!")
+
+
 func _on_toggle_fast_clock() -> void:
 	if time_manager == null:
 		return
@@ -571,24 +584,33 @@ func _on_daylight_started(day_number: int) -> void:
 	pop_mgr.set_dusk_or_night_safety(false, building_mgr)
 	if day_number > 1:
 		shrine_offering_used_today = false
-		shrine_offering_used_today = false
 	resource_mgr.refresh_renewable_nodes()
 	_update_resource_node_visuals()
 	feedback_message.emit("Day %d Daylight — Wood & Stone nodes refreshed! Expand Farms, Watchtower & Stone Wall." % day_number)
 
 
-func _on_sunset_started(_day_number: int) -> void:
+func _on_sunset_started(day_number: int) -> void:
 	pop_mgr.set_dusk_or_night_safety(true, building_mgr)
 	_play_sfx("sfx_sunset")
-	feedback_message.emit("Sunset Warning — Builder is retreating to the Town Center safe zone!")
+	if day_number >= 2:
+		feedback_message.emit("Sunset Warning — Greedlings approach from BOTH shores tonight! Keep villagers inside the walls.")
+	else:
+		feedback_message.emit("Sunset Warning — Builder is retreating to the Town Center safe zone!")
 
 
-func _on_night_started(_day_number: int) -> void:
+func _on_night_started(day_number: int) -> void:
 	pop_mgr.set_dusk_or_night_safety(true, building_mgr)
+	if reign_state == ReignState.ISLAND_CLEARED:
+		_play_sfx("sfx_sunset")
+		feedback_message.emit("The island is at peace — no Greedlings remain after your victory.")
+		return
 	if not night_mgr.night_active:
 		night_mgr.on_night_started(time_manager.current_day if time_manager != null else 1)
 	_play_sfx("sfx_night")
-	feedback_message.emit("Night has fallen! Greedling Raiders approach from the East Shore!")
+	if day_number >= 2:
+		feedback_message.emit("Night %d! Raiders hit the East Wall — West Scouts prowl the far flank!" % day_number)
+	else:
+		feedback_message.emit("Night has fallen! Greedling Raiders approach from the East Shore!")
 
 
 func _on_sunrise_reached(completed_day: int) -> void:
@@ -642,7 +664,7 @@ func _build_population_summary() -> String:
 		if role_counts.has(role_name):
 			parts.append("%d %s" % [int(role_counts[role_name]), role_name.capitalize()])
 	var detail: String = ", ".join(parts) if not parts.is_empty() else "none"
-	return "NPCs: %d (%s) | Idle: %d" % [recruited, detail, idle]
+	return "NPCs: %d (%s) | Idle: %d | Vagrants: %d" % [recruited, detail, idle, pop_mgr.camp_vagrants_available]
 
 
 func _sync_hearth_visuals() -> void:
@@ -904,9 +926,9 @@ func _sync_dynamic_actors() -> void:
 	if slice_hud != null and slice_hud.has_method("set_forecast_text"):
 		var day_n: int = time_manager.current_day if time_manager != null else 1
 		if night_mgr.enemy_active or night_mgr.west_enemy_active:
-			var alert: String = "ALERT: %s (%d/%d HP) at x=%.0f" % [night_mgr.get_enemy_display_name(), night_mgr.enemy_hp, night_mgr.enemy_max_hp, night_mgr.enemy_x] if night_mgr.enemy_active else "ALERT: West flank!"
+			var alert: String = "ALERT: %s (%d/%d HP) at x=%.0f" % [night_mgr.get_enemy_display_name(), night_mgr.enemy_hp, night_mgr.enemy_max_hp, night_mgr.enemy_x] if night_mgr.enemy_active else "ALERT: Greedling raiders inbound!"
 			if night_mgr.west_enemy_active:
-				alert += " | West Scout at x=%.0f" % night_mgr.west_enemy_x
+				alert += " | West Scout (%d/%d HP) at x=%.0f" % [night_mgr.west_enemy_hp, night_mgr.enemy_max_hp, night_mgr.west_enemy_x]
 			slice_hud.call("set_forecast_text", alert)
 		else:
 			slice_hud.call("set_forecast_text", NightEncounterManager.get_night_forecast(day_n))

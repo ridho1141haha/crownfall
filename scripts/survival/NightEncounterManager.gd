@@ -5,6 +5,7 @@ signal enemy_updated(active: bool, position_x: float, hp: int, max_hp: int)
 signal wave_spawned(wave_index: int, total_waves: int)
 signal enemy_defeated(archetype: String, reward_gold: int, position_x: float)
 signal night_encounter_resolved(survived: bool, wall_held: bool)
+signal building_attacked(plot_id: String, damage: int, enemy_x: float)
 
 const SPAWN_X: float = 820.0
 const WEST_SPAWN_X: float = -820.0
@@ -174,7 +175,9 @@ func _trample_interior(building_mgr: BuildingManager, enemy_x: float, plot_ids: 
 		var px: float = float((building_mgr.get_plot(pid) as Dictionary)["position_x"])
 		if absf(enemy_x - px) <= ATTACK_RANGE:
 			trampled.append(pid)
-			building_mgr.apply_enemy_damage(dmg, pid)
+			var applied: int = building_mgr.apply_enemy_damage(dmg, pid)
+			if applied > 0:
+				building_attacked.emit(pid, applied, enemy_x)
 
 
 func on_night_started(day_num: int = 1) -> void:
@@ -263,7 +266,9 @@ func _tick_east_enemy(delta: float, building_mgr: BuildingManager, hearth_level:
 			var tower_dmg: int = int(roundf(float(building_mgr.get_watchtower_support_damage()) * light_mult))
 			while _attack_timer >= ATTACK_INTERVAL and building_mgr.has_defensive_barrier(BuildingManager.WALL_ID) and enemy_active:
 				_attack_timer -= ATTACK_INTERVAL
-				building_mgr.apply_enemy_damage(effective_dmg, BuildingManager.WALL_ID)
+				var wall_applied: int = building_mgr.apply_enemy_damage(effective_dmg, BuildingManager.WALL_ID)
+				if wall_applied > 0:
+					building_attacked.emit(BuildingManager.WALL_ID, wall_applied, enemy_x)
 				enemy_hp = maxi(0, enemy_hp - building_mgr.get_thorn_damage(BuildingManager.WALL_ID) - tower_dmg)
 				if enemy_hp <= 0:
 					enemy_active = false
@@ -307,7 +312,9 @@ func _tick_west_enemy(delta: float, building_mgr: BuildingManager, hearth_level:
 			_west_attack_timer += delta
 			while _west_attack_timer >= ATTACK_INTERVAL and building_mgr.has_defensive_barrier(BuildingManager.WEST_WALL_ID) and west_enemy_active:
 				_west_attack_timer -= ATTACK_INTERVAL
-				building_mgr.apply_enemy_damage(eff_dmg, BuildingManager.WEST_WALL_ID)
+				var w_applied: int = building_mgr.apply_enemy_damage(eff_dmg, BuildingManager.WEST_WALL_ID)
+				if w_applied > 0:
+					building_attacked.emit(BuildingManager.WEST_WALL_ID, w_applied, west_enemy_x)
 				west_enemy_hp = maxi(0, west_enemy_hp - building_mgr.get_thorn_damage(BuildingManager.WEST_WALL_ID))
 				if west_enemy_hp <= 0:
 					west_enemy_active = false

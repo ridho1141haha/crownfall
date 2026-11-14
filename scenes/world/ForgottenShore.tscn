@@ -545,7 +545,7 @@ text = "Tonight (East): 3 Waves • Greedling Raider"
 
 [node name="PopulationLabel" type="Label" parent="ClockHUD/MarginContainer/VBoxContainer"]
 layout_mode = 2
-text = "NPCs: 0 (none) | Idle: 0"
+text = "NPCs: 0 (none) | Idle: 0 | Vagrants: 2"
 
 [node name="SFXPlayer" type="AudioStreamPlayer" parent="."]
 volume_db = -4.0

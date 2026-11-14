@@ -31,6 +31,8 @@ const ARCHER_FIRE_INTERVAL: float = 1.0
 const ARCHER_BASE_DAMAGE: int = 20
 const ARCHER_GROUND_RANGE: float = 240.0
 const ARCHER_TOWER_RANGE: float = 360.0
+const ARCHER_PURSUIT_GAP: float = 190.0
+const ARCHER_PURSUIT_WEST_LIMIT: float = -600.0
 const ENEMY_GRAB_RANGE: float = 24.0
 
 var npc_id: String = NPC_ID
@@ -258,16 +260,20 @@ func _tick_idle_builder(delta: float, building_mgr: BuildingManager, night_mgr: 
 func _tick_archer(delta: float, building_mgr: BuildingManager, night_mgr: NightEncounterManager) -> void:
 	var on_tower: bool = false
 	var guard_x: float = SAFE_ZONE_X
+	var defend_west: bool = night_mgr != null and night_mgr.night_active and night_mgr.west_enemy_active and not night_mgr.enemy_active
 	if building_mgr != null:
-		if building_mgr.has_plot(BuildingManager.WATCHTOWER_ID) and building_mgr.is_fully_operational(BuildingManager.WATCHTOWER_ID):
-			var owner: String = building_mgr.get_plot_claimant(BuildingManager.WATCHTOWER_ID)
-			if owner.is_empty() or owner == npc_id:
-				building_mgr.claim_plot(BuildingManager.WATCHTOWER_ID, npc_id)
-				assigned_task_id = BuildingManager.WATCHTOWER_ID
-				guard_x = BuildingManager.WATCHTOWER_POSITION_X
-				on_tower = true
-		if not on_tower and building_mgr.is_standing(BuildingManager.WALL_ID):
-			guard_x = BuildingManager.WALL_POSITION_X - 36.0
+		if defend_west:
+			guard_x = clampf(night_mgr.west_enemy_x + ARCHER_PURSUIT_GAP, ARCHER_PURSUIT_WEST_LIMIT, SAFE_ZONE_X)
+		else:
+			if building_mgr.has_plot(BuildingManager.WATCHTOWER_ID) and building_mgr.is_fully_operational(BuildingManager.WATCHTOWER_ID):
+				var owner: String = building_mgr.get_plot_claimant(BuildingManager.WATCHTOWER_ID)
+				if owner.is_empty() or owner == npc_id:
+					building_mgr.claim_plot(BuildingManager.WATCHTOWER_ID, npc_id)
+					assigned_task_id = BuildingManager.WATCHTOWER_ID
+					guard_x = BuildingManager.WATCHTOWER_POSITION_X
+					on_tower = true
+			if not on_tower and building_mgr.is_standing(BuildingManager.WALL_ID):
+				guard_x = BuildingManager.WALL_POSITION_X - 36.0
 
 	if absf(position_x - guard_x) > 12.0:
 		state = State.MOVING_TO_TASK
