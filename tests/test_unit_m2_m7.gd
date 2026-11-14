@@ -7,6 +7,9 @@ const NPCBuilderAgentScript = preload("res://scripts/npc/NPCBuilderAgent.gd")
 const NightEncounterManagerScript = preload("res://scripts/survival/NightEncounterManager.gd")
 const SaveManagerScript = preload("res://scripts/save/SaveManager.gd")
 const NPCPopulationManagerScript = preload("res://scripts/npc/NPCPopulationManager.gd")
+const ResourceNodeManagerScript = preload("res://scripts/world/ResourceNodeManager.gd")
+const HearthSystemScript = preload("res://scripts/kingdom/HearthSystem.gd")
+const InteractionResolverScript = preload("res://scripts/player/InteractionResolver.gd")
 
 var _failures: int = 0
 var _checks: int = 0
@@ -46,6 +49,8 @@ func _init() -> void:
 	if not _test_p4_light_burn_and_enemy_archetypes():
 		return
 	if not _test_p5_shipwreck_and_v2_save():
+		return
+	if not _test_task1_modules_and_save_roundtrip():
 		return
 	if _failures > 0:
 		quit(1)
@@ -486,4 +491,59 @@ func _test_p5_shipwreck_and_v2_save() -> bool:
 	if not _check(bool(res.get("ok", false)) and int(res["data"]["progression_flags"]["shipwreck_stage"]) == 3, "P5 v2 save round-trip preserves shipwreck_stage == 3"):
 		return false
 	print("PASS: P5/P7 Shipwreck Total Cost, v2 Save Round-Trip & Follower Hardening")
+	return true
+
+
+func _test_task1_modules_and_save_roundtrip() -> bool:
+	var ledger: EconomyLedger = EconomyLedgerScript.new({"gold": 12, "wood": 12, "stone": 12})
+	var rnm: ResourceNodeManager = ResourceNodeManagerScript.new()
+	var c1: Dictionary = rnm.try_collect("timber_pile_west", -110.0, ledger)
+	if not _check(bool(c1.get("ok", false)) and rnm.is_collected("timber_pile_west"), "Task1 ResourceNodeManager collects timber_pile_west"):
+		return false
+	rnm.refresh_renewable_nodes()
+	if not _check(not rnm.is_collected("timber_pile_west"), "Task1 renewable Wood node refreshes cleanly"):
+		return false
+
+	var hs: HearthSystem = HearthSystemScript.new()
+	var h_res: Dictionary = hs.try_upgrade(0.0, ledger)
+	if not _check(bool(h_res.get("ok", false)) and hs.hearth_level == 2 and is_equal_approx(hs.get_radius_px(), 320.0), "Task1 HearthSystem upgrades to Lv2 (320 px)"):
+		return false
+
+	# Spatial overlap test: Watchtower (210) vs Wall (380) >= 140 px apart; InteractionResolver picks 1 nearest target
+	var bm: BuildingManager = BuildingManagerScript.new()
+	bm.register_forgotten_shore_expansion_plots()
+	var tgt_tower: Dictionary = InteractionResolverScript.resolve_nearest(215.0, rnm, bm, null, hs, 0, -1350.0, 1350.0, false)
+	var tgt_wall: Dictionary = InteractionResolverScript.resolve_nearest(360.0, rnm, bm, null, hs, 0, -1350.0, 1350.0, false)
+	if not _check(String(tgt_tower.get("target_id", "")) == BuildingManager.WATCHTOWER_ID and String(tgt_wall.get("target_id", "")) == BuildingManager.WALL_ID, "Task1 InteractionResolver disambiguates Watchtower (210) vs Wall (380)"):
+		return false
+
+	# SaveManager round-trip with hearth_level, reign_state String, node_states Dictionary
+	var sm: SaveManager = SaveManagerScript.new()
+	var t1_path: String = "user://test_unit_task1_save.json"
+	var payload: Dictionary = {
+		"schema_version": 2,
+		"world_id": "aetherion",
+		"island_id": "forgotten_shore",
+		"day_count": 2,
+		"world_time": 10.0,
+		"world_phase": "daylight",
+		"player": {"position_x": 210.0, "facing_direction": 1},
+		"resources": ledger.get_all_balances(),
+		"buildings": bm.to_save_array(),
+		"npcs": [{"id": "npc_01", "recruited": true, "role": "builder", "state": "IDLE", "position_x": 0.0}],
+		"night_encounter": NightEncounterManagerScript.new().to_save_dict(),
+		"progression_flags": {
+			"first_night_survived": true,
+			"hearth_level": 2,
+			"reign_state": "ISLAND_CLEARED",
+			"node_states": rnm.to_save_dict(),
+		},
+	}
+	if not _check(sm.save_state(payload, t1_path), "Task1 SaveManager saves new fields"):
+		return false
+	var loaded: Dictionary = sm.load_state(t1_path)
+	var pf: Dictionary = loaded["data"]["progression_flags"]
+	if not _check(bool(loaded["ok"]) and int(pf["hearth_level"]) == 2 and String(pf["reign_state"]) == "ISLAND_CLEARED" and typeof(pf["node_states"]) == TYPE_DICTIONARY, "Task1 SaveManager round-trip preserves hearth_level, reign_state String, node_states"):
+		return false
+	print("PASS: Task 1 Modules (ResourceNodeManager, HearthSystem, InteractionResolver) & Save v2 Round-Trip")
 	return true
