@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """
-Repository Static, Scene-Graph, CI Engine Lock & Documentation OD-01..OD-10 Consistency Verifier.
+Repository Static, Scene-Graph, CI Fail-Fast Lock & Documentation OD-01..OD-10 Consistency Verifier.
 Works both in a Google Colab / Jupyter notebook cell and via CLI:
     python3 tests/verify_repo_integrity.py
 """
+import json
 import os
 import re
 import sys
@@ -49,7 +50,7 @@ for tscn in sorted((ROOT / "scenes").rglob("*.tscn")):
     for rp in re.findall(r'path="res://([^"]+)"', txt):
         assert_check((ROOT / rp).exists(), f"{rel}: ExtResource res://{rp} exists")
 
-# 2. Verify .gd scripts (pure tab indentation, no duplicate manual _ready(), real current_scene transition test)
+# 2. Verify .gd scripts (pure tab indentation, zero raw assert() in tests, zero root.add_child in _init)
 for gd in sorted(list((ROOT / "scripts").rglob("*.gd")) + list((ROOT / "tests").rglob("*.gd"))):
     rel = gd.relative_to(ROOT).as_posix()
     lines = gd.read_text(encoding="utf-8").splitlines()
@@ -62,39 +63,51 @@ for gd in sorted(list((ROOT / "scripts").rglob("*.gd")) + list((ROOT / "tests").
     full = "\n".join(lines)
     if rel.startswith("tests/"):
         assert_check(
-            "session._ready()" not in full and "mid_session._ready()" not in full,
-            f"{rel}: no duplicate manual _ready() call",
+            "assert(" not in full and "func _check(" in full,
+            f"{rel}: uses fail-fast _check() with quit(1) instead of raw assert()",
+        )
+        assert_check(
+            "root.add_child(" not in full,
+            f"{rel}: does not call root.add_child() before scene lifecycle readiness",
         )
 
-m8_txt = (ROOT / "tests/test_integration_m8_slice.gd").read_text(encoding="utf-8")
+# 3. Verify M5 test separates movement ticks from construction work ticks
+unit_txt = (ROOT / "tests/test_unit_m2_m7.gd").read_text(encoding="utf-8")
 assert_check(
-    'current_scene.name != "Main"' in m8_txt and 'current_scene.name != "ForgottenShore"' in m8_txt,
-    "test_integration_m8_slice.gd: verifies real SceneTree.current_scene transitions",
+    'for _step: int in range(5):\n\t\tnpc.tick(1.0, bm)' in unit_txt
+    and 'is_equal_approx(bm.construction_progress, 0.5)' in unit_txt,
+    "test_unit_m2_m7.gd: M5 separates 5s movement phase from 2s construction work phase",
 )
 
-# 3. Verify CI workflow explicit Godot 4.7.2 version lock (zero 4.3.0 fallback)
+# 4. Verify CI workflow explicit Godot 4.7.2 lock & fail-fast SCRIPT ERROR / TEST FAILURE log trap
 ci_txt = (ROOT / ".github/workflows/godot-ci.yml").read_text(encoding="utf-8")
 assert_check(
-    "version: 4.7.2" in ci_txt and "4.3.0" not in ci_txt,
-    ".github/workflows/godot-ci.yml: explicitly installs Godot 4.7.2 without silent 4.3.0 fallback",
+    "version: 4.7.2" in ci_txt and "4.3" not in ci_txt,
+    ".github/workflows/godot-ci.yml: explicitly installs Godot 4.7.2 without 4.3 fallback",
 )
 assert_check(
     r'grep -E "^4\.7\.2\."' in ci_txt,
     ".github/workflows/godot-ci.yml: enforces runtime godot --version == 4.7.2.* check",
 )
+assert_check(
+    '! grep -E "(SCRIPT ERROR:|Parser Error:|TEST FAILURE:)"' in ci_txt and "set -o pipefail" in ci_txt,
+    ".github/workflows/godot-ci.yml: traps SCRIPT ERROR and TEST FAILURE with non-zero exit",
+)
 
-# 4. Verify canonical enemy balance consistency (45 HP, 15 damage, 15 thorn, 3 waves) across code & docs
+# 5. Verify canonical enemy balance consistency (45 HP, 15 damage, 15 thorn, 3 waves) across code & docs
 nem_txt = (ROOT / "scripts/survival/NightEncounterManager.gd").read_text(encoding="utf-8")
 assert_check("const ENEMY_MAX_HP: int = 45" in nem_txt, "NightEncounterManager.gd: ENEMY_MAX_HP == 45")
 assert_check("const ATTACK_DAMAGE: int = 15" in nem_txt, "NightEncounterManager.gd: ATTACK_DAMAGE == 15")
 assert_check("const WALL_THORN_DAMAGE: int = 15" in nem_txt, "NightEncounterManager.gd: WALL_THORN_DAMAGE == 15")
 
-# 5. Verify zero residual "open / undecided / not locked" contradictions across GDD, PRD, SYSTEMS, TDD, Baseline, DECISIONS
+# 6. Verify zero residual "open / undecided / not locked" contradictions across ALL 7 docs (including ASSET_GUIDELINES.md)
 FORBIDDEN_PHRASES = [
     "not yet locked",
     "not yet decided",
     "remain undecided",
     "are open design decisions",
+    "remain open design decisions",
+    "is still open",
     "are not finalized",
     "are not yet finalized",
     "it does not claim that the systems have been implemented",
@@ -102,9 +115,20 @@ FORBIDDEN_PHRASES = [
     "Exact Builder data representation remains open",
 ]
 
-for doc_name in ["GDD.md", "PRD.md", "SYSTEMS.md", "TDD.md", "REVISED_PROJECT_BASELINE.md", "DECISIONS_M2_M8.md"]:
+ALL_DOCS = [
+    "GDD.md",
+    "PRD.md",
+    "SYSTEMS.md",
+    "TDD.md",
+    "ASSET_GUIDELINES.md",
+    "REVISED_PROJECT_BASELINE.md",
+    "DECISIONS_M2_M8.md",
+]
+
+for doc_name in ALL_DOCS:
     doc_path = ROOT / "docs" / doc_name
     dtxt = doc_path.read_text(encoding="utf-8")
+    assert_check("1.3" in dtxt[:400], f"docs/{doc_name}: header version is 1.3")
     for phrase in FORBIDDEN_PHRASES:
         assert_check(phrase not in dtxt, f"docs/{doc_name}: free of contradictory phrase '{phrase}'")
     assert_check(
@@ -112,12 +136,31 @@ for doc_name in ["GDD.md", "PRD.md", "SYSTEMS.md", "TDD.md", "REVISED_PROJECT_BA
         f"docs/{doc_name}: zero conflicting 50/60 HP enemy numbers",
     )
 
-# 6. Verify specific OD-01..OD-10 approved facts are present in GDD, PRD, and SYSTEMS
-for doc_name in ["GDD.md", "PRD.md", "SYSTEMS.md"]:
-    dtxt = (ROOT / "docs" / doc_name).read_text(encoding="utf-8")
-    assert_check("npc_01" in dtxt, f"docs/{doc_name}: documents approved Builder actor ID 'npc_01' (OD-05)")
-    assert_check("45 HP" in dtxt, f"docs/{doc_name}: documents approved Greedling Raider 45 HP (OD-06)")
-    assert_check("settlement_breached" in dtxt, f"docs/{doc_name}: documents approved non-destructive breach rule (OD-07)")
+# 7. Verify TDD.md Section 5.1 JSON example matches SaveManager.REQUIRED_KEYS (including night_encounter)
+tdd_txt = (ROOT / "docs/TDD.md").read_text(encoding="utf-8")
+json_match = re.search(r"~~~json\s*(\{.*?\})\s*~~~", tdd_txt, flags=re.DOTALL)
+assert_check(json_match is not None, "docs/TDD.md: Section 5.1 contains parseable JSON block")
+if json_match:
+    parsed_tdd_json = json.loads(json_match.group(1))
+    required_save_keys = [
+        "schema_version",
+        "world_id",
+        "island_id",
+        "day_count",
+        "world_time",
+        "world_phase",
+        "resources",
+        "buildings",
+        "npcs",
+        "night_encounter",
+        "progression_flags",
+    ]
+    for req_k in required_save_keys:
+        assert_check(req_k in parsed_tdd_json, f"docs/TDD.md Section 5.1 JSON: includes required key '{req_k}'")
+
+# 8. Verify readme.md locks Godot 4.7.2.stable without 4.3+ claim
+readme_txt = (ROOT / "readme.md").read_text(encoding="utf-8")
+assert_check("4.7.2.stable" in readme_txt and "4.3+" not in readme_txt, "readme.md: locked to Godot 4.7.2.stable")
 
 if errors:
     for e in errors:

@@ -1,68 +1,155 @@
 extends SceneTree
 
-const UnitSuiteScript = preload("res://tests/test_unit_m2_m7.gd")
-const IntegrationSuiteScript = preload("res://tests/test_integration_m8_slice.gd")
-const MainScene = preload("res://scenes/main/Main.tscn")
-const ForgottenShoreScene = preload("res://scenes/world/ForgottenShore.tscn")
-const TimeManagerScript = preload("res://scripts/world/TimeManager.gd")
-const EconomyLedgerScript = preload("res://scripts/economy/EconomyLedger.gd")
-const BuildingManagerScript = preload("res://scripts/kingdom/BuildingManager.gd")
-const NPCBuilderAgentScript = preload("res://scripts/npc/NPCBuilderAgent.gd")
-const NightEncounterManagerScript = preload("res://scripts/survival/NightEncounterManager.gd")
-const SaveManagerScript = preload("res://scripts/save/SaveManager.gd")
+const TEST_SAVE_PATH: String = "user://test_m8_integration_save.json"
+const MAX_WAIT_FRAMES: int = 120
+
+var _stage: int = 0
+var _wait_frames: int = 0
+var _checks: int = 0
 
 
-func _init() -> void:
-	# Run P0 Unit Checks (M2-M7) + P0 Full Scene Integration Check (M8)
-	_run_p0_unit_checks()
-	_run_m8_scene_integration_check()
-	print("ALL M0-M8 P0 VERTICAL SLICE UNIT & SCENE INTEGRATION TESTS PASSED!")
-	quit(0)
+func _check(cond: bool, msg: String) -> bool:
+	_checks += 1
+	if not cond:
+		printerr("TEST FAILURE [test_integration_m8_slice]: " + msg)
+		quit(1)
+		return false
+	return true
 
 
-func _run_p0_unit_checks() -> void:
-	var ledger: EconomyLedger = EconomyLedgerScript.new({"gold": 2, "wood": 4, "stone": 2})
-	var bm: BuildingManager = BuildingManagerScript.new()
-	var night: NightEncounterManager = NightEncounterManagerScript.new()
-	assert(not ledger.try_add(&"gold", 1.5))
-	assert(bm.request_start_construction(BuildingManager.WALL_POSITION_X, ledger))
-	bm.advance_construction(4.0)
-	night.on_night_started()
-	for _s: int in range(180):
-		night.tick(1.0, true, bm)
-	night.on_sunrise_reached(bm)
-	assert(night.first_night_survived and bm.is_standing())
-	print("PASS: P0 Core Unit Checks (M2-M7)")
+func _initialize() -> void:
+	Engine.set_meta("crownfall_load_on_start", false)
+	var err: Error = change_scene_to_file("res://scenes/main/Main.tscn")
+	_check(err == OK, "Initial change_scene_to_file to Main.tscn")
 
 
-func _run_m8_scene_integration_check() -> void:
-	var test_save_path: String = "user://test_master_slice_save.json"
-	var session: ForgottenShoreSession = ForgottenShoreScene.instantiate() as ForgottenShoreSession
-	root.add_child(session)
-	session.time_manager.auto_advance = false
+func _process(_delta: float) -> bool:
+	_wait_frames += 1
+	if _wait_frames > MAX_WAIT_FRAMES:
+		_check(false, "Scene transition timed out at stage %d" % _stage)
+		return true
 
-	assert(not session.execute_command(&"interact", 0.0))
-	assert(session.execute_command(&"interact", -480.0))
-	assert(not session.execute_command(&"interact", -480.0))
-	assert(session.execute_command(&"interact", -110.0))
-	assert(session.execute_command(&"interact", 190.0))
-	assert(session.execute_command(&"recruit", -220.0))
-	assert(not session.execute_command(&"recruit", -220.0))
-	assert(session.execute_command(&"build_wall", 360.0))
-	assert(not session.execute_command(&"build_wall", 360.0))
+	match _stage:
+		0:
+			if current_scene == null or current_scene.name != "Main":
+				return false
+			var play_btn: Button = current_scene.get_node_or_null("CenterContainer/VBoxContainer/PlayButton") as Button
+			if not _check(play_btn != null, "PlayButton exists on Main.tscn"):
+				return true
+			play_btn.pressed.emit()
+			_wait_frames = 0
+			_stage = 1
+			return false
 
-	for _step: int in range(12):
-		session._process(1.0)
-	assert(session.building_mgr.state == BuildingManager.WallState.COMPLETED)
+		1:
+			if current_scene == null or current_scene.name != "ForgottenShore":
+				return false
+			var session: ForgottenShoreSession = current_scene as ForgottenShoreSession
+			if not _check(session != null and session.time_manager != null, "ForgottenShoreSession and @onready time_manager ready"):
+				return true
+			session.time_manager.auto_advance = false
 
-	session.time_manager.advance_time(480.0)
-	assert(session.time_manager.current_phase == TimeManager.Phase.SUNSET)
-	session.time_manager.advance_time(60.0)
-	assert(session.time_manager.current_phase == TimeManager.Phase.NIGHT)
-	for _step: int in range(180):
-		session._process(1.0)
-	session.time_manager.advance_time(180.0)
-	assert(session.night_mgr.first_night_survived)
-	assert(session.save_game_state(test_save_path))
-	session.free()
-	print("PASS: M8 Scene Integration Check (Main -> ForgottenShore -> Full Loop -> Save/Reload)")
+			if not _check(not session.execute_command(&"interact", 0.0), "Empty interact returns false"):
+				return true
+			if not _check(session.execute_command(&"interact", -480.0), "Collect west gold chest"):
+				return true
+			if not _check(not session.execute_command(&"interact", -480.0), "Duplicate interact returns false"):
+				return true
+			if not _check(session.execute_command(&"interact", -110.0), "Collect timber pile"):
+				return true
+			if not _check(session.execute_command(&"interact", 190.0), "Collect stone outcrop"):
+				return true
+			if not _check(session.execute_command(&"interact", -780.0), "Collect shrine cache"):
+				return true
+			if not _check(session.economy.get_amount(&"gold") == 9 and session.economy.get_amount(&"wood") == 7 and session.economy.get_amount(&"stone") == 4, "Collected balances match 9G/7W/4S"):
+				return true
+
+			if not _check(not session.execute_command(&"recruit", 100.0), "Out-of-range recruit rejected"):
+				return true
+			if not _check(session.execute_command(&"recruit", -220.0), "Recruit Villager at Camp"):
+				return true
+			if not _check(not session.execute_command(&"recruit", -220.0), "Duplicate recruit rejected"):
+				return true
+			if not _check(not session.execute_command(&"build_wall", 0.0), "Out-of-range build_wall rejected"):
+				return true
+			if not _check(session.execute_command(&"build_wall", 360.0), "Fund Wooden Wall at x=360"):
+				return true
+			if not _check(not session.execute_command(&"build_wall", 360.0), "Duplicate build_wall rejected"):
+				return true
+
+			for _step: int in range(12):
+				session._process(1.0)
+			if not _check(session.building_mgr.state == BuildingManager.WallState.COMPLETED and session.building_mgr.durability == 150, "Builder completed wall to 150 HP"):
+				return true
+
+			session.time_manager.advance_time(480.0)
+			if not _check(session.time_manager.current_phase == TimeManager.Phase.SUNSET and session.builder_npc.safety_override_active, "Sunset triggers Builder safety override"):
+				return true
+			for _step: int in range(5):
+				session._process(1.0)
+			if not _check(absf(session.builder_npc.position_x - NPCBuilderAgent.SAFE_ZONE_X) <= NPCBuilderAgent.WORK_RANGE, "Builder reached safe zone"):
+				return true
+
+			session.time_manager.advance_time(60.0)
+			if not _check(session.time_manager.current_phase == TimeManager.Phase.NIGHT, "Night started"):
+				return true
+			for _step: int in range(6):
+				session._process(1.0)
+			var mid_night_x: float = session.night_mgr.enemy_x
+			var mid_night_hp: int = session.night_mgr.enemy_hp
+			if not _check(session.save_game_state(TEST_SAVE_PATH), "Mid-night save succeeded"):
+				return true
+
+			for _step: int in range(174):
+				session._process(1.0)
+			session.time_manager.advance_time(180.0)
+			if not _check(session.time_manager.current_day == 2 and session.night_mgr.first_night_survived and session.building_mgr.durability == 15, "Survived 3-wave Night 1 with 15 HP wall"):
+				return true
+
+			if not _check(session.load_game_state(TEST_SAVE_PATH), "Mid-night state reload succeeded"):
+				return true
+			if not _check(is_equal_approx(session.night_mgr.enemy_x, mid_night_x) and session.night_mgr.enemy_hp == mid_night_hp, "Mid-night enemy position and HP preserved"):
+				return true
+
+			for _step: int in range(174):
+				session._process(1.0)
+			session.time_manager.advance_time(180.0)
+			if not _check(session.save_game_state(), "Sunrise Day 2 default save succeeded"):
+				return true
+
+			var err_back: Error = change_scene_to_file("res://scenes/main/Main.tscn")
+			if not _check(err_back == OK, "Transition back to Main.tscn"):
+				return true
+			_wait_frames = 0
+			_stage = 2
+			return false
+
+		2:
+			if current_scene == null or current_scene.name != "Main":
+				return false
+			var continue_btn: Button = current_scene.get_node_or_null("CenterContainer/VBoxContainer/ContinueButton") as Button
+			if not _check(continue_btn != null and not continue_btn.disabled, "ContinueButton enabled on Main.tscn"):
+				return true
+			continue_btn.pressed.emit()
+			_wait_frames = 0
+			_stage = 3
+			return false
+
+		3:
+			if current_scene == null or current_scene.name != "ForgottenShore":
+				return false
+			var loaded_session: ForgottenShoreSession = current_scene as ForgottenShoreSession
+			if not _check(loaded_session != null and loaded_session.time_manager != null, "Continue transitioned to ForgottenShoreSession"):
+				return true
+			if not _check(loaded_session.time_manager.current_day == 2 and loaded_session.night_mgr.first_night_survived, "Continue loaded Day 2 survived state"):
+				return true
+			if not _check(loaded_session.builder_npc.recruited and loaded_session.building_mgr.durability == 15, "Continue loaded Builder and 15 HP wall"):
+				return true
+			if not _check(loaded_session.execute_command(&"repair_wall", 360.0) and loaded_session.building_mgr.durability == 150, "Day 2 wall repair to 150 HP"):
+				return true
+
+			print("PASS: All %d M8 Multi-Frame Scene Transition & Save/Continue Integration Checks succeeded!" % _checks)
+			quit(0)
+			return true
+
+	return false

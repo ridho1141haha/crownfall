@@ -1,132 +1,154 @@
 extends SceneTree
 
 const TEST_SAVE_PATH: String = "user://test_m8_integration_save.json"
+const MAX_WAIT_FRAMES: int = 120
 
 var _stage: int = 0
+var _wait_frames: int = 0
+var _checks: int = 0
+
+
+func _check(cond: bool, msg: String) -> bool:
+	_checks += 1
+	if not cond:
+		printerr("TEST FAILURE [test_integration_m8_slice]: " + msg)
+		quit(1)
+		return false
+	return true
 
 
 func _initialize() -> void:
-	# Ensure a clean start and load Main.tscn as the active SceneTree.current_scene
 	Engine.set_meta("crownfall_load_on_start", false)
 	var err: Error = change_scene_to_file("res://scenes/main/Main.tscn")
-	assert(err == OK, "Failed initial change_scene_to_file to Main.tscn")
+	_check(err == OK, "Initial change_scene_to_file to Main.tscn")
 
 
 func _process(_delta: float) -> bool:
+	_wait_frames += 1
+	if _wait_frames > MAX_WAIT_FRAMES:
+		_check(false, "Scene transition timed out at stage %d" % _stage)
+		return true
+
 	match _stage:
 		0:
-			# Wait for Main.tscn to become the active current_scene, then press PlayButton
 			if current_scene == null or current_scene.name != "Main":
 				return false
 			var play_btn: Button = current_scene.get_node_or_null("CenterContainer/VBoxContainer/PlayButton") as Button
-			assert(play_btn != null, "PlayButton missing on Main.tscn")
+			if not _check(play_btn != null, "PlayButton exists on Main.tscn"):
+				return true
 			play_btn.pressed.emit()
+			_wait_frames = 0
 			_stage = 1
 			return false
 
 		1:
-			# Verify PlayButton actually transitioned current_scene to ForgottenShore.tscn!
 			if current_scene == null or current_scene.name != "ForgottenShore":
 				return false
 			var session: ForgottenShoreSession = current_scene as ForgottenShoreSession
-			assert(session != null, "Active current_scene is not ForgottenShoreSession")
+			if not _check(session != null and session.time_manager != null, "ForgottenShoreSession and @onready time_manager ready"):
+				return true
 			session.time_manager.auto_advance = false
 
-			# 1. Verify command return accuracy in empty space
-			assert(not session.execute_command(&"interact", 0.0))
+			if not _check(not session.execute_command(&"interact", 0.0), "Empty interact returns false"):
+				return true
+			if not _check(session.execute_command(&"interact", -480.0), "Collect west gold chest"):
+				return true
+			if not _check(not session.execute_command(&"interact", -480.0), "Duplicate interact returns false"):
+				return true
+			if not _check(session.execute_command(&"interact", -110.0), "Collect timber pile"):
+				return true
+			if not _check(session.execute_command(&"interact", 190.0), "Collect stone outcrop"):
+				return true
+			if not _check(session.execute_command(&"interact", -780.0), "Collect shrine cache"):
+				return true
+			if not _check(session.economy.get_amount(&"gold") == 9 and session.economy.get_amount(&"wood") == 7 and session.economy.get_amount(&"stone") == 4, "Collected balances match 9G/7W/4S"):
+				return true
 
-			# 2. Collect all 4 Forgotten Shore caches and verify duplicate interact returns false
-			assert(session.execute_command(&"interact", -480.0)) # +4 Gold -> 6 Gold
-			assert(not session.execute_command(&"interact", -480.0))
-			assert(session.execute_command(&"interact", -110.0)) # +5 Wood -> 7 Wood
-			assert(session.execute_command(&"interact", 190.0))  # +3 Stone -> 4 Stone
-			assert(session.execute_command(&"interact", -780.0)) # +3 Gold (Shrine) -> 9 Gold
-			assert(session.economy.get_amount(&"gold") == 9)
-			assert(session.economy.get_amount(&"wood") == 7)
-			assert(session.economy.get_amount(&"stone") == 4)
+			if not _check(not session.execute_command(&"recruit", 100.0), "Out-of-range recruit rejected"):
+				return true
+			if not _check(session.execute_command(&"recruit", -220.0), "Recruit Villager at Camp"):
+				return true
+			if not _check(not session.execute_command(&"recruit", -220.0), "Duplicate recruit rejected"):
+				return true
+			if not _check(not session.execute_command(&"build_wall", 0.0), "Out-of-range build_wall rejected"):
+				return true
+			if not _check(session.execute_command(&"build_wall", 360.0), "Fund Wooden Wall at x=360"):
+				return true
+			if not _check(not session.execute_command(&"build_wall", 360.0), "Duplicate build_wall rejected"):
+				return true
 
-			# 3. Recruit Villager at Camp (x=-220) and fund Wooden Wall at x=360
-			assert(not session.execute_command(&"recruit", 100.0))
-			assert(session.execute_command(&"recruit", -220.0))
-			assert(not session.execute_command(&"recruit", -220.0))
-			assert(not session.execute_command(&"build_wall", 0.0))
-			assert(session.execute_command(&"build_wall", 360.0))
-			assert(not session.execute_command(&"build_wall", 360.0))
-
-			# 4. Tick Daylight so Builder completes the wall (150 HP)
 			for _step: int in range(12):
 				session._process(1.0)
-			assert(session.building_mgr.state == BuildingManager.WallState.COMPLETED)
-			assert(session.building_mgr.durability == 150)
+			if not _check(session.building_mgr.state == BuildingManager.WallState.COMPLETED and session.building_mgr.durability == 150, "Builder completed wall to 150 HP"):
+				return true
 
-			# 5. Advance to Sunset -> verify Builder retreats to Town Center safe zone
 			session.time_manager.advance_time(480.0)
-			assert(session.time_manager.current_phase == TimeManager.Phase.SUNSET)
-			assert(session.builder_npc.safety_override_active)
+			if not _check(session.time_manager.current_phase == TimeManager.Phase.SUNSET and session.builder_npc.safety_override_active, "Sunset triggers Builder safety override"):
+				return true
 			for _step: int in range(5):
 				session._process(1.0)
-			assert(absf(session.builder_npc.position_x - NPCBuilderAgent.SAFE_ZONE_X) <= NPCBuilderAgent.WORK_RANGE)
+			if not _check(absf(session.builder_npc.position_x - NPCBuilderAgent.SAFE_ZONE_X) <= NPCBuilderAgent.WORK_RANGE, "Builder reached safe zone"):
+				return true
 
-			# 6. Advance to Night -> test mid-night encounter save/load preservation
 			session.time_manager.advance_time(60.0)
-			assert(session.time_manager.current_phase == TimeManager.Phase.NIGHT)
+			if not _check(session.time_manager.current_phase == TimeManager.Phase.NIGHT, "Night started"):
+				return true
 			for _step: int in range(6):
 				session._process(1.0)
 			var mid_night_x: float = session.night_mgr.enemy_x
 			var mid_night_hp: int = session.night_mgr.enemy_hp
-			assert(session.save_game_state(TEST_SAVE_PATH))
+			if not _check(session.save_game_state(TEST_SAVE_PATH), "Mid-night save succeeded"):
+				return true
 
-			# 7. Complete the 180s Night through Sunrise -> auto-saves to user://save_slot_0.json
 			for _step: int in range(174):
 				session._process(1.0)
 			session.time_manager.advance_time(180.0)
-			assert(session.time_manager.current_day == 2)
-			assert(session.night_mgr.first_night_survived)
-			assert(session.building_mgr.durability == 15)
+			if not _check(session.time_manager.current_day == 2 and session.night_mgr.first_night_survived and session.building_mgr.durability == 15, "Survived 3-wave Night 1 with 15 HP wall"):
+				return true
 
-			# Verify mid-night save restores exact enemy position before transitioning back to Main.tscn
-			assert(session.load_game_state(TEST_SAVE_PATH))
-			assert(is_equal_approx(session.night_mgr.enemy_x, mid_night_x))
-			assert(session.night_mgr.enemy_hp == mid_night_hp)
+			if not _check(session.load_game_state(TEST_SAVE_PATH), "Mid-night state reload succeeded"):
+				return true
+			if not _check(is_equal_approx(session.night_mgr.enemy_x, mid_night_x) and session.night_mgr.enemy_hp == mid_night_hp, "Mid-night enemy position and HP preserved"):
+				return true
 
-			# Re-apply Day 2 Sunrise save to default slot so Main.tscn ContinueButton loads Day 2
 			for _step: int in range(174):
 				session._process(1.0)
 			session.time_manager.advance_time(180.0)
-			assert(session.save_game_state())
+			if not _check(session.save_game_state(), "Sunrise Day 2 default save succeeded"):
+				return true
 
-			# Transition back to Main.tscn to test real ContinueButton scene transition
 			var err_back: Error = change_scene_to_file("res://scenes/main/Main.tscn")
-			assert(err_back == OK)
+			if not _check(err_back == OK, "Transition back to Main.tscn"):
+				return true
+			_wait_frames = 0
 			_stage = 2
 			return false
 
 		2:
-			# Wait for Main.tscn to become current_scene, verify ContinueButton is enabled, and press it!
 			if current_scene == null or current_scene.name != "Main":
 				return false
 			var continue_btn: Button = current_scene.get_node_or_null("CenterContainer/VBoxContainer/ContinueButton") as Button
-			assert(continue_btn != null and not continue_btn.disabled, "ContinueButton should be enabled when valid save exists")
+			if not _check(continue_btn != null and not continue_btn.disabled, "ContinueButton enabled on Main.tscn"):
+				return true
 			continue_btn.pressed.emit()
+			_wait_frames = 0
 			_stage = 3
 			return false
 
 		3:
-			# Verify ContinueButton transitioned current_scene to ForgottenShore.tscn AND auto-loaded Day 2 state!
 			if current_scene == null or current_scene.name != "ForgottenShore":
 				return false
 			var loaded_session: ForgottenShoreSession = current_scene as ForgottenShoreSession
-			assert(loaded_session != null)
-			assert(loaded_session.time_manager.current_day == 2, "Loaded current_scene should be on Day 2")
-			assert(loaded_session.night_mgr.first_night_survived, "Loaded current_scene should preserve first_night_survived")
-			assert(loaded_session.builder_npc.recruited, "Loaded current_scene should preserve recruited Builder")
-			assert(loaded_session.building_mgr.durability == 15, "Loaded current_scene should preserve damaged wall (15 HP)")
+			if not _check(loaded_session != null and loaded_session.time_manager != null, "Continue transitioned to ForgottenShoreSession"):
+				return true
+			if not _check(loaded_session.time_manager.current_day == 2 and loaded_session.night_mgr.first_night_survived, "Continue loaded Day 2 survived state"):
+				return true
+			if not _check(loaded_session.builder_npc.recruited and loaded_session.building_mgr.durability == 15, "Continue loaded Builder and 15 HP wall"):
+				return true
+			if not _check(loaded_session.execute_command(&"repair_wall", 360.0) and loaded_session.building_mgr.durability == 150, "Day 2 wall repair to 150 HP"):
+				return true
 
-			# Repair damaged wall on loaded scene and verify completion
-			assert(loaded_session.execute_command(&"repair_wall", 360.0))
-			assert(loaded_session.building_mgr.state == BuildingManager.WallState.COMPLETED)
-			assert(loaded_session.building_mgr.durability == 150)
-			print("PASS: M8 Full Multi-Frame Scene Transition & Save/Continue Integration Test!")
+			print("PASS: All %d M8 Multi-Frame Scene Transition & Save/Continue Integration Checks succeeded!" % _checks)
 			quit(0)
 			return true
 

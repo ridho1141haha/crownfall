@@ -33,16 +33,28 @@ jobs:
           echo "${ACTUAL_VERSION}" | grep -E "^4\.7\.2\."
 
       - name: Verify Project Import & Parser
-        run: godot --headless --import
+        run: |
+          set -o pipefail
+          godot --headless --import 2>&1 | tee /tmp/godot_import.log
+          ! grep -E "(SCRIPT ERROR:|Parser Error:|TEST FAILURE:)" /tmp/godot_import.log
 
       - name: Run P0 Unit Tests (M2-M7 + Extreme Save Rollback)
-        run: godot --headless --script res://tests/test_unit_m2_m7.gd
+        run: |
+          set -o pipefail
+          godot --headless --script res://tests/test_unit_m2_m7.gd 2>&1 | tee /tmp/godot_unit.log
+          ! grep -E "(SCRIPT ERROR:|Parser Error:|TEST FAILURE:)" /tmp/godot_unit.log
+          grep -q "PASS: All .* P0 Unit Checks" /tmp/godot_unit.log
 
       - name: Run P0 Scene Integration Test (M8 Real Scene Transitions & Full Loop)
-        run: godot --headless --script res://tests/test_integration_m8_slice.gd
-
-      - name: Run Combined P0 Vertical Slice Suite
-        run: godot --headless --script res://tests/test_vertical_slice.gd
+        run: |
+          set -o pipefail
+          godot --headless --script res://tests/test_integration_m8_slice.gd 2>&1 | tee /tmp/godot_m8.log
+          ! grep -E "(SCRIPT ERROR:|Parser Error:|TEST FAILURE:)" /tmp/godot_m8.log
+          grep -q "PASS: All .* M8 Multi-Frame Scene Transition" /tmp/godot_m8.log
 
       - name: Run Experimental P1 Skeleton Tests (M9-M10)
-        run: godot --headless --script res://tests/test_experimental_p1_m9_m10.gd
+        run: |
+          set -o pipefail
+          godot --headless --script res://tests/test_experimental_p1_m9_m10.gd 2>&1 | tee /tmp/godot_p1.log
+          ! grep -E "(SCRIPT ERROR:|Parser Error:|TEST FAILURE:)" /tmp/godot_p1.log
+          grep -q "PASS: All .* Experimental P1 Skeleton Checks" /tmp/godot_p1.log
