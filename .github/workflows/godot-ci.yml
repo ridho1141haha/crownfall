@@ -21,6 +21,7 @@ jobs:
         run: |
           python3 -m pip install --quiet pillow
           python3 scripts/tools/generate_pixel_assets.py
+          python3 scripts/tools/generate_sfx_assets.py
 
       - name: Run Repository Static, Scene-Graph & OD-01..OD-10 Consistency Verifier
         run: python3 tests/verify_repo_integrity.py
