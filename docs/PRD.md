@@ -5,11 +5,11 @@
 **Product:** CROWNFALL: THE LAST LIGHT
 **Platform:** Windows PC
 **Engine:** Godot 4
-**Product Stage:** Pre-production — Single-Player Vertical Slice
+**Product Stage:** M0–M8 Vertical Slice Prototype Implemented (`Godot 4.7.2.stable`)
 **Development Model:** Solo Developer + AI Assistance
 **Source of Truth:** `docs/REVISED_PROJECT_BASELINE.md`
 
-> **Scope authority:** This PRD is aligned with the Revised Project Baseline v1.3 & `docs/DECISIONS_M2_M8.md`, GDD v1.2, SYSTEMS v1.2, and TDD v1.2. The first playable target is a single-player vertical slice. Online multiplayer remains a long-term product goal, but is not part of the first slice or its acceptance criteria.
+> **Scope authority:** This PRD is aligned with the Revised Project Baseline v1.3 & `docs/DECISIONS_M2_M8.md`, GDD v1.3, SYSTEMS v1.3, and TDD v1.3. The first playable target is a single-player vertical slice. Online multiplayer remains a long-term product goal, but is not part of the first slice or its acceptance criteria.
 
 ---
 
@@ -685,7 +685,7 @@ Rules:
 - Changes to product scope, priorities, or acceptance criteria update this PRD.
 - Changes to art production standards update ASSET_GUIDELINES.
 - Approved decisions with lasting architectural or product consequences should be recorded as ADRs when the ADR structure is introduced.
-- If documents conflict, the Revised Project Baseline v1.1 governs the decisions it explicitly defines until all documents are synchronized.
+- If documents conflict, the Revised Project Baseline v1.3 (`docs/DECISIONS_M2_M8.md`) governs the decisions it explicitly defines until all documents are synchronized.
 
 ---
 
@@ -711,7 +711,7 @@ These long-term goals must be validated and prioritized incrementally. They are 
 
 Project: CROWNFALL: THE LAST LIGHT  
 Document: PRD.md  
-Version: 1.2
+Version: 1.3
 
 
 ---

@@ -4,7 +4,7 @@
 **Document Version:** 1.3
 **Baseline:** Revised Project Baseline v1.3 & `docs/DECISIONS_M2_M8.md`
 **Engine:** Godot 4
-**Status:** Pre-production — Single-Player Vertical Slice
+**Status:** M0–M8 Vertical Slice Prototype Implemented (`Godot 4.7.2.stable`)
 
 ---
 
@@ -12,7 +12,7 @@
 
 This document defines the responsibilities, behavior, state transitions, invariants, and test expectations of the gameplay systems in CROWNFALL.
 
-The approved first playable target is a single-player vertical slice on Forgotten Shore. This document describes intended system behavior; it does not claim that the systems have been implemented.
+The approved first playable target is a single-player vertical slice on Forgotten Shore. This document specifies the required system behavior and invariants; the P0 systems (`M0–M8`) are implemented in `scripts/` and verified by `tests/`, with `OD-01`..`OD-10` resolved in `docs/DECISIONS_M2_M8.md`.
 
 | Priority | Meaning |
 |---|---|
@@ -503,7 +503,7 @@ Never report a test as passed unless it has actually run. Distinguish static rev
 
 Project: CROWNFALL: THE LAST LIGHT  
 Document: SYSTEMS.md  
-Version: 1.2
+Version: 1.3
 
 
 ---

@@ -7,7 +7,7 @@
 **Engine:** Godot 4
 **Language:** GDScript
 **Platform Target:** Windows PC
-**Status:** Pre-production — Single-Player Vertical Slice
+**Status:** M0–M8 Vertical Slice Prototype Implemented (`Godot 4.7.2.stable`)
 
 ---
 
@@ -238,7 +238,7 @@ The Revised Project Baseline defines approved cross-project scope. This GDD owns
 
 Project: CROWNFALL: THE LAST LIGHT  
 Document: GDD.md  
-Version: 1.2
+Version: 1.3
 
 
 ---

@@ -7,7 +7,7 @@
 **Language:** GDScript
 **Platform Target:** Windows PC
 **Architecture Direction:** Simulation / Presentation Separation
-**Status:** Pre-production — Single-Player Vertical Slice
+**Status:** M0–M8 Vertical Slice Prototype Implemented (`Godot 4.7.2.stable`)
 
 ---
 
@@ -268,7 +268,7 @@ Intended flow:
 7. If invalid, attempt the backup and report the recovery result.
 8. Never overwrite a valid backup with malformed data.
 
-The exact replacement/rename sequence must be verified against the selected Godot version and target filesystem during M7. Do not claim atomicity merely because a temporary filename is used.
+Implemented in `SaveManager._safe_replace_file()`: writes and validates `.tmp`, stages and validates `.bak` via `.bak.tmp`, attempts direct atomic POSIX rename first, and falls back to Windows-safe staged `.old` swap with automatic rollback from `.old`/`.bak` if replacement fails.
 
 ### 5.4 Save Test Cases
 
@@ -297,7 +297,7 @@ Testing should grow with the project rather than requiring a complex framework b
 | Manual runtime tests | Verify movement, collisions, visuals, controls, and gameplay feel |
 | Regression checks | Re-run critical prior tests after changes |
 
-The test framework and automation tooling are not yet selected. Choose them when M0/M3 implementation needs are clear.
+Automated testing uses Godot 4 headless SceneTree scripts (`tests/test_unit_m2_m7.gd`, `tests/test_integration_m8_slice.gd`, `tests/test_experimental_p1_m9_m10.gd`), `tests/verify_repo_integrity.py`, and `.github/workflows/godot-ci.yml`.
 
 ### 6.2 Required Feature Tests
 
@@ -391,15 +391,15 @@ A generated file, static code review, or successful parser check alone does not 
 
 ## 10. Open Technical Decisions
 
-| Decision | Needed Before | Notes |
+| Decision | Status | Resolution Reference (`docs/DECISIONS_M2_M8.md`) |
 |---|---|---|
-| Exact Godot stable patch and project settings | M0 | Record the version used to initialize the project |
-| Input map and movement tuning | M0/M1 | Validate by runtime feel |
-| Test framework/tooling | M3 | Select based on actual project requirements |
-| Resource collection representation | M3 | Must match the approved GDD rules |
-| Builder data representation | M5 | Depends on GDD/SYSTEMS decision |
-| Final save schema and required NPC fields | M7 | Freeze only after persistent state is known |
-| ENet connectivity/relay strategy | M9 | Requires external network testing |
+| Exact Godot stable patch and project settings | **Resolved (M0)** | Verified on **Godot `4.7.2.stable`** (`1280x720`, `gl_compatibility`) |
+| Input map and movement tuning | **Resolved (M1)** | `A/D`, `E`, `R`, `B`, `F`, `T`, `K` (`move_speed = 240.0`) |
+| Test framework/tooling | **Resolved (M3/M8)** | Headless `SceneTree` suites + `tests/verify_repo_integrity.py` + GitHub Actions CI |
+| Resource collection representation | **Resolved (M3)** | 4 single-use Forgotten Shore caches (`OD-01`) |
+| Builder data representation | **Resolved (M5)** | Persistent `NPCBuilderAgent` (`id="npc_01"`, `OD-05`) |
+| Final save schema and required NPC fields | **Resolved (M7)** | `schema_version: 1` with multi-plot `buildings[]`, `npcs[]`, and `night_encounter` (`OD-09`) |
+| ENet connectivity/relay strategy | **Open (Deferred to M9)** | Requires two-peer external network testing before M9 sign-off |
 
 ---
 
@@ -407,4 +407,4 @@ A generated file, static code review, or successful parser check alone does not 
 
 Project: CROWNFALL: THE LAST LIGHT  
 Document: TDD.md  
-Version: 1.2
+Version: 1.3

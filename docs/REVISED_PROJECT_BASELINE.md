@@ -515,7 +515,7 @@ Commit M0 and M1 as separate focused changes. Do not combine all later game syst
 
 ## 14. Documentation ownership and synchronization
 
-The current documentation set is synchronized to baseline v1.2. Maintain these ownership boundaries:
+The current documentation set is synchronized to baseline v1.3. Maintain these ownership boundaries:
 
 - **README:** concise public-facing project summary and honest repository/implementation status.
 - **PRD:** product scope, requirement IDs, priorities, acceptance criteria, risks, and success definition.
@@ -542,7 +542,7 @@ All ten P0 vertical-slice open decisions (`OD-01` through `OD-10`) have been for
 | OD-03 | Stone's concrete first-slice purpose | **Resolved (v1.3)** | Required for Wooden Wall foundation (`2G, 4W, 2S`) & repair (`2W, 1S`) |
 | OD-04 | Wooden Wall placement, footprint, cost, duration, repair, and refund rules | **Resolved (v1.3)** | East plot `x=360`, `4.0s` build, `150 HP` completed, partial barricade HP if unfinished, no refund |
 | OD-05 | Builder as assignment, profession, role, or separate actor representation | **Resolved (v1.3)** | Persistent `NPCBuilderAgent` (`id="npc_01"`, `role: "villager" -> "builder"`) |
-| OD-06 | First enemy identity, behavior, tuning, and spawn conditions | **Resolved (v1.3)** | 3 paced Greedling Raider waves (`t=0s, 55s, 110s`, `50 HP`, `15 dmg/s`, `10 thorn dmg`) |
+| OD-06 | First enemy identity, behavior, tuning, and spawn conditions | **Resolved (v1.3)** | 3 paced Greedling Raider waves (`t=0s, 55s, 110s`, `45 HP`, `15 dmg/s`, `15 thorn dmg`) |
 | OD-07 | Wall destruction, settlement breach, NPC loss, and first-night failure outcomes | **Resolved (v1.3)** | Non-destructive breach (`settlement_breached = true`); rebuildable on next day |
 | OD-08 | Minimal exploration reward or point-of-interest interaction | **Resolved (v1.3)** | Far-west Forgotten Shrine (`x=-780`) granting `+3 Gold` |
 | OD-09 | Persistent NPC fields and final save payload | **Resolved (v1.3)** | `schema_version: 1` including multi-plot `buildings[]`, `npcs[]`, and `night_encounter` state |
