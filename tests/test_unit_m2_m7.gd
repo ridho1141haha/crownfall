@@ -6,6 +6,7 @@ const BuildingManagerScript = preload("res://scripts/kingdom/BuildingManager.gd"
 const NPCBuilderAgentScript = preload("res://scripts/npc/NPCBuilderAgent.gd")
 const NightEncounterManagerScript = preload("res://scripts/survival/NightEncounterManager.gd")
 const SaveManagerScript = preload("res://scripts/save/SaveManager.gd")
+const NPCPopulationManagerScript = preload("res://scripts/npc/NPCPopulationManager.gd")
 
 var _failures: int = 0
 var _checks: int = 0
@@ -39,6 +40,10 @@ func _init() -> void:
 	if not _test_p1_p2_farm_watchtower_stone_wall():
 		return
 	if not _test_m7_schema_v1_migration():
+		return
+	if not _test_p3_multi_npc_tool_stands_and_lock():
+		return
+	if not _test_p4_light_burn_and_enemy_archetypes():
 		return
 	if _failures > 0:
 		quit(1)
@@ -368,4 +373,76 @@ func _test_m7_schema_v1_migration() -> bool:
 	if not _check(int(d["schema_version"]) == 2 and d.has("player") and d["progression_flags"].has("reign_state"), "M7 v1 save migrated to schema_version 2"):
 		return false
 	print("PASS: M7 SaveManager v1 -> v2 Migration Test")
+	return true
+
+
+func _test_p3_multi_npc_tool_stands_and_lock() -> bool:
+	var ledger: EconomyLedger = EconomyLedgerScript.new({"gold": 12, "wood": 12, "stone": 12})
+	var bm: BuildingManager = BuildingManagerScript.new()
+	bm.register_forgotten_shore_expansion_plots()
+	var pop: NPCPopulationManager = NPCPopulationManagerScript.new()
+	pop.camp_vagrants_available = 2
+
+	# Recruit npc_01 (builder) and npc_02 (villager -> farmer via scythe_stand)
+	var a1: NPCBuilderAgent = pop.recruit_next_vagrant(-220.0, ledger)
+	var a2: NPCBuilderAgent = pop.recruit_next_vagrant(-220.0, ledger)
+	if not _check(a1 != null and a1.role == "builder" and a2 != null and a2.role == "villager", "P3 recruited npc_01 builder + npc_02 villager"):
+		return false
+	var farmer: NPCBuilderAgent = pop.assign_tool_stand("scythe_stand", ledger, bm)
+	if not _check(farmer != null and farmer.role == "farmer", "P3 assigned villager to farmer via scythe_stand"):
+		return false
+
+	# Task claiming lock: npc_01 claims wall_east_01; another builder cannot double-claim it
+	bm.request_start_construction(BuildingManager.WALL_POSITION_X, ledger, BuildingManager.WALL_ID)
+	if not _check(bm.claim_plot(BuildingManager.WALL_ID, "npc_01") and not bm.claim_plot(BuildingManager.WALL_ID, "npc_03"), "P3 task claiming lock prevents double-claim"):
+		return false
+	bm.release_plot_claim(BuildingManager.WALL_ID, "npc_01")
+
+	# Recruit npc_03 -> archer via bow_stand and verify Watchtower night volley
+	pop.on_sunrise_refill()
+	var a3: NPCBuilderAgent = pop.recruit_next_vagrant(-220.0, ledger)
+	var archer: NPCBuilderAgent = pop.assign_tool_stand("bow_stand", ledger, bm)
+	if not _check(a3 != null and archer != null and archer.role == "archer", "P3 assigned archer via bow_stand"):
+		return false
+
+	bm.request_start_construction(BuildingManager.WATCHTOWER_POSITION_X, ledger, BuildingManager.WATCHTOWER_ID)
+	bm.advance_construction(3.5, BuildingManager.WATCHTOWER_ID)
+	var night: NightEncounterManager = NightEncounterManagerScript.new()
+	night.on_night_started()
+	night.enemy_x = 320.0
+	archer.position_x = BuildingManager.WATCHTOWER_POSITION_X
+	archer.tick(0.5, bm, night)
+	if not _check(night.enemy_hp == 5, "P3 Watchtower Archer dealt 40 volley dmg (45 -> 5 HP)"):
+		return false
+
+	var saved: Array[Dictionary] = pop.to_save_array()
+	var pop2: NPCPopulationManager = NPCPopulationManagerScript.new()
+	if not _check(pop2.apply_save_array(saved) and pop2.agents.size() == 3, "P3 multi-NPC save/load round-trip"):
+		return false
+	print("PASS: P3 Multi-NPC (Builder, Farmer, Archer), Tool Stands & Task Claiming Lock")
+	return true
+
+
+func _test_p4_light_burn_and_enemy_archetypes() -> bool:
+	# Verify Day 3 spawns Brute (160 HP) and Solar Brazier Lv.3 (460 px) weakens wall damage by 20% + deals 4 dps burn
+	var ledger: EconomyLedger = EconomyLedgerScript.new({"gold": 6, "wood": 6, "stone": 7})
+	var bm: BuildingManager = BuildingManagerScript.new()
+	bm.request_start_construction(BuildingManager.WALL_POSITION_X, ledger)
+	bm.advance_construction(4.0)
+	bm.request_upgrade_wall(BuildingManager.WALL_POSITION_X, ledger)
+
+	var night: NightEncounterManager = NightEncounterManagerScript.new()
+	night.on_night_started(3)
+	if not _check(night.get_wave_archetype(3, 3) == "brute" and NightEncounterManager.get_hearth_radius(3) == 460.0, "P4 Day 3 wave 4 is Brute and Hearth Lv3 reaches 460 px"):
+		return false
+
+	# Tick 12s inside Hearth Lv3 light (enemy starts at 820, reaches 386 in ~4.6s, enters 460px at ~3.8s)
+	for _s: int in range(12):
+		night.tick(1.0, true, bm, 3)
+	# Under Lv3 light, Raider deals 12 dmg/hit instead of 15 (weakened 20%) and takes burn DoT
+	if not _check(bm.durability > 260 - 45, "P4 Hearth Lv3 Weakened Strike reduced wall damage"):
+		return false
+	if not _check(NightEncounterManager.get_night_forecast(3).contains("Brute"), "P4 Day 3 forecast telegraphs Brute"):
+		return false
+	print("PASS: P4 The Last Light (Hearth Lv3, Burn DoT, Weakened Strike, Brute & Forecast)")
 	return true
