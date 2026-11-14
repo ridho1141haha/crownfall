@@ -94,7 +94,11 @@ assert_check(
     ".github/workflows/godot-ci.yml: traps SCRIPT ERROR and TEST FAILURE with non-zero exit",
 )
 
-# 5. Verify canonical enemy balance consistency (45 HP, 15 damage, 15 thorn, 3 waves) across code & docs
+# 5. Verify canonical enemy balance consistency (45 HP, 15 damage, 15 thorn, 3 waves) across data/enemies.json & fallback constants
+enemies_json = json.loads((ROOT / "data/enemies.json").read_text(encoding="utf-8"))
+raider_stats = enemies_json.get("archetypes", {}).get("raider", {})
+assert_check(int(raider_stats.get("hp", 0)) == 45, "data/enemies.json: raider.hp == 45")
+assert_check(int(raider_stats.get("damage", 0)) == 15, "data/enemies.json: raider.damage == 15")
 nem_txt = (ROOT / "scripts/survival/NightEncounterManager.gd").read_text(encoding="utf-8")
 assert_check("const ENEMY_MAX_HP: int = 45" in nem_txt, "NightEncounterManager.gd: ENEMY_MAX_HP == 45")
 assert_check("const ATTACK_DAMAGE: int = 15" in nem_txt, "NightEncounterManager.gd: ATTACK_DAMAGE == 15")
