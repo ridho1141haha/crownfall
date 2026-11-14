@@ -38,6 +38,8 @@ func _init() -> void:
 		return
 	if not _test_p1_p2_farm_watchtower_stone_wall():
 		return
+	if not _test_m7_schema_v1_migration():
+		return
 	if _failures > 0:
 		quit(1)
 		return
@@ -337,4 +339,33 @@ func _test_p1_p2_farm_watchtower_stone_wall() -> bool:
 	if not _check(bm.max_durability == BuildingManager.STONE_WALL_MAX_DURABILITY and bm.get_thorn_damage() == 20, "P2 Stone Wall Lv2 has 260 HP and 20 thorn dmg"):
 		return false
 	print("PASS: P1/P2 Farm Plot, Watchtower & Stone Wall Tier 2 Unit Test")
+	return true
+
+
+func _test_m7_schema_v1_migration() -> bool:
+	var sm: SaveManager = SaveManagerScript.new()
+	var v1_path: String = "user://test_unit_save_v1.json"
+	var v1_payload: Dictionary = {
+		"schema_version": 1,
+		"world_id": "aetherion",
+		"island_id": "forgotten_shore",
+		"day_count": 2,
+		"world_time": 5.0,
+		"world_phase": "daylight",
+		"resources": {"gold": 4, "wood": 3, "stone": 2},
+		"buildings": [{"id": "wall_east_01", "state": "COMPLETED", "durability": 150, "max_durability": 150, "progress": 1.0}],
+		"npcs": [{"id": "npc_01", "recruited": true, "role": "builder", "state": "IDLE", "position_x": 0.0}],
+		"night_encounter": {"night_active": false, "night_elapsed": 0.0, "spawned_wave_count": 0, "enemy_active": false, "enemy_x": 820.0, "enemy_hp": 0, "settlement_breached": false, "first_night_survived": true},
+		"progression_flags": {"first_night_survived": true},
+	}
+	var f: FileAccess = FileAccess.open(v1_path, FileAccess.WRITE)
+	f.store_string(JSON.stringify(v1_payload))
+	f.close()
+	var loaded: Dictionary = sm.load_state(v1_path)
+	if not _check(bool(loaded.get("ok", false)), "M7 v1 legacy save loads cleanly via migration"):
+		return false
+	var d: Dictionary = loaded["data"]
+	if not _check(int(d["schema_version"]) == 2 and d.has("player") and d["progression_flags"].has("reign_state"), "M7 v1 save migrated to schema_version 2"):
+		return false
+	print("PASS: M7 SaveManager v1 -> v2 Migration Test")
 	return true
