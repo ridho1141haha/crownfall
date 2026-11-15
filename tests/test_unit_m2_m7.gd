@@ -25,6 +25,86 @@ func _check(cond: bool, msg: String) -> bool:
 	return true
 
 
+func _test_v143_era_progression() -> bool:
+	# 1. Wood Age bawaan; loader data-driven dari data/eras.json
+	var era: EraProgressionManager = EraProgressionManager.new()
+	if not _check(era.get_era_id() == "wood_age" and era.get_era_name() == "Wood Age", "v1.4.3 Era starts at Wood Age from data/eras.json"):
+		return false
+
+	# 2. Stone Age terbuka oleh Stone Wall Tier 2 (bertahap, tidak sekaligus)
+	if not _check(era.notify_stone_wall_built() and era.get_era_id() == "stone_age", "v1.4.3 Stone Wall Tier 2 unlocks Stone Age"):
+		return false
+	if not _check(not era.notify_stone_wall_built(), "v1.4.3 Stone Age notification is idempotent"):
+		return false
+
+	# 3. Iron Age terbuka saat vessel ready (Shipwreck Stage 3)
+	var era2: EraProgressionManager = EraProgressionManager.new()
+	if not _check(era2.notify_vessel_ready() and era2.get_era_id() == "iron_age", "v1.4.3 Vessel ready unlocks Iron Age"):
+		return false
+
+	# 4. Simpan/muat era
+	var era3: EraProgressionManager = EraProgressionManager.new()
+	if not _check(not era3.apply_save_era("bogus_era") and era3.get_era_id() == "wood_age", "v1.4.3 apply_save_era rejects unknown id"):
+		return false
+	if not _check(era3.apply_save_era("stone_age") and era3.to_save_id() == "stone_age", "v1.4.3 apply_save_era restores Stone Age"):
+		return false
+
+	# 5. Migrasi save lama: backfill current_day_number dari day_count dan
+	#    inferensi era dari bangunan batu
+	var ne_v1: Dictionary = NightEncounterManagerScript.new().to_save_dict()
+	ne_v1.erase("current_day_number")
+	var v1_payload: Dictionary = {
+		"schema_version": 1, "world_id": "aetherion", "island_id": "forgotten_shore",
+		"day_count": 2, "world_time": 10.0, "world_phase": "night",
+		"resources": {"gold": 2, "wood": 2, "stone": 1},
+		"buildings": [{"id": "wall_east_01", "type": "stone_wall", "state": "COMPLETED", "durability": 260, "max_durability": 260}],
+		"npcs": [{"id": "npc_01", "recruited": true, "role": "builder", "state": "IDLE", "position_x": 0.0}],
+		"night_encounter": ne_v1,
+		"progression_flags": {"first_night_survived": false},
+	}
+	var migrated_v1: Dictionary = SaveManagerScript.migrate_payload(v1_payload) as Dictionary
+	var mig_pf: Dictionary = migrated_v1["progression_flags"] as Dictionary
+	if not _check(String(mig_pf.get("era_id", "")) == "stone_age", "v1.4.3 v1 migration infers Stone Age from stone wall"):
+		return false
+	if not _check(int((migrated_v1["night_encounter"] as Dictionary).get("current_day_number", 0)) == 2, "v1.4.3 migration backfills current_day_number from day_count"):
+		return false
+	var v1_wo: Dictionary = v1_payload.duplicate(true)
+	(v1_wo["buildings"] as Array)[0] = {"id": "wall_east_01", "type": "wooden_wall", "state": "COMPLETED", "durability": 150, "max_durability": 150}
+	var migrated_wo: Dictionary = SaveManagerScript.migrate_payload(v1_wo) as Dictionary
+	if not _check(String((migrated_wo["progression_flags"] as Dictionary).get("era_id", "")) == "wood_age", "v1.4.3 migration infers Wood Age without stone wall"):
+		return false
+
+	# 6. Validasi ketat: era_id asing ditolak
+	var sm_era: SaveManager = SaveManagerScript.new()
+	var era_payload: Dictionary = {
+		"schema_version": 2, "world_id": "aetherion", "island_id": "forgotten_shore",
+		"day_count": 1, "world_time": 0.0, "world_phase": "daylight",
+		"resources": {"gold": 2, "wood": 2, "stone": 1},
+		"buildings": [{"id": "wall_east_01", "type": "wooden_wall", "state": "COMPLETED", "durability": 150, "max_durability": 150}],
+		"npcs": [{"id": "npc_01", "recruited": true, "role": "builder", "state": "IDLE", "position_x": 0.0}],
+		"night_encounter": NightEncounterManagerScript.new().to_save_dict(),
+		"progression_flags": {"era_id": "space_age"},
+	}
+	if not _check(not sm_era.validate_payload(era_payload), "v1.4.3 SaveManager rejects unknown era_id"):
+		return false
+
+	# 7. Sesi: era tersimpan & dipulihkan lewat jalur apply transaksional
+	var session_script2: GDScript = load("res://scripts/world/ForgottenShoreSession.gd")
+	var sess_era: ForgottenShoreSession = session_script2.new()
+	sess_era.era_mgr.apply_save_era("stone_age")
+	var era_payload2: Dictionary = sess_era.build_save_payload()
+	if not _check(String((era_payload2["progression_flags"] as Dictionary).get("era_id", "")) == "stone_age", "v1.4.3 session save payload carries era_id"):
+		return false
+	sess_era.era_mgr = EraProgressionManager.new()
+	if not _check(sess_era.era_mgr.get_era_id() == "wood_age" and sess_era._apply_loaded_payload(era_payload2), "v1.4.3 transactional payload apply restores era"):
+		return false
+	if not _check(sess_era.era_mgr.get_era_id() == "stone_age", "v1.4.3 era restored after transactional payload apply"):
+		return false
+
+	print("PASS: v1.4.3 Era Progression (Wood -> Stone -> Iron) & Save Migration")
+	return true
+
+
 func _init() -> void:
 	# Run EVERY suite even after failures, then report a full recap
 	var suite_names: Array[String] = [
@@ -32,6 +112,7 @@ func _init() -> void:
 		"M6 Balance", "M6 Watchtower Support", "M7 Atomic Save", "P1/P2 Tier2",
 		"M7 v1->v2 Migration", "P3 Multi-NPC", "P4 Last Light", "P5/P7 Shipwreck",
 		"Task1 Modules", "Task2 Softlock/Flare", "P0 Atomicity/Bounds", "v1.4.1 Forest",
+		"v1.4.3 Era",
 	]
 	var suites: Array[Callable] = [
 		_test_m2_world_clock, _test_m3_economy_invariants, _test_m4_building_and_multiplot,
@@ -42,6 +123,7 @@ func _init() -> void:
 		_test_p5_shipwreck_and_v2_save, _test_task1_modules_and_save_roundtrip,
 		_test_task2_softlock_flare_west_lane, _test_p0_atomicity_and_bounds,
 		_test_v141_forest_autochop_and_west_guard,
+		_test_v143_era_progression,
 	]
 	var failed_suites: Array[String] = []
 	for i: int in range(suites.size()):
@@ -691,6 +773,13 @@ func _test_v141_forest_autochop_and_west_guard() -> bool:
 	bm.request_start_construction(BuildingManager.FARM_EAST_POSITION_X, f_ledger, BuildingManager.FARM_EAST_ID)
 	bm.advance_construction(3.5, BuildingManager.FARM_EAST_ID)
 	var hs_chk: HearthSystem = HearthSystemScript.new()
+	# Node batu terdekat (stone_outcrop_east, x=190; jarak 65) lebih dekat daripada
+	# Watchtower (x=210; jarak 85), dan resolver lintas-kategori memang memilih target
+	# terdekat. Kumpulkan dulu agar pengujian benar-benar menguji seleksi plot.
+	if not _check(bool(rnm.try_collect("stone_outcrop_east", 125.0, f_ledger)["ok"]), "v1.4.2 Stone outcrop (x=190) collected to isolate plot-selection test at x=125"):
+		return false
+	if not _check(bm.get_nearest_actionable_plot_id(125.0, BuildingManager.INTERACT_RANGE, "any") == BuildingManager.WATCHTOWER_ID, "v1.4.2 get_nearest_actionable_plot_id skips COMPLETED Farm East and returns Watchtower at x=125"):
+		return false
 	var overlap_tgt: Dictionary = InteractionResolverScript.resolve_nearest(125.0, rnm, bm, null, hs_chk, 0, -1350.0, 1350.0, false)
 	if not _check(String(overlap_tgt.get("target_id", "")) == BuildingManager.WATCHTOWER_ID, "v1.4.2 Completed Farm East (x=120) does not block actionable Watchtower (x=210) at x=125"):
 		return false

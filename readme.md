@@ -33,8 +33,11 @@ Open `project.godot` in **Godot `4.7.2.stable`** and press **F5**:
   - `R`: Recruit Villager as Builder at Vagrant Camp (`x = -220`, cost: `2 Gold`)
   - `B`: Fund Wooden Wall construction at Eastern Wall Plot (`x = 380`, cost: `2 Gold, 4 Wood, 2 Stone`)
   - `F`: Fund instant wall repair when damaged (`cost: 2 Wood, 1 Stone`)
+  - `Q`: Upgrade the highlighted structure (`Wooden Wall` -> `Stone Wall Tier 2` at the Eastern/Western Wall plot for `3 Gold, 2 Wood, 5 Stone`; `Town Center Hearth` -> next light tier when in range)
+  - `Space`: Kindle Flare during active Night combat (`1 Wood`, `+50%` Hearth burn & Watchtower damage for `8s`, `25s` cooldown)
   - `T`: Toggle `1x` / `20x` clock speed for testing phase transitions
   - `K`: Trigger manual local save (`user://save_slot_0.json`, disabled during active Night combat)
+  - `Esc`: Toggle the in-game pause menu (Resume, Save Game, Settings, Return to Main Menu — returning with unsaved progress asks for confirmation first)
 
 ### 2. Run Automated Test Suites (Headless CLI)
  The repository separates unit tests, full scene integration tests (`Main.tscn` → `ForgottenShore.tscn`), and experimental P1 tests:

@@ -31,6 +31,7 @@ var hearth_sys: HearthSystem = HearthSystem.new()
 var pop_mgr: NPCPopulationManager = NPCPopulationManager.new()
 var builder_npc: NPCBuilderAgent = null
 var night_mgr: NightEncounterManager = NightEncounterManager.new()
+var era_mgr: EraProgressionManager = EraProgressionManager.new()
 var save_mgr: SaveManager = SaveManager.new()
 
 # Backward-compatible mirror for tests inspecting collected_node_ids directly
@@ -62,6 +63,7 @@ var _signals_wired: bool = false
 var _anim_clock: float = 0.0
 var _prev_builder_x: float = NPCBuilderAgent.CAMP_POSITION_X
 var _active_target: Dictionary = {}
+var _last_saved_signature: int = 0
 
 @onready var time_manager: TimeManager = $TimeManager as TimeManager
 @onready var player: PlayerController = $Player as PlayerController
@@ -89,6 +91,8 @@ func _ready() -> void:
 	_wire_signals()
 	_consume_pending_load_if_requested()
 	_sync_all_presentations()
+	_sync_plot_label_data()
+	_last_saved_signature = _unsaved_signature()
 	feedback_message.emit("Forgotten Shore: [A/D] Move | [E] Interact | [Q] Upgrade | [R] Recruit | [B] Build | [F] Repair | [T] 20x | [K] Save | [Esc] Pause")
 
 
@@ -233,6 +237,44 @@ func _spawn_floating_text(world_x: float, text: String, col: Color = Color(1.0, 
 	tw.chain().tween_callback(lbl.queue_free)
 
 
+const PAYMENT_FLY_COLORS: Dictionary = {
+	"gold": Color(1.0, 0.84, 0.28, 1.0),
+	"wood": Color(0.62, 0.42, 0.22, 1.0),
+	"stone": Color(0.62, 0.66, 0.7, 1.0),
+}
+
+
+func _spawn_payment_fly(cost: Dictionary, from_x: float, to_x: float) -> void:
+	# Animasi pembayaran: partikel kecil per jenis resource terbang dari aktor
+	# menuju target yang dibayar (plot bangunan, hearth, kapal, atau altar).
+	if not is_inside_tree():
+		return
+	var total: int = int(cost.get("gold", 0)) + int(cost.get("wood", 0)) + int(cost.get("stone", 0))
+	if total <= 0:
+		return
+	var lane_delay: float = 0.0
+	for res_id: String in ["gold", "wood", "stone"]:
+		var amount: int = int(cost.get(res_id, 0))
+		if amount <= 0:
+			continue
+		var col: Color = PAYMENT_FLY_COLORS.get(res_id, Color(1.0, 1.0, 1.0, 1.0))
+		var dots: int = mini(amount, 4)
+		for i: int in range(dots):
+			var dot: ColorRect = ColorRect.new()
+			dot.color = col
+			dot.size = Vector2(7.0, 7.0)
+			dot.position = Vector2(from_x - 4.0 + randf_range(-9.0, 9.0), -38.0 + randf_range(-7.0, 7.0))
+			dot.z_index = 40
+			add_child(dot)
+			var delay: float = lane_delay + float(i) * 0.05
+			var tw_fly: Tween = create_tween()
+			tw_fly.set_parallel(true)
+			tw_fly.tween_property(dot, "position:x", to_x - 4.0, 0.55).set_delay(delay).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN)
+			tw_fly.tween_property(dot, "position:y", -44.0, 0.55).set_delay(delay).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+			tw_fly.chain().tween_property(dot, "modulate:a", 0.0, 0.12)
+			tw_fly.chain().tween_callback(dot.queue_free)
+		lane_delay += 0.08
+
 
 func _trigger_camera_shake(intensity: float = 4.0, duration: float = 0.14) -> void:
 	if player == null or not is_inside_tree():
@@ -320,6 +362,7 @@ func execute_world_command(actor_id: String, command: StringName, target_id: Str
 			ok = (agent != null)
 			if ok:
 				resolved_target = agent.npc_id
+				_spawn_payment_fly({"gold": 2}, actor_x, NPCBuilderAgent.CAMP_POSITION_X)
 				_wire_follower_signals(agent)
 				if agent.role == "villager":
 					feedback_message.emit("Recruited Villager! Assign a role at the Hammer/Scythe/Bow Stand near Town Center. Total NPCs: %d" % pop_mgr.get_recruited_count())
@@ -336,6 +379,8 @@ func execute_world_command(actor_id: String, command: StringName, target_id: Str
 			ok = building_mgr.request_start_construction(actor_x, economy, resolved_target)
 			if ok:
 				_play_sfx("sfx_build")
+				var built_plot: Dictionary = building_mgr.get_plot(resolved_target)
+				_spawn_payment_fly(built_plot.get("build_cost", {}) as Dictionary, actor_x, float(built_plot.get("position_x", actor_x)))
 				feedback_message.emit("%s blueprint funded! Builder will construct it." % resolved_target)
 
 		&"repair":
@@ -349,6 +394,11 @@ func execute_world_command(actor_id: String, command: StringName, target_id: Str
 			ok = building_mgr.request_repair(actor_x, economy, resolved_target, extra_repair_cost)
 			if ok:
 				_play_sfx("sfx_build")
+				var rep_plot: Dictionary = building_mgr.get_plot(resolved_target)
+				var rep_total: Dictionary = (rep_plot.get("repair_cost", {}) as Dictionary).duplicate()
+				for r_key: String in extra_repair_cost.keys():
+					rep_total[String(r_key)] = int(rep_total.get(String(r_key), 0)) + int(extra_repair_cost[r_key])
+				_spawn_payment_fly(rep_total, actor_x, float(rep_plot.get("position_x", actor_x)))
 				feedback_message.emit("Structure (%s) repaired to full durability!" % resolved_target)
 
 		&"upgrade_building":
@@ -361,7 +411,17 @@ func execute_world_command(actor_id: String, command: StringName, target_id: Str
 			ok = building_mgr.request_upgrade_wall(actor_x, economy, resolved_target)
 			if ok:
 				_play_sfx("sfx_build")
-				feedback_message.emit("Upgraded to Stone Wall Tier 2 (260 HP, 20 thorn dmg)!")
+				var upg_plot: Dictionary = building_mgr.get_plot(resolved_target)
+				_spawn_payment_fly(building_mgr.get_plot_upgrade_cost(resolved_target), actor_x, float(upg_plot.get("position_x", actor_x)))
+				var era_note: String = ""
+				if era_mgr.notify_stone_wall_built():
+					era_note = " The Stone Age has begun!"
+				feedback_message.emit("Upgraded to %s (%d HP, %d thorn dmg)!%s" % [
+					building_mgr.get_plot_title(resolved_target),
+					int(upg_plot.get("max_durability", BuildingManager.STONE_WALL_MAX_DURABILITY)),
+					building_mgr.get_thorn_damage(resolved_target),
+					era_note,
+				])
 
 		&"upgrade_hearth":
 			var hres: Dictionary = hearth_sys.try_upgrade(actor_x, economy)
@@ -369,6 +429,7 @@ func execute_world_command(actor_id: String, command: StringName, target_id: Str
 			if ok:
 				_sync_hearth_visuals()
 				_play_sfx("sfx_build")
+				_spawn_payment_fly(hearth_sys.get_next_upgrade_cost(), actor_x, HearthSystem.HEARTH_POSITION_X)
 				_spawn_floating_text(0.0, "Hearth Lv.%d!" % hearth_sys.hearth_level, Color(1.0, 0.78, 0.35, 1.0))
 				feedback_message.emit("Hearth upgraded to Lv.%d (Light radius: %.0f px)!" % [hearth_sys.hearth_level, hearth_sys.get_radius_px()])
 			else:
@@ -380,6 +441,7 @@ func execute_world_command(actor_id: String, command: StringName, target_id: Str
 			if ok:
 				_sync_hearth_visuals()
 				_play_sfx("sfx_sunset")
+				_spawn_payment_fly(HearthSystem.BOOST_COST, actor_x, HearthSystem.HEARTH_POSITION_X)
 				_spawn_floating_text(0.0, "STOKED!", Color(1.0, 0.85, 0.4, 1.0))
 				feedback_message.emit("Fire stoked! Light radius +30%% and burn +2 DPS for %.0f seconds!" % HearthSystem.BOOST_DURATION_SEC)
 			else:
@@ -408,6 +470,7 @@ func execute_world_command(actor_id: String, command: StringName, target_id: Str
 				shrine_offering_used_today = true
 				ok = true
 				_play_sfx("sfx_coin")
+				_spawn_payment_fly({"wood": 4, "stone": 2}, actor_x, -780.0)
 				_spawn_floating_text(-780.0, "+2G Offering")
 				feedback_message.emit("Shrine Offering accepted: 4W + 2S -> +2 Gold!")
 
@@ -423,6 +486,7 @@ func execute_world_command(actor_id: String, command: StringName, target_id: Str
 				flare_cooldown_timer = 25.0
 				ok = true
 				_play_sfx("sfx_sunset")
+				_spawn_payment_fly({"wood": 1}, actor_x, HearthSystem.HEARTH_POSITION_X)
 				_spawn_floating_text(actor_x, "KINDLE FLARE +50%!", Color(1.0, 0.82, 0.35, 1.0))
 				feedback_message.emit("Kindle Flare active! Hearth burn & Watchtower dmg +50% for 8s!")
 
@@ -569,8 +633,12 @@ func _on_player_interact_shipwreck(player_x: float) -> bool:
 	shipwreck_stage += 1
 	_sync_landmark_visuals()
 	_play_sfx("sfx_build")
+	_spawn_payment_fly(cost, player_x, SHIPWRECK_X)
 	_spawn_floating_text(SHIPWRECK_X, "Ship Stage %d/3" % shipwreck_stage)
-	feedback_message.emit("Shipwreck repaired to Stage %d/3!" % shipwreck_stage)
+	if shipwreck_stage >= 3 and era_mgr.notify_vessel_ready():
+		feedback_message.emit("Shipwreck repaired to Stage %d/3! The Iron Age has begun — heavy craft powers the great voyage." % shipwreck_stage)
+	else:
+		feedback_message.emit("Shipwreck repaired to Stage %d/3!" % shipwreck_stage)
 	return true
 
 
@@ -733,7 +801,8 @@ func _on_enemy_defeated(_archetype: String, reward_gold: int, pos_x: float) -> v
 
 func _on_night_resolved(survived: bool, wall_held: bool) -> void:
 	if reign_state == ReignState.ISLAND_CLEARED:
-		feedback_message.emit("Dawn of Day 3+! Forgotten Shore secured.")
+		var dawn_day: int = time_manager.current_day if time_manager != null else 1
+		feedback_message.emit("Dawn of Day %d! Forgotten Shore secured." % dawn_day)
 	elif survived and wall_held:
 		feedback_message.emit("Sunrise reached! Your defenses held the line.")
 	elif survived:
@@ -818,33 +887,47 @@ func _tick_monarch_light_risk(sim_delta: float, is_night: bool) -> void:
 
 
 func _get_plot_nodes(plot_id: String) -> Dictionary:
+	var node_refs: Dictionary = {}
 	match plot_id:
 		BuildingManager.WALL_ID:
-			return {"sprite": wall_visual, "label": wall_label, "title": "Wall Plot", "cost": "2G 4W 2S"}
+			node_refs = {"sprite": wall_visual, "label": wall_label}
 		BuildingManager.WEST_WALL_ID:
-			return {"sprite": get_node_or_null("WorldObjects/WestWallPlot/WallVisual") as Sprite2D, "label": get_node_or_null("WorldObjects/WestWallPlot/WallLabel") as Label, "title": "West Wall", "cost": "2G 4W 2S"}
+			node_refs = {"sprite": get_node_or_null("WorldObjects/WestWallPlot/WallVisual") as Sprite2D, "label": get_node_or_null("WorldObjects/WestWallPlot/WallLabel") as Label}
 		BuildingManager.WATCHTOWER_ID:
-			return {
+			node_refs = {
 				"sprite": get_node_or_null("WorldObjects/WatchtowerPlot/WatchtowerVisual") as Sprite2D,
 				"label": get_node_or_null("WorldObjects/WatchtowerPlot/WatchtowerLabel") as Label,
-				"title": "Watchtower",
-				"cost": "3G 3W 3S",
 			}
 		BuildingManager.FARM_WEST_ID:
-			return {
+			node_refs = {
 				"sprite": get_node_or_null("WorldObjects/FarmWestPlot/FarmVisual") as Sprite2D,
 				"label": get_node_or_null("WorldObjects/FarmWestPlot/FarmLabel") as Label,
-				"title": "Farm Plot",
-				"cost": "3G 4W",
 			}
 		BuildingManager.FARM_EAST_ID:
-			return {
+			node_refs = {
 				"sprite": get_node_or_null("WorldObjects/FarmEastPlot/FarmVisual") as Sprite2D,
 				"label": get_node_or_null("WorldObjects/FarmEastPlot/FarmLabel") as Label,
-				"title": "Farm Plot",
-				"cost": "3G 4W",
 			}
-	return {}
+		_:
+			return {}
+	# Title & cost selalu mengikuti data plot (data/buildings.json), bukan hardcode.
+	node_refs["title"] = building_mgr.get_plot_title(plot_id)
+	node_refs["cost"] = building_mgr.get_plot_cost_label(plot_id)
+	return node_refs
+
+
+func _sync_plot_label_data() -> void:
+	# Selaraskan label statis .tscn dengan data bangunan saat ini (idempotent).
+	for plot_id: String in building_mgr.get_all_plot_ids():
+		var nodes: Dictionary = _get_plot_nodes(plot_id)
+		if nodes.is_empty():
+			continue
+		var lbl: Label = nodes["label"] as Label
+		if lbl == null:
+			continue
+		var plot: Dictionary = building_mgr.get_plot(plot_id)
+		if int(plot.get("state", 0)) == BuildingManager.WallState.PLACEHOLDER:
+			lbl.text = "%s [E/B]\n%s" % [String(nodes["title"]), String(nodes["cost"])]
 
 
 func _on_wall_state_changed(wall_id: String, new_state: String, progress: float, durability: int, max_dur: int) -> void:
@@ -875,7 +958,7 @@ func _on_wall_state_changed(wall_id: String, new_state: String, progress: float,
 				lbl.text = "Stone Wall Lv.2\nHP %d/%d" % [durability, max_dur]
 			elif wall_id == BuildingManager.WALL_ID:
 				spr.modulate = Color(1.0, 1.0, 1.0, 1.0)
-				lbl.text = "Wooden Wall [Q: Stone Lv2]\nHP %d/%d (3G 2W 5S)" % [durability, max_dur]
+				lbl.text = "Wooden Wall [Q: Stone Lv2]\nHP %d/%d (%s)" % [durability, max_dur, building_mgr.get_plot_upgrade_cost_label(wall_id)]
 			else:
 				spr.modulate = Color(1.0, 1.0, 1.0, 1.0)
 				lbl.text = "%s\nHP %d/%d" % [title, durability, max_dur]
@@ -1163,6 +1246,8 @@ func _sync_all_presentations() -> void:
 	_update_resource_node_visuals()
 	_update_forest_visuals()
 	_sync_dynamic_actors()
+	if slice_hud != null and slice_hud.has_method("_refresh_clock"):
+		slice_hud.call("_refresh_clock")
 
 
 func _reign_state_to_string(rs: ReignState) -> String:
@@ -1221,12 +1306,28 @@ func build_save_payload() -> Dictionary:
 			"shipwreck_stage": shipwreck_stage,
 			"portal_relic_looted": portal_relic_looted,
 			"shrine_offering_used_today": shrine_offering_used_today,
+			"era_id": era_mgr.to_save_id(),
 		},
 	}
 
 
 func save_game_state(save_path: String = SaveManager.DEFAULT_SAVE_PATH) -> bool:
-	return save_mgr.save_state(build_save_payload(), save_path)
+	var ok: bool = save_mgr.save_state(build_save_payload(), save_path)
+	if ok:
+		_last_saved_signature = _unsaved_signature()
+	return ok
+
+
+func _unsaved_signature() -> int:
+	# Signature progres signifikan untuk deteksi "belum tersimpan". world_time
+	# dikecualikan karena berubah setiap frame dan bukan progres yang hilang.
+	var payload: Dictionary = build_save_payload()
+	payload.erase("world_time")
+	return payload.hash()
+
+
+func has_unsaved_progress() -> bool:
+	return _unsaved_signature() != _last_saved_signature
 
 
 func load_game_state(save_path: String = SaveManager.DEFAULT_SAVE_PATH) -> bool:
@@ -1235,6 +1336,22 @@ func load_game_state(save_path: String = SaveManager.DEFAULT_SAVE_PATH) -> bool:
 		return false
 	var data: Dictionary = res["data"]
 
+	# Transaksional: snapshot state hidup saat ini SEBELUM ada mutasi. Jika
+	# langkah apply mana pun gagal, seluruh snapshot dipulihkan sehingga sesi
+	# tidak pernah berada di kondisi setengah-terpakai ("fresh reign" palsu).
+	var snapshot: Dictionary = build_save_payload()
+	if not _apply_loaded_payload(data):
+		load_failed.emit("Failed to restore saved kingdom state — rolling back")
+		_apply_loaded_payload(snapshot)
+		_sync_all_presentations()
+		return false
+
+	_sync_all_presentations()
+	_last_saved_signature = _unsaved_signature()
+	return true
+
+
+func _apply_loaded_payload(data: Dictionary) -> bool:
 	# Restore order: player -> progression flags -> encounter -> clock (silently,
 	# no phase signals) -> economy -> buildings -> NPCs. Restoring the clock
 	# before reign_state used to re-trigger night_started with a default
@@ -1254,31 +1371,27 @@ func load_game_state(save_path: String = SaveManager.DEFAULT_SAVE_PATH) -> bool:
 	shipwreck_stage = clampi(int(flags.get("shipwreck_stage", 0)), 0, 3)
 	portal_relic_looted = bool(flags.get("portal_relic_looted", false))
 	shrine_offering_used_today = bool(flags.get("shrine_offering_used_today", false))
+	era_mgr.apply_save_era(String(flags.get("era_id", "")))
 	resource_mgr.apply_save_state(flags.get("node_states", null), flags.get("collected_nodes", []))
 	tree_mgr.apply_save_state(flags.get("tree_states", null))
 
 	if data.has("night_encounter") and typeof(data["night_encounter"]) == TYPE_DICTIONARY:
 		if not night_mgr.apply_save_dict(data["night_encounter"]):
-			load_failed.emit("Failed to restore night_encounter state")
 			return false
 
 	if time_manager != null:
 		if not time_manager.apply_save_dict(data, true):
-			load_failed.emit("Failed to restore time_manager state")
 			return false
 
 	if not economy.set_balances_from_dict(data["resources"]):
-		load_failed.emit("Failed to restore economy balances")
 		return false
 
 	var b_arr: Array = data["buildings"]
 	if not building_mgr.apply_save_array(b_arr):
-		load_failed.emit("Failed to restore buildings state")
 		return false
 
 	var n_arr: Array = data["npcs"]
 	if not pop_mgr.apply_save_array(n_arr):
-		load_failed.emit("Failed to restore NPC population state")
 		return false
 	if data.has("camp_vagrants_available"):
 		pop_mgr.camp_vagrants_available = clampi(int(roundf(float(data["camp_vagrants_available"]))), 0, NPCPopulationManager.MAX_CAMP_VAGRANTS)
@@ -1290,7 +1403,6 @@ func load_game_state(save_path: String = SaveManager.DEFAULT_SAVE_PATH) -> bool:
 		var is_unsafe: bool = time_manager.current_phase != TimeManager.Phase.DAYLIGHT
 		pop_mgr.set_dusk_or_night_safety(is_unsafe, building_mgr)
 
-	_sync_all_presentations()
 	return true
 
 

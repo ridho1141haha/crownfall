@@ -77,42 +77,18 @@ var position_x: float = WALL_POSITION_X
 
 
 func _init() -> void:
+	# Konstanta di bawah hanya fallback instan; konfigurasi sebenarnya berasal
+	# dari data/buildings.json (termasuk wall_east_01) via apply_data_configs().
 	register_plot(WALL_ID, "wooden_wall", WALL_POSITION_X, WALL_BUILD_COST, WALL_REPAIR_COST, BUILD_DURATION, REINFORCED_MAX_DURABILITY)
+	# Terapkan konfigurasi JSON ke plot utama TANPA mendaftarkan plot baru, agar
+	# manager segar tetap hanya berisi wall_east_01 (kontrak uji M4 dipertahankan).
+	apply_data_configs("res://data/buildings.json", false)
 
 
 func register_forgotten_shore_expansion_plots() -> void:
-	var loaded_from_data: bool = false
-	if FileAccess.file_exists("res://data/buildings.json"):
-		var parsed: Variant = JSON.parse_string(FileAccess.get_file_as_string("res://data/buildings.json"))
-		if typeof(parsed) == TYPE_DICTIONARY and (parsed as Dictionary).has("plots"):
-			loaded_from_data = true
-			for entry: Variant in (parsed as Dictionary)["plots"]:
-				if typeof(entry) != TYPE_DICTIONARY:
-					continue
-				var d: Dictionary = entry as Dictionary
-				var pid: String = String(d.get("id", ""))
-				if pid.is_empty() or has_plot(pid):
-					continue
-				var extra_props: Dictionary = {}
-				if d.has("support_damage"):
-					extra_props["support_damage"] = int(d["support_damage"])
-				if d.has("harvest_interval"):
-					extra_props["harvest_interval"] = float(d["harvest_interval"])
-				if d.has("gold_yield"):
-					extra_props["gold_yield"] = int(d["gold_yield"])
-				var upg: Dictionary = d.get("upgrade", {}) as Dictionary
-				if upg.has("thorn_damage"):
-					extra_props["upgrade_thorn_damage"] = int(upg["thorn_damage"])
-				register_plot(
-					pid,
-					String(d.get("type", "wooden_wall")),
-					float(d.get("position_x", 0.0)),
-					d.get("build_cost", WALL_BUILD_COST) as Dictionary,
-					d.get("repair_cost", WALL_REPAIR_COST) as Dictionary,
-					float(d.get("build_duration", BUILD_DURATION)),
-					int(d.get("max_durability", REINFORCED_MAX_DURABILITY)),
-					extra_props
-				)
+	# data/buildings.json adalah sumber kebenaran; entri untuk plot yang sudah
+	# terdaftar (mis. wall_east_01 dari _init) tetap dibaca dan diterapkan.
+	apply_data_configs("res://data/buildings.json", true)
 	# Fallback per-plot jika file JSON korup/kosong atau ada plot ekspansi yang terlewat
 	if not has_plot(WATCHTOWER_ID):
 		register_plot(WATCHTOWER_ID, "watchtower", WATCHTOWER_POSITION_X, WATCHTOWER_BUILD_COST, WALL_REPAIR_COST, 3.5, WATCHTOWER_MAX_DURABILITY)
@@ -122,6 +98,128 @@ func register_forgotten_shore_expansion_plots() -> void:
 		register_plot(FARM_EAST_ID, "farm_plot", FARM_EAST_POSITION_X, FARM_BUILD_COST, FARM_REPAIR_COST, 3.5, FARM_MAX_DURABILITY)
 	if not has_plot(WEST_WALL_ID):
 		register_plot(WEST_WALL_ID, "wooden_wall", WEST_WALL_POSITION_X, WALL_BUILD_COST, WALL_REPAIR_COST, BUILD_DURATION, REINFORCED_MAX_DURABILITY)
+
+
+static func _as_cost_dict(value: Variant, fallback: Dictionary) -> Dictionary:
+	# Kast aman: JSON yang tidak berbentuk Dictionary tidak boleh mematikan loader.
+	if typeof(value) == TYPE_DICTIONARY:
+		return (value as Dictionary).duplicate()
+	return fallback.duplicate()
+
+
+static func format_cost_text(cost: Dictionary) -> String:
+	var parts: Array[String] = []
+	for res_id: String in ["gold", "wood", "stone"]:
+		var amount: int = int(cost.get(res_id, 0))
+		if amount > 0:
+			parts.append("%d%s" % [amount, res_id[0].to_upper()])
+	if parts.is_empty():
+		return "Free"
+	return " ".join(parts)
+
+
+func apply_data_configs(path: String = "res://data/buildings.json", register_missing_plots: bool = false) -> bool:
+	if not FileAccess.file_exists(path):
+		return false
+	var parsed: Variant = JSON.parse_string(FileAccess.get_file_as_string(path))
+	if typeof(parsed) != TYPE_DICTIONARY:
+		return false
+	var root_d: Dictionary = parsed as Dictionary
+	if not root_d.has("plots") or typeof(root_d["plots"]) != TYPE_ARRAY:
+		return false
+	var any_applied: bool = false
+	for entry: Variant in (root_d["plots"] as Array):
+		if typeof(entry) != TYPE_DICTIONARY:
+			continue
+		var d: Dictionary = entry as Dictionary
+		var pid: String = String(d.get("id", ""))
+		if pid.is_empty():
+			continue
+		if has_plot(pid):
+			_apply_json_config_to_plot(pid, d)
+		elif register_missing_plots:
+			register_plot(
+				pid,
+				String(d.get("type", "wooden_wall")),
+				float(d.get("position_x", 0.0)),
+				_as_cost_dict(d.get("build_cost", null), WALL_BUILD_COST),
+				_as_cost_dict(d.get("repair_cost", null), WALL_REPAIR_COST),
+				_finite_positive(d.get("build_duration", BUILD_DURATION), BUILD_DURATION),
+				maxi(1, int(d.get("max_durability", REINFORCED_MAX_DURABILITY))),
+				_collect_extra_props(d)
+			)
+		_apply_config_extras(pid, d)
+		any_applied = true
+	return any_applied
+
+
+static func _finite_positive(value: Variant, fallback: float) -> float:
+	var v: float = float(value)
+	if is_nan(v) or is_inf(v) or v <= 0.0:
+		return fallback
+	return v
+
+
+func _collect_extra_props(d: Dictionary) -> Dictionary:
+	var extra_props: Dictionary = {}
+	if d.has("support_damage") and EconomyLedger.is_exact_int_value(d["support_damage"]):
+		extra_props["support_damage"] = int(d["support_damage"])
+	if d.has("harvest_interval"):
+		var hiv: float = float(d["harvest_interval"])
+		if not is_nan(hiv) and not is_inf(hiv) and hiv > 0.0:
+			extra_props["harvest_interval"] = hiv
+	if d.has("gold_yield") and EconomyLedger.is_exact_int_value(d["gold_yield"]):
+		extra_props["gold_yield"] = int(d["gold_yield"])
+	return extra_props
+
+
+func _apply_json_config_to_plot(plot_id: String, d: Dictionary) -> void:
+	# Perbarui hanya konfigurasi data-driven; state runtime (state/level/durability/
+	# progress/claim) tidak di-reset, sehingga aman dipanggil ulang kapan pun.
+	if not _plots.has(plot_id):
+		return
+	var plot: Dictionary = _plots[plot_id]
+	if d.has("type") and typeof(d["type"]) == TYPE_STRING and not String(d["type"]).is_empty():
+		plot["type"] = String(d["type"])
+	if d.has("position_x"):
+		var px_v: float = float(d["position_x"])
+		if not is_nan(px_v) and not is_inf(px_v):
+			plot["position_x"] = px_v
+	plot["build_cost"] = _as_cost_dict(d.get("build_cost", null), plot["build_cost"] as Dictionary)
+	plot["repair_cost"] = _as_cost_dict(d.get("repair_cost", null), plot["repair_cost"] as Dictionary)
+	if d.has("build_duration"):
+		plot["build_duration"] = _finite_positive(d["build_duration"], float(plot["build_duration"]))
+	if d.has("max_durability") and EconomyLedger.is_exact_int_value(d["max_durability"]):
+		plot["max_durability"] = maxi(1, int(d["max_durability"]))
+	_apply_config_extras(plot_id, d)
+	_sync_primary_mirror()
+	_emit_plot_state(plot_id)
+
+
+func _apply_config_extras(plot_id: String, d: Dictionary) -> void:
+	if not _plots.has(plot_id):
+		return
+	var plot: Dictionary = _plots[plot_id]
+	if d.has("title") and typeof(d["title"]) == TYPE_STRING and not String(d["title"]).is_empty():
+		plot["title"] = String(d["title"])
+	if d.has("cost_label") and typeof(d["cost_label"]) == TYPE_STRING and not String(d["cost_label"]).is_empty():
+		plot["cost_label"] = String(d["cost_label"])
+	else:
+		plot["cost_label"] = format_cost_text(plot["build_cost"] as Dictionary)
+	if d.has("upgrade") and typeof(d["upgrade"]) == TYPE_DICTIONARY:
+		var upg: Dictionary = d["upgrade"] as Dictionary
+		var upg_cost: Dictionary = _as_cost_dict(upg.get("cost", null), STONE_WALL_UPGRADE_COST)
+		plot["upgrade_cost"] = upg_cost
+		if upg.has("cost_label") and typeof(upg["cost_label"]) == TYPE_STRING and not String(upg["cost_label"]).is_empty():
+			plot["upgrade_cost_label"] = String(upg["cost_label"])
+		else:
+			plot["upgrade_cost_label"] = format_cost_text(upg_cost)
+		if upg.has("max_durability") and EconomyLedger.is_exact_int_value(upg["max_durability"]):
+			plot["upgrade_max_durability"] = maxi(1, int(upg["max_durability"]))
+		if upg.has("thorn_damage") and EconomyLedger.is_exact_int_value(upg["thorn_damage"]):
+			plot["upgrade_thorn_damage"] = int(upg["thorn_damage"])
+		if upg.has("target_type") and typeof(upg["target_type"]) == TYPE_STRING and not String(upg["target_type"]).is_empty():
+			plot["upgrade_target_type"] = String(upg["target_type"])
 
 
 func register_plot(
@@ -247,6 +345,44 @@ func get_farm_gold_yield(plot_id: String = FARM_WEST_ID) -> int:
 	return 2
 
 
+func get_plot_title(plot_id: String = WALL_ID) -> String:
+	var plot: Dictionary = _plots.get(plot_id, {})
+	if plot.has("title"):
+		return String(plot["title"])
+	match String(plot.get("type", "wooden_wall")):
+		"watchtower":
+			return "Watchtower"
+		"farm_plot":
+			return "Farm Plot"
+		"stone_wall":
+			return "Stone Wall"
+		_:
+			return "Wall Plot"
+
+
+func get_plot_cost_label(plot_id: String = WALL_ID) -> String:
+	var plot: Dictionary = _plots.get(plot_id, {})
+	if plot.has("cost_label"):
+		return String(plot["cost_label"])
+	return format_cost_text(plot.get("build_cost", WALL_BUILD_COST) as Dictionary)
+
+
+func get_plot_upgrade_cost(plot_id: String = WALL_ID) -> Dictionary:
+	var plot: Dictionary = _plots.get(plot_id, {})
+	if plot.has("upgrade_cost"):
+		return (plot["upgrade_cost"] as Dictionary).duplicate()
+	return STONE_WALL_UPGRADE_COST.duplicate()
+
+
+func get_plot_upgrade_cost_label(plot_id: String = WALL_ID) -> String:
+	var plot: Dictionary = _plots.get(plot_id, {})
+	if plot.has("upgrade_cost_label"):
+		return String(plot["upgrade_cost_label"])
+	if plot.has("upgrade_cost"):
+		return format_cost_text(plot["upgrade_cost"] as Dictionary)
+	return format_cost_text(STONE_WALL_UPGRADE_COST)
+
+
 func apply_damage(amount: int, plot_id: String = WALL_ID) -> int:
 	return apply_enemy_damage(amount, plot_id)
 
@@ -337,14 +473,16 @@ func request_upgrade_wall(candidate_x: float, ledger: EconomyLedger, plot_id: St
 	if absf(candidate_x - float(plot["position_x"])) > INTERACT_RANGE:
 		building_action_rejected.emit("Move closer to Wall (x=%.0f) to upgrade" % float(plot["position_x"]))
 		return false
-	if not ledger.try_spend(STONE_WALL_UPGRADE_COST):
-		building_action_rejected.emit("Need 3 Gold, 2 Wood, 5 Stone for Stone Wall Tier 2")
+	var upg_cost: Dictionary = (plot["upgrade_cost"] as Dictionary) if plot.has("upgrade_cost") else STONE_WALL_UPGRADE_COST
+	var upg_max: int = int(plot.get("upgrade_max_durability", STONE_WALL_MAX_DURABILITY))
+	if not ledger.try_spend(upg_cost):
+		building_action_rejected.emit("Need %s for Stone Wall Tier 2" % get_plot_upgrade_cost_label(plot_id))
 		return false
 
 	plot["level"] = 2
-	plot["type"] = "stone_wall"
-	plot["max_durability"] = STONE_WALL_MAX_DURABILITY
-	plot["durability"] = STONE_WALL_MAX_DURABILITY
+	plot["type"] = String(plot.get("upgrade_target_type", "stone_wall"))
+	plot["max_durability"] = upg_max
+	plot["durability"] = upg_max
 	_sync_primary_mirror()
 	_emit_plot_state(plot_id)
 	return true

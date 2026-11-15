@@ -83,23 +83,10 @@ func load_archetypes_from_data(path: String = "res://data/enemies.json") -> void
 						}
 
 
-static var _hearth_tiers_cache: Array[Dictionary] = []
-
-const LIGHTING_DATA_PATH: String = "res://data/lighting.json"
-
-static func _load_hearth_tiers() -> Array[Dictionary]:
-	if not _hearth_tiers_cache.is_empty():
-		return _hearth_tiers_cache
-	if FileAccess.file_exists(LIGHTING_DATA_PATH):
-		var parsed: Variant = JSON.parse_string(FileAccess.get_file_as_string(LIGHTING_DATA_PATH))
-		if typeof(parsed) == TYPE_DICTIONARY and (parsed as Dictionary).has("hearth_tiers"):
-			for item: Variant in (parsed as Dictionary)["hearth_tiers"]:
-				if typeof(item) == TYPE_DICTIONARY:
-					_hearth_tiers_cache.append(item as Dictionary)
-	return _hearth_tiers_cache
-
+# Tingkat hearth kini dibaca dari loader tervalidasi HearthSystem (satu sumber
+# untuk data/lighting.json) — loader duplikat tanpa validasi dihapus.
 static func get_hearth_radius(hearth_level: int) -> float:
-	for t: Dictionary in _load_hearth_tiers():
+	for t: Dictionary in HearthSystem.get_validated_tiers():
 		if int(t.get("level", 0)) == hearth_level:
 			return float(t.get("radius_px", 0.0))
 	match hearth_level:
@@ -111,7 +98,7 @@ static func get_hearth_radius(hearth_level: int) -> float:
 			return 180.0
 
 static func get_hearth_burn_dps(hearth_level: int) -> float:
-	for t: Dictionary in _load_hearth_tiers():
+	for t: Dictionary in HearthSystem.get_validated_tiers():
 		if int(t.get("level", 0)) == hearth_level:
 			return float(t.get("burn_dps", 2.0))
 	return 4.0 if hearth_level >= 3 else 2.0

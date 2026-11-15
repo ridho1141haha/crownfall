@@ -8,6 +8,7 @@ var _session: Node = null
 var _backdrop: ColorRect = null
 var _main_box: VBoxContainer = null
 var _settings_box: VBoxContainer = null
+var _confirm_box: VBoxContainer = null
 var _volume_slider: HSlider = null
 var _volume_val_label: Label = null
 var _fullscreen_check: CheckButton = null
@@ -153,12 +154,45 @@ func _build_ui() -> void:
 	back_btn.pressed.connect(_show_main_panel)
 	_settings_box.add_child(back_btn)
 
+	_confirm_box = VBoxContainer.new()
+	_confirm_box.add_theme_constant_override("separation", 10)
+	_confirm_box.visible = false
+	root_vbox.add_child(_confirm_box)
+
+	var c_title: Label = Label.new()
+	c_title.text = "UNSAVED PROGRESS"
+	c_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	c_title.add_theme_color_override("font_color", Color(1.0, 0.72, 0.35, 1.0))
+	_confirm_box.add_child(c_title)
+
+	var c_body: Label = Label.new()
+	c_body.text = "Progress since your last save will be lost.\nManual save is disabled during Night combat.\nReturn to Main Menu anyway?"
+	c_body.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_confirm_box.add_child(c_body)
+
+	var c_row: HBoxContainer = HBoxContainer.new()
+	c_row.alignment = BoxContainer.ALIGNMENT_CENTER
+	c_row.add_theme_constant_override("separation", 12)
+	_confirm_box.add_child(c_row)
+
+	var stay_btn: Button = Button.new()
+	stay_btn.text = "Stay"
+	stay_btn.pressed.connect(_on_cancel_exit)
+	c_row.add_child(stay_btn)
+
+	var leave_btn: Button = Button.new()
+	leave_btn.text = "Return Anyway"
+	leave_btn.pressed.connect(_do_return_to_main_menu)
+	c_row.add_child(leave_btn)
+
 
 func _show_main_panel() -> void:
 	if _main_box != null:
 		_main_box.visible = true
 	if _settings_box != null:
 		_settings_box.visible = false
+	if _confirm_box != null:
+		_confirm_box.visible = false
 
 
 func _show_settings_panel() -> void:
@@ -166,6 +200,8 @@ func _show_settings_panel() -> void:
 		_main_box.visible = false
 	if _settings_box != null:
 		_settings_box.visible = true
+	if _confirm_box != null:
+		_confirm_box.visible = false
 
 
 func _on_volume_changed(val: float) -> void:
@@ -192,6 +228,24 @@ func _on_save_pressed() -> void:
 
 
 func _on_main_menu_pressed() -> void:
+	# Manual save terkunci saat malam dan autosave hanya terjadi saat sunrise;
+	# jika ada progres setelah simpanan terakhir, minta konfirmasi eksplisit.
+	if _session != null and _session.has_method("has_unsaved_progress") and bool(_session.call("has_unsaved_progress")):
+		if _main_box != null:
+			_main_box.visible = false
+		if _settings_box != null:
+			_settings_box.visible = false
+		if _confirm_box != null:
+			_confirm_box.visible = true
+		return
+	_do_return_to_main_menu()
+
+
+func _on_cancel_exit() -> void:
+	_show_main_panel()
+
+
+func _do_return_to_main_menu() -> void:
 	if get_tree() != null:
 		get_tree().paused = false
 		get_tree().change_scene_to_file(MAIN_MENU_SCENE)

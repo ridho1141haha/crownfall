@@ -23,6 +23,13 @@ var tiers: Array[Dictionary] = []
 var hearth_level: int = 1
 var boost_remaining: float = 0.0
 
+const DEFAULT_LIGHTING_PATH: String = "res://data/lighting.json"
+
+# Cache statis tingkat hearth yang SUDAH divalidasi — satu-satunya sumber untuk
+# semua konsumen (HearthSystem instans, NightEncounterManager, HUD forecast),
+# sehingga tidak ada lagi loader lighting.json ganda tanpa validasi.
+static var _validated_tiers_cache: Array[Dictionary] = []
+
 
 func _init() -> void:
 	load_from_data()
@@ -41,23 +48,43 @@ static func is_valid_tier_dict(d: Dictionary, expected_level: int) -> bool:
 	return typeof(d["upgrade_cost"]) == TYPE_DICTIONARY
 
 
-func load_from_data(path: String = "res://data/lighting.json") -> void:
+func load_from_data(path: String = DEFAULT_LIGHTING_PATH) -> void:
 	tiers.clear()
+	if path == DEFAULT_LIGHTING_PATH:
+		tiers.assign(get_validated_tiers().duplicate(true))
+		return
+	var staged: Array[Dictionary] = _parse_validated_tiers(path)
+	if staged.size() >= MAX_LEVEL:
+		tiers.assign(staged)
+	else:
+		tiers.assign(DEFAULT_TIERS)
+
+
+static func _parse_validated_tiers(path: String) -> Array[Dictionary]:
+	var out: Array[Dictionary] = []
 	if FileAccess.file_exists(path):
 		var parsed: Variant = JSON.parse_string(FileAccess.get_file_as_string(path))
 		if typeof(parsed) == TYPE_DICTIONARY and (parsed as Dictionary).has("hearth_tiers") and typeof((parsed as Dictionary)["hearth_tiers"]) == TYPE_ARRAY:
 			var raw_arr: Array = (parsed as Dictionary)["hearth_tiers"]
-			var valid_all: bool = (raw_arr.size() >= MAX_LEVEL)
-			var staged: Array[Dictionary] = []
-			for i: int in range(mini(raw_arr.size(), MAX_LEVEL)):
-				if typeof(raw_arr[i]) != TYPE_DICTIONARY or not is_valid_tier_dict(raw_arr[i] as Dictionary, i + 1):
-					valid_all = false
-					break
-				staged.append(raw_arr[i] as Dictionary)
-			if valid_all:
-				tiers.assign(staged)
-	if tiers.size() < MAX_LEVEL:
-		tiers.assign(DEFAULT_TIERS)
+			if raw_arr.size() >= MAX_LEVEL:
+				var valid_all: bool = true
+				for i: int in range(MAX_LEVEL):
+					if typeof(raw_arr[i]) != TYPE_DICTIONARY or not is_valid_tier_dict(raw_arr[i] as Dictionary, i + 1):
+						valid_all = false
+						break
+					out.append(raw_arr[i] as Dictionary)
+				if not valid_all:
+					out.clear()
+	return out
+
+
+static func get_validated_tiers() -> Array[Dictionary]:
+	if _validated_tiers_cache.is_empty():
+		var staged: Array[Dictionary] = _parse_validated_tiers(DEFAULT_LIGHTING_PATH)
+		if staged.size() < MAX_LEVEL:
+			staged = DEFAULT_TIERS.duplicate(true)
+		_validated_tiers_cache = staged
+	return _validated_tiers_cache
 
 
 func get_tier(level: int = -1) -> Dictionary:

@@ -1,0 +1,22 @@
+{
+  "eras": [
+    {
+      "id": "wood_age",
+      "name": "Wood Age",
+      "order": 1,
+      "description": "Timber raises the first shelters and walls of Forgotten Shore."
+    },
+    {
+      "id": "stone_age",
+      "name": "Stone Age",
+      "order": 2,
+      "description": "Masonry hardens the defenses; unlocks when the first wall becomes Stone Wall Tier 2."
+    },
+    {
+      "id": "iron_age",
+      "name": "Iron Age",
+      "order": 3,
+      "description": "Heavy craft powers the great voyage; unlocks when the ship reaches Stage 3."
+    }
+  ]
+}

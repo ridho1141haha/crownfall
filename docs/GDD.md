@@ -76,7 +76,7 @@ Its visual and gameplay identity should support:
 - Resource locations that encourage movement through the playable area.
 - A clear settlement anchor and a defensible route for the first night.
 
-The first-slice terrain layout places the Town Center safe zone at `x=0.0`, Vagrant Camp at `x=-220.0`, Eastern Wooden Wall plot at `x=360.0`, and four single-use resource caches across `[-780.0, 190.0]` (`OD-01`, `OD-08`).
+The first-slice terrain layout places the Town Center safe zone at `x=0.0`, Vagrant Camp at `x=-220.0`, Eastern Wooden Wall plot at `x=380.0`, and five resource nodes — two single-use caches and three renewable nodes — across `[-780.0, 190.0]` (`OD-01`, `OD-08`).
 
 Other island concepts are long-term worldbuilding, not P0 production requirements.
 
@@ -124,12 +124,13 @@ The vertical slice uses one kingdom resource ledger.
 
 Iron, Food, Crystal, and Ancient Relics are deferred. No personal coin-pouch capacity or complex personal inventory is required in P0.
 
-Approved first-slice economy (`OD-01`, `OD-02`, `OD-03`): Starting balances are `2 Gold, 2 Wood, 1 Stone`. Resources are collected via `[E]` within `72 px` at four Forgotten Shore nodes defined in `data/resource_nodes.json`: one-time Gold caches (`cache_gold_west` `+4G` at `x=-480`, `shrine_cache_far_west` `+3G` at `x=-780`), renewable Wood/Stone nodes (`timber_pile_west` `+5W` at `x=-110`, `stone_outcrop_east` `+3S` at `x=190`) that refresh every Sunrise, plus `Farm Plots` (`3G, 4W`, `+2 Gold` every `60s` during Daylight).
+Approved first-slice economy (`OD-01`, `OD-02`, `OD-03`): Starting balances are `2 Gold, 2 Wood, 1 Stone`. Resources are collected via `[E]` within `72 px` at five Forgotten Shore nodes defined in `data/resource_nodes.json`: one-time Gold caches (`cache_gold_west` `+4G` at `x=-480`, `shrine_cache_far_west` `+3G` at `x=-780`), renewable Wood/Stone nodes (`timber_pile_west` `+5W` at `x=-110`, `stone_outcrop_east` `+3S` at `x=190`, `stone_deposit_west` `+3S` at `x=-600`) that refresh every Sunrise, plus `Farm Plots` (`3G, 4W`, `+2 Gold` every `60s` during Daylight).
 
 ### 3.4 Settlement and Construction
 
 - **Town Center:** the starting kingdom anchor and reference point for the settlement's safe area. It may be a fixed starting scene rather than a constructible building.
-- **Wooden Wall & Stone Wall Tier 2:** primary defensive wall at `x=360` (`150 HP`, upgradeable to `Stone Wall Lv.2` with `260 HP` and `20 thorn dmg` for `3G, 2W, 5S`).
+- **Era Progression (Wood Age -> Stone Age -> Iron Age):** eras advance gradually on the first island and never appear all at once (`data/eras.json` via `EraProgressionManager.gd`). `Wood Age` is active from the start; the first `Stone Wall Tier 2` upgrade begins the `Stone Age`; reaching `Shipwreck Stage 3` begins the `Iron Age` for heavy craft ahead of the great voyage. The current era is shown in the HUD clock line and persisted as `progression_flags.era_id` (old saves are migrated by inference).
+- **Wooden Wall & Stone Wall Tier 2:** primary defensive wall at `x=380` (`150 HP`, upgradeable to `Stone Wall Lv.2` with `260 HP` and `20 thorn dmg` for `3G, 2W, 5S`).
 - **Watchtower (`x=290`):** defensive support tower (`3G, 3W, 3S`, `120 HP`) dealing `+10` support damage per strike to raiders attacking the wall.
 - **Farm Plots (`x=-310`, `x=120`):** passive Gold income (`3G, 4W`, `+2G / 60s` during Daylight).
 - **Construction flow:** choose a location, validate placement, validate and deduct cost once, create a blueprint/construction state, let Builder behavior progress it, then mark it completed.
@@ -191,9 +192,9 @@ All first-slice design decisions have been formally approved and synchronized wi
 
 | ID | Decision Topic | Approved Resolution |
 |---|---|---|
-| GDD-OD-01 (`OD-01`) | Gold, Wood, and Stone sources & collection | 4 single-use caches on Forgotten Shore interacted via `[E]` within `72 px` (`-480`, `-110`, `190`, `-780`) |
+| GDD-OD-01 (`OD-01`) | Gold, Wood, and Stone sources & collection | Five resource nodes on Forgotten Shore interacted via `[E]` within `72 px` (`-780`, `-600`, `-480`, `-110`, `190`); two are single-use caches and three are renewable (refresh every Sunrise) |
 | GDD-OD-02 (`OD-02`) | Starting balances & recruitment cost | Start with `2G, 2W, 1S`; recruit Villager at Camp (`x=-220`) for `2 Gold` |
-| GDD-OD-03 (`OD-03/04`) | Wooden Wall placement, cost, duration, repair | Plot at `x=360`; build cost `2G, 4W, 2S` (`4.0s`, `150 HP`); partial barricade `progress * 80 HP`; repair `2W, 1S` |
+| GDD-OD-03 (`OD-03/04`) | Wooden Wall placement, cost, duration, repair | Plot at `x=380`; build cost `2G, 4W, 2S` (`4.0s`, `150 HP`); partial barricade `progress * 80 HP`; repair `2W, 1S` |
 | GDD-OD-04 (`OD-05`) | Builder representation | Persistent `NPCBuilderAgent` (`id="npc_01"`, `role: "villager" -> "builder"`) |
 | GDD-OD-05 (`OD-06`) | First enemy identity, behavior, tuning, spawn | Greedling Raider: 3 waves (`0s, 55s, 110s`), `45 HP`, `15 dmg/hit`, `5 thorn dmg/hit` (Wooden Lv.1; `20` at Lv.2/Stone), `95 px/s` |
 | GDD-OD-06 (`OD-07`) | Wall destruction & breach consequences | Non-destructive `settlement_breached = true` at `x=0.0`; rebuildable on next day |

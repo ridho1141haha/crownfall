@@ -184,6 +184,26 @@ static func migrate_payload(data: Variant) -> Variant:
 					if not bd.has("type"):
 						bd["type"] = "wooden_wall"
 		d["schema_version"] = 2
+	# Backfill lintas-versi: save lama yang dibuat di tengah malam hari ke-N tidak
+	# menyimpan current_day_number. Tanpa backfill, malam hari ke-2 akan salah
+	# memakai jadwal wave hari ke-1 (nilai bawaan 1). Turunkan dari day_count.
+	if d.has("night_encounter") and typeof(d["night_encounter"]) == TYPE_DICTIONARY:
+		var ne_mig: Dictionary = d["night_encounter"] as Dictionary
+		if not ne_mig.has("current_day_number") and EconomyLedger.is_exact_int_value(d.get("day_count", null)):
+			ne_mig["current_day_number"] = maxi(1, int(roundf(float(d["day_count"]))))
+	# Backfill era untuk save yang dibuat sebelum sistem zaman ada: inferensi
+	# Stone Age bila ada tembok batu; selain itu Wood Age. Iron Age tidak pernah
+	# diinferensi karena hanya dicapai lewat Shipwreck Stage 3 (selalu tersimpan).
+	if d.has("progression_flags") and typeof(d["progression_flags"]) == TYPE_DICTIONARY:
+		var pf_mig: Dictionary = d["progression_flags"] as Dictionary
+		if not pf_mig.has("era_id") or String(pf_mig["era_id"]).is_empty():
+			var inferred_era: String = "wood_age"
+			if d.has("buildings") and typeof(d["buildings"]) == TYPE_ARRAY:
+				for b_mig: Variant in (d["buildings"] as Array):
+					if typeof(b_mig) == TYPE_DICTIONARY and String((b_mig as Dictionary).get("type", "")) == "stone_wall":
+						inferred_era = "stone_age"
+						break
+			pf_mig["era_id"] = inferred_era
 	return d
 
 
@@ -268,6 +288,12 @@ func validate_payload(data: Variant) -> bool:
 
 	if not NightEncounterManager.is_valid_saved_encounter_dict(dict["night_encounter"]):
 		return false
+	var ne_chk: Dictionary = dict["night_encounter"] as Dictionary
+	if ne_chk.has("current_day_number"):
+		var cdn_chk: int = int(roundf(float(ne_chk["current_day_number"])))
+		var day_chk: int = int(roundf(float(dict["day_count"])))
+		if cdn_chk > day_chk:
+			return false
 
 	if dict.has("player"):
 		if typeof(dict["player"]) != TYPE_DICTIONARY:
@@ -310,6 +336,11 @@ func validate_payload(data: Variant) -> bool:
 		for ns_key: String in ns_chk.keys():
 			if typeof(ns_chk[ns_key]) != TYPE_BOOL:
 				return false
+	if pf_chk.has("era_id"):
+		if typeof(pf_chk["era_id"]) != TYPE_STRING:
+			return false
+		if String(pf_chk["era_id"]) not in EraProgressionManager.KNOWN_ERA_IDS:
+			return false
 	if pf_chk.has("tree_states"):
 		if not ForestTreeManager.is_valid_saved_tree_states(pf_chk["tree_states"]):
 			return false

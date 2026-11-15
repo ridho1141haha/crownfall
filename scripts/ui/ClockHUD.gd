@@ -65,7 +65,13 @@ func bind_session(session: ForgottenShoreSession) -> void:
 		return
 	_session.economy.balance_changed.connect(_on_balance_changed)
 	_session.feedback_message.connect(_on_feedback_message)
+	if _session.era_mgr != null:
+		_session.era_mgr.era_changed.connect(_on_era_changed)
 	_refresh_resources()
+	_refresh_clock()
+
+
+func _on_era_changed(_era_id: String, _era_name: String) -> void:
 	_refresh_clock()
 
 
@@ -85,7 +91,10 @@ func _on_feedback_message(msg: String) -> void:
 func _refresh_clock() -> void:
 	if time_manager == null or status_label == null:
 		return
-	status_label.text = "Day %d  •  %s" % [time_manager.current_day, time_manager.get_phase_name()]
+	if _session != null and _session.era_mgr != null:
+		status_label.text = "Day %d  •  %s  •  %s" % [time_manager.current_day, time_manager.get_phase_name(), _session.era_mgr.get_era_name()]
+	else:
+		status_label.text = "Day %d  •  %s" % [time_manager.current_day, time_manager.get_phase_name()]
 
 
 func _refresh_resources() -> void:
