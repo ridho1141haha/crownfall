@@ -56,6 +56,8 @@ func _init() -> void:
 		return
 	if not _test_p0_atomicity_and_bounds():
 		return
+	if not _test_v141_forest_autochop_and_west_guard():
+		return
 	if _failures > 0:
 		quit(1)
 		return
@@ -610,4 +612,51 @@ func _test_p0_atomicity_and_bounds() -> bool:
 	if not _check(is_equal_approx(net.MIN_WORLD_X, -1540.0) and is_equal_approx(net.MAX_WORLD_X, 1540.0), "P0 NetworkSessionManager bounds synced to +-1540"):
 		return false
 	print("PASS: P0 Atomicity, Night Repair, Strict NPC Load & Bounds Sync")
+	return true
+
+
+func _test_v141_forest_autochop_and_west_guard() -> bool:
+	# 1. Forest 3-hit chop & sunrise regrow
+	var forest_script = load("res://scripts/world/ForestTreeManager.gd")
+	var fm = forest_script.new()
+	var ledger: EconomyLedger = EconomyLedgerScript.new({"gold": 4, "wood": 0, "stone": 0})
+	var r1: Dictionary = fm.try_chop("tree_west_01", -680.0, ledger)
+	var r2: Dictionary = fm.try_chop("tree_west_01", -680.0, ledger)
+	var r3: Dictionary = fm.try_chop("tree_west_01", -680.0, ledger)
+	if not _check(bool(r1["ok"]) and bool(r2["ok"]) and bool(r3["ok"]) and bool(r3["felled"]) and ledger.get_amount(&"wood") == 4, "v1.4.1 Forest tree felled in 3 hits (+4 Wood)"):
+		return false
+	fm.regrow_all()
+	if not _check(not fm.is_felled("tree_west_01") and fm.get_hp("tree_west_01") == 3, "v1.4.1 Forest regrows on Sunrise"):
+		return false
+
+	# 2. Idle Builder di x=0.0 bisa mendeteksi timber_pile_west (x=-110.0) dan jalan auto-chop
+	var rnm: ResourceNodeManager = ResourceNodeManagerScript.new()
+	var bm: BuildingManager = BuildingManagerScript.new()
+	var night: NightEncounterManager = NightEncounterManagerScript.new()
+	var builder: NPCBuilderAgent = NPCBuilderAgentScript.new()
+	builder.request_recruit(NPCBuilderAgent.CAMP_POSITION_X, ledger)
+	builder.position_x = 0.0
+	for _s: int in range(3):
+		builder.tick(1.0, bm, night, rnm, ledger)
+	if not _check(rnm.is_collected("timber_pile_west") and ledger.get_amount(&"wood") == 9, "v1.4.1 Idle Builder at x=0 walks to x=-110 and auto-chops +5 Wood"):
+		return false
+
+	# 3. Archer tidak keluar melewati West Wall (x=-400) saat menjaga West Scout
+	var w_ledger: EconomyLedger = EconomyLedgerScript.new({"gold": 4, "wood": 6, "stone": 4})
+	bm.register_forgotten_shore_expansion_plots()
+	bm.request_start_construction(BuildingManager.WEST_WALL_POSITION_X, w_ledger, BuildingManager.WEST_WALL_ID)
+	bm.advance_construction(4.0, BuildingManager.WEST_WALL_ID)
+	night.on_night_started(2)
+	night.enemy_active = false
+	night.west_enemy_active = true
+	night.west_enemy_x = -800.0
+	var archer: NPCBuilderAgent = NPCBuilderAgentScript.new("npc_02")
+	archer.recruited = true
+	archer.role = "archer"
+	archer.position_x = -350.0
+	archer.tick(1.0, bm, night)
+	if not _check(archer.position_x >= BuildingManager.WEST_WALL_POSITION_X + 36.0, "v1.4.1 Archer stays behind standing West Wall (x >= -364)"):
+		return false
+
+	print("PASS: v1.4.1 Forest Chopping, Global Auto-Chop & West Wall Archer Guard")
 	return true

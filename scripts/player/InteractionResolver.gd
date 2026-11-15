@@ -12,7 +12,8 @@ static func resolve_nearest(
 	shipwreck_x: float,
 	portal_x: float,
 	portal_looted: bool,
-	shrine_offering_used: bool = false
+	shrine_offering_used: bool = false,
+	tree_mgr: ForestTreeManager = null
 ) -> Dictionary:
 	var best: Dictionary = {
 		"has_target": false,
@@ -137,6 +138,23 @@ static func resolve_nearest(
 				"prompt_text": "Greed Portal [E]",
 				"distance": d_port,
 			}
+
+	# 5b. Forest Trees ([E] Chop)
+	if tree_mgr != null:
+		var tr: Dictionary = tree_mgr.find_nearest_standing(actor_x, ForestTreeManager.INTERACT_RANGE)
+		if not tr.is_empty():
+			var tid: String = String(tr["id"])
+			var d_tree: float = absf(actor_x - float(tr["x"]))
+			if d_tree < float(best["distance"]):
+				best = {
+					"has_target": true,
+					"kind": "tree",
+					"target_id": tid,
+					"primary_command": &"chop_tree",
+					"upgrade_command": &"",
+					"prompt_text": "[E] Chop Tree (%d/%d)" % [tree_mgr.get_hp(tid), int(tr["max_hp"])],
+					"distance": d_tree,
+				}
 
 	# 6. Town Center Hearth Upgrade ([Q])
 	if hearth_sys != null and hearth_sys.can_upgrade():

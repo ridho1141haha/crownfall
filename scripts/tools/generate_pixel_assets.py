@@ -586,6 +586,29 @@ def build_shipwreck_stages() -> Image.Image:
     return sheet
 
 
+def build_pine_tree_states() -> Image.Image:
+    sheet = new_canvas(48 * 2, 64)
+    leaf_l = (68, 128, 74, 255)
+    leaf_m = (46, 94, 56, 255)
+    leaf_d = (30, 64, 42, 255)
+    f0 = new_canvas(48, 64)
+    rect(f0, 21, 42, 6, 20, WOOD_D)
+    rect(f0, 22, 42, 2, 20, WOOD)
+    for tier_y, half_w in [(32, 16), (20, 13), (10, 9)]:
+        for row in range(14):
+            w = max(2, int(half_w * 2 * (row + 1) / 14))
+            x0 = 24 - (w // 2)
+            col = leaf_l if row < 4 else (leaf_m if row < 10 else leaf_d)
+            rect(f0, x0, tier_y - 10 + row, w, 1, col)
+    sheet.paste(add_outline(f0), (0, 0))
+    f1 = new_canvas(48, 64)
+    rect(f1, 19, 52, 10, 10, WOOD_D)
+    rect(f1, 20, 52, 4, 10, WOOD)
+    rect(f1, 19, 51, 10, 2, WOOD_L)
+    sheet.paste(add_outline(f1), (48, 0))
+    return sheet
+
+
 def build_greed_portal() -> Image.Image:
     sheet = new_canvas(48 * 2, 48)
     void_c = (44, 22, 62, 255)
@@ -627,6 +650,7 @@ def main() -> None:
         "buildings/tool_stands/props_tool_stands.png": build_tool_stands(),
         "buildings/shipwreck/building_shipwreck_stages.png": build_shipwreck_stages(),
         "environment/landmarks/env_greed_portal.png": build_greed_portal(),
+        "environment/vegetation/env_pine_tree_states.png": build_pine_tree_states(),
     }
 
     for rel_path, img in outputs.items():

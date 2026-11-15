@@ -136,7 +136,7 @@ func tick(delta: float, building_mgr: BuildingManager, night_mgr: NightEncounter
 		_tick_archer(delta, building_mgr, night_mgr)
 		return
 
-	if night_mgr != null and night_mgr.night_active and role != "villager":
+	if night_mgr != null and night_mgr.night_active and role != "villager" and absf(position_x - SAFE_ZONE_X) > WORK_RANGE:
 		var nearest: Dictionary = night_mgr.get_nearest_active_enemy(position_x)
 		if not nearest.is_empty() and absf(float(nearest["x"]) - position_x) <= ENEMY_GRAB_RANGE:
 			var former: String = role
@@ -239,7 +239,7 @@ func _tick_farmer(delta: float, building_mgr: BuildingManager) -> void:
 func _tick_idle_builder(delta: float, building_mgr: BuildingManager, night_mgr: NightEncounterManager, resource_mgr: ResourceNodeManager, ledger: EconomyLedger) -> void:
 	var can_chop: bool = resource_mgr != null and ledger != null and night_mgr != null and not night_mgr.night_active and not safety_override_active
 	if can_chop:
-		var node: Dictionary = resource_mgr.find_nearest_available(position_x, ResourceNodeManager.INTERACT_RANGE, &"wood", true)
+		var node: Dictionary = resource_mgr.find_nearest_available(position_x, INF, &"wood", true)
 		if not node.is_empty():
 			var nx: float = float(node["x"])
 			cached_target_x = nx
@@ -263,7 +263,10 @@ func _tick_archer(delta: float, building_mgr: BuildingManager, night_mgr: NightE
 	var defend_west: bool = night_mgr != null and night_mgr.night_active and night_mgr.west_enemy_active and not night_mgr.enemy_active
 	if building_mgr != null:
 		if defend_west:
-			guard_x = clampf(night_mgr.west_enemy_x + ARCHER_PURSUIT_GAP, ARCHER_PURSUIT_WEST_LIMIT, SAFE_ZONE_X)
+			if building_mgr.has_plot(BuildingManager.WEST_WALL_ID) and building_mgr.is_standing(BuildingManager.WEST_WALL_ID):
+				guard_x = maxf(BuildingManager.WEST_WALL_POSITION_X + 36.0, clampf(night_mgr.west_enemy_x + ARCHER_PURSUIT_GAP, ARCHER_PURSUIT_WEST_LIMIT, SAFE_ZONE_X))
+			else:
+				guard_x = clampf(night_mgr.west_enemy_x + ARCHER_PURSUIT_GAP, ARCHER_PURSUIT_WEST_LIMIT, SAFE_ZONE_X)
 		else:
 			if building_mgr.has_plot(BuildingManager.WATCHTOWER_ID) and building_mgr.is_fully_operational(BuildingManager.WATCHTOWER_ID):
 				var owner: String = building_mgr.get_plot_claimant(BuildingManager.WATCHTOWER_ID)

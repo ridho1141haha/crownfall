@@ -23,6 +23,10 @@ const SHIPWRECK_COSTS: Array[Dictionary] = [
 var economy: EconomyLedger = EconomyLedger.new({"gold": 2, "wood": 2, "stone": 1})
 var building_mgr: BuildingManager = BuildingManager.new()
 var resource_mgr: ResourceNodeManager = ResourceNodeManager.new()
+var tree_mgr: ForestTreeManager = ForestTreeManager.new()
+var pause_menu: PauseMenu = null
+var _tree_sprites: Dictionary = {}
+var _tree_labels: Dictionary = {}
 var hearth_sys: HearthSystem = HearthSystem.new()
 var pop_mgr: NPCPopulationManager = NPCPopulationManager.new()
 var builder_npc: NPCBuilderAgent = null
@@ -80,10 +84,25 @@ func _init() -> void:
 func _ready() -> void:
 	building_mgr.register_forgotten_shore_expansion_plots()
 	_sync_resource_prompts_from_data()
+	_setup_forest_visuals()
+	_setup_pause_menu()
 	_wire_signals()
 	_consume_pending_load_if_requested()
 	_sync_all_presentations()
-	feedback_message.emit("Forgotten Shore: [A/D] Move | [E] Interact | [Q] Upgrade | [R] Recruit | [B] Build | [F] Repair | [T] 20x | [K] Save")
+	feedback_message.emit("Forgotten Shore: [A/D] Move | [E] Interact | [Q] Upgrade | [R] Recruit | [B] Build | [F] Repair | [T] 20x | [K] Save | [Esc] Pause")
+
+
+func _setup_pause_menu() -> void:
+	if pause_menu != null:
+		return
+	pause_menu = PauseMenu.new()
+	pause_menu.bind_session(self)
+	add_child(pause_menu)
+
+
+func _exit_tree() -> void:
+	if get_tree() != null:
+		get_tree().paused = false
 
 
 func _sync_resource_prompts_from_data() -> void:
@@ -239,7 +258,8 @@ func _resolve_target_for_actor(actor_x: float) -> Dictionary:
 		SHIPWRECK_X,
 		PORTAL_X,
 		portal_relic_looted,
-		shrine_offering_used_today
+		shrine_offering_used_today,
+		tree_mgr
 	)
 
 
@@ -365,6 +385,24 @@ func execute_world_command(actor_id: String, command: StringName, target_id: Str
 				_play_sfx("sfx_sunset")
 				_spawn_floating_text(actor_x, "KINDLE FLARE +50%!", Color(1.0, 0.82, 0.35, 1.0))
 				feedback_message.emit("Kindle Flare active! Hearth burn & Watchtower dmg +50% for 8s!")
+
+		&"chop_tree":
+			if resolved_target.is_empty():
+				var tr: Dictionary = tree_mgr.find_nearest_standing(actor_x)
+				resolved_target = String(tr.get("id", ""))
+			var cres: Dictionary = tree_mgr.try_chop(resolved_target, actor_x, economy)
+			ok = bool(cres.get("ok", false))
+			if ok:
+				var td: Dictionary = cres["tree"] as Dictionary
+				_update_forest_visuals()
+				_play_sfx("sfx_build")
+				if bool(cres.get("felled", false)):
+					_spawn_floating_text(float(td["x"]), "+%d Wood" % int(cres["wood_gained"]))
+					feedback_message.emit("Tree felled! +%d Wood" % int(cres["wood_gained"]))
+				else:
+					_spawn_floating_text(float(td["x"]), "Chop (%d/%d)" % [int(cres["hp_left"]), int(td["max_hp"])])
+			else:
+				_record_rejection(String(cres.get("reason", "Cannot chop tree")))
 
 		&"save_game":
 			ok = _on_manual_save()
@@ -585,7 +623,9 @@ func _on_daylight_started(day_number: int) -> void:
 	if day_number > 1:
 		shrine_offering_used_today = false
 	resource_mgr.refresh_renewable_nodes()
+	tree_mgr.regrow_all()
 	_update_resource_node_visuals()
+	_update_forest_visuals()
 	feedback_message.emit("Day %d Daylight — Wood & Stone nodes refreshed! Expand Farms, Watchtower & Stone Wall." % day_number)
 
 
@@ -624,7 +664,9 @@ func _on_sunrise_reached(completed_day: int) -> void:
 	elif reign_state != ReignState.ISLAND_CLEARED:
 		reign_state = ReignState.ACTIVE
 	resource_mgr.refresh_renewable_nodes()
+	tree_mgr.regrow_all()
 	_update_resource_node_visuals()
+	_update_forest_visuals()
 	pop_mgr.on_sunrise_refill()
 	save_game_state()
 
@@ -882,9 +924,25 @@ func _update_proximity_prompts() -> void:
 		portal_lbl.visible = (active_kind == "portal")
 		portal_lbl.modulate = highlight_col if portal_lbl.visible else normal_col
 
+	for tr: Dictionary in tree_mgr.trees:
+		var tid: String = String(tr["id"])
+		var t_lbl: Label = _tree_labels.get(tid, null) as Label
+		if t_lbl != null:
+			var is_tree_active: bool = (active_kind == "tree" and active_id == tid)
+			t_lbl.visible = is_tree_active and not tree_mgr.is_felled(tid)
+			t_lbl.text = "[E] Chop (%d/%d)" % [tree_mgr.get_hp(tid), int(tr["max_hp"])]
+			t_lbl.modulate = highlight_col if is_tree_active else normal_col
+
+	var has_archer: bool = false
+	for a: NPCBuilderAgent in pop_mgr.agents:
+		if a.recruited and a.role == "archer":
+			has_archer = true
+			break
 	for sid: String in NPCPopulationManager.TOOL_STANDS.keys():
 		var lbl: Label = get_node_or_null("WorldObjects/ToolStands/%s/Label" % sid) as Label
 		if lbl != null:
+			if sid == "bow_stand":
+				lbl.text = "[E] Archer (1G 1W)" if has_archer else "[E] Archer (Free 1st)"
 			var is_stand: bool = (active_kind == "tool_stand" and active_id == sid)
 			lbl.visible = is_stand
 			lbl.modulate = highlight_col if is_stand else normal_col
@@ -957,6 +1015,60 @@ func _sync_dynamic_actors() -> void:
 	_update_proximity_prompts()
 
 
+func _setup_forest_visuals() -> void:
+	var world_objs: Node = get_node_or_null("WorldObjects")
+	if world_objs == null or world_objs.get_node_or_null("ForestTrees") != null:
+		return
+	var root_forest: Node2D = Node2D.new()
+	root_forest.name = "ForestTrees"
+	root_forest.z_index = -1
+	world_objs.add_child(root_forest)
+	var tex_path: String = "res://assets/environment/vegetation/env_pine_tree_states.png"
+	var tree_tex: Texture2D = load(tex_path) as Texture2D if ResourceLoader.exists(tex_path) else null
+	for dx: float in [-1220.0, -1150.0, -860.0, -720.0, -540.0, 460.0, 610.0, 770.0, 880.0, 1120.0]:
+		var bg_spr: Sprite2D = Sprite2D.new()
+		bg_spr.position = Vector2(dx, 0.0)
+		bg_spr.centered = false
+		bg_spr.offset = Vector2(-24, -64)
+		bg_spr.hframes = 2
+		bg_spr.frame = 0
+		bg_spr.scale = Vector2(0.85, 0.85)
+		bg_spr.modulate = Color(0.68, 0.78, 0.74, 0.72)
+		if tree_tex != null:
+			bg_spr.texture = tree_tex
+		root_forest.add_child(bg_spr)
+	for tr: Dictionary in tree_mgr.trees:
+		var tid: String = String(tr["id"])
+		var spr: Sprite2D = Sprite2D.new()
+		spr.name = tid
+		spr.position = Vector2(float(tr["x"]), 0.0)
+		spr.centered = false
+		spr.offset = Vector2(-24, -64)
+		spr.hframes = 2
+		spr.z_index = 1
+		if tree_tex != null:
+			spr.texture = tree_tex
+		root_forest.add_child(spr)
+		_tree_sprites[tid] = spr
+		var lbl: Label = Label.new()
+		lbl.visible = false
+		lbl.position = Vector2(-56, -86)
+		lbl.size = Vector2(112, 24)
+		lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		lbl.text = "[E] Chop (3/3)"
+		spr.add_child(lbl)
+		_tree_labels[tid] = lbl
+	_update_forest_visuals()
+
+
+func _update_forest_visuals() -> void:
+	for tr: Dictionary in tree_mgr.trees:
+		var tid: String = String(tr["id"])
+		var spr: Sprite2D = _tree_sprites.get(tid, null) as Sprite2D
+		if spr != null:
+			spr.frame = 1 if tree_mgr.is_felled(tid) else 0
+
+
 func _update_resource_node_visuals() -> void:
 	var nodes_root: Node = get_node_or_null("WorldObjects/ResourceNodes")
 	if nodes_root == null:
@@ -987,6 +1099,7 @@ func _sync_all_presentations() -> void:
 	_sync_hearth_visuals()
 	_sync_landmark_visuals()
 	_update_resource_node_visuals()
+	_update_forest_visuals()
 	_sync_dynamic_actors()
 
 
@@ -1038,6 +1151,7 @@ func build_save_payload() -> Dictionary:
 			"first_night_survived": night_mgr.first_night_survived,
 			"collected_nodes": resource_mgr.get_collected_ids_array(),
 			"node_states": resource_mgr.to_save_dict(),
+			"tree_states": tree_mgr.to_save_dict(),
 			"reign_state": _reign_state_to_string(reign_state),
 			"hearth_level": hearth_sys.hearth_level,
 			"shipwreck_stage": shipwreck_stage,
@@ -1098,6 +1212,7 @@ func load_game_state(save_path: String = SaveManager.DEFAULT_SAVE_PATH) -> bool:
 	portal_relic_looted = bool(flags.get("portal_relic_looted", false))
 	shrine_offering_used_today = bool(flags.get("shrine_offering_used_today", false))
 	resource_mgr.apply_save_state(flags.get("node_states", null), flags.get("collected_nodes", []))
+	tree_mgr.apply_save_state(flags.get("tree_states", null))
 
 	if time_manager != null:
 		var is_unsafe: bool = time_manager.current_phase != TimeManager.Phase.DAYLIGHT
