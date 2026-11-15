@@ -228,18 +228,12 @@ func validate_payload(data: Variant) -> bool:
 	var b_arr: Array = dict["buildings"]
 	if b_arr.is_empty():
 		return false
-	var known_plot_ids: Dictionary = {
-		BuildingManager.WALL_ID: true,
-		BuildingManager.WEST_WALL_ID: true,
-		BuildingManager.WATCHTOWER_ID: true,
-		BuildingManager.FARM_WEST_ID: true,
-		BuildingManager.FARM_EAST_ID: true,
-	}
-	var known_building_types: Dictionary = {
-		"wooden_wall": true,
-		"stone_wall": true,
-		"watchtower": true,
-		"farm_plot": true,
+	var allowed_plot_types: Dictionary = {
+		BuildingManager.WALL_ID: ["wooden_wall", "stone_wall"],
+		BuildingManager.WEST_WALL_ID: ["wooden_wall", "stone_wall"],
+		BuildingManager.WATCHTOWER_ID: ["watchtower"],
+		BuildingManager.FARM_WEST_ID: ["farm_plot"],
+		BuildingManager.FARM_EAST_ID: ["farm_plot"],
 	}
 	var seen_plot_ids: Dictionary = {}
 	for b_item: Variant in b_arr:
@@ -247,10 +241,11 @@ func validate_payload(data: Variant) -> bool:
 			return false
 		var b_dict: Dictionary = b_item as Dictionary
 		var plot_id: String = String(b_dict["id"])
-		if not known_plot_ids.has(plot_id) or seen_plot_ids.has(plot_id):
+		if not allowed_plot_types.has(plot_id) or seen_plot_ids.has(plot_id):
 			return false
 		seen_plot_ids[plot_id] = true
-		if not known_building_types.has(String(b_dict.get("type", "wooden_wall"))):
+		var b_type: String = String(b_dict.get("type", "wooden_wall"))
+		if not (allowed_plot_types[plot_id] as Array).has(b_type):
 			return false
 		if b_dict.has("position_x"):
 			var bpx: float = float(b_dict["position_x"])
@@ -278,9 +273,17 @@ func validate_payload(data: Variant) -> bool:
 		if typeof(dict["player"]) != TYPE_DICTIONARY:
 			return false
 		var p_dict: Dictionary = dict["player"]
-		var px: float = float(p_dict.get("position_x", 0.0))
-		if is_nan(px) or is_inf(px):
+		if typeof(p_dict.get("position_x", 0.0)) not in [TYPE_FLOAT, TYPE_INT]:
 			return false
+		var px: float = float(p_dict.get("position_x", 0.0))
+		if is_nan(px) or is_inf(px) or px < WorldConstants.MIN_PLAYABLE_X or px > WorldConstants.MAX_PLAYABLE_X:
+			return false
+		if p_dict.has("facing_direction"):
+			if not EconomyLedger.is_exact_int_value(p_dict["facing_direction"]):
+				return false
+			var fd: int = int(roundf(float(p_dict["facing_direction"])))
+			if fd != -1 and fd != 1:
+				return false
 
 	if typeof(dict["progression_flags"]) != TYPE_DICTIONARY:
 		return false
@@ -307,6 +310,15 @@ func validate_payload(data: Variant) -> bool:
 		for ns_key: String in ns_chk.keys():
 			if typeof(ns_chk[ns_key]) != TYPE_BOOL:
 				return false
+	if pf_chk.has("tree_states"):
+		if not ForestTreeManager.is_valid_saved_tree_states(pf_chk["tree_states"]):
+			return false
+	if pf_chk.has("hearth_boost_remaining"):
+		if typeof(pf_chk["hearth_boost_remaining"]) not in [TYPE_FLOAT, TYPE_INT]:
+			return false
+		var hbr: float = float(pf_chk["hearth_boost_remaining"])
+		if is_nan(hbr) or is_inf(hbr) or hbr < 0.0 or hbr > HearthSystem.BOOST_DURATION_SEC:
+			return false
 
 	if dict.has("camp_vagrants_available"):
 		if not EconomyLedger.is_exact_int_value(dict["camp_vagrants_available"]):

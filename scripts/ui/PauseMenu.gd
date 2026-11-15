@@ -183,7 +183,12 @@ func _on_save_pressed() -> void:
 	if _session != null and _session.has_method("_on_manual_save"):
 		var ok: bool = bool(_session.call("_on_manual_save"))
 		if _status_label != null:
-			_status_label.text = "Saved!" if ok else "Cannot save during Night!"
+			if ok:
+				_status_label.text = "Saved!"
+			elif _session.has_method("get_last_rejection_reason") and not String(_session.call("get_last_rejection_reason")).is_empty():
+				_status_label.text = String(_session.call("get_last_rejection_reason"))
+			else:
+				_status_label.text = "Save failed!"
 
 
 func _on_main_menu_pressed() -> void:

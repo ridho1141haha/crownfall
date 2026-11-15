@@ -460,7 +460,7 @@ func _test_p4_light_burn_and_enemy_archetypes() -> bool:
 	night_burn.on_night_started(1)
 	for _s: int in range(12):
 		night_burn.tick(1.0, true, bm_burn, NightEncounterManager.get_hearth_radius(1), NightEncounterManager.get_hearth_burn_dps(1))
-	if not _check(night_burn.enemy_hp < 60 and night_burn.enemy_hp > 0, "P4 burn DoT alone reduced enemy HP (no wall, hp=%d)" % night_burn.enemy_hp):
+	if not _check(night_burn.enemy_hp < NightEncounterManager.ENEMY_MAX_HP and night_burn.enemy_hp > 0, "P4 burn DoT alone reduced enemy HP below 45 (no wall, hp=%d)" % night_burn.enemy_hp):
 		return false
 	if not _check(NightEncounterManager.get_night_forecast(3).contains("Brute"), "P4 Day 3 forecast telegraphs Brute"):
 		return false
@@ -686,5 +686,63 @@ func _test_v141_forest_autochop_and_west_guard() -> bool:
 	if not _check(archer.position_x >= BuildingManager.WEST_WALL_POSITION_X + 36.0, "v1.4.1 Archer stays behind standing West Wall (x >= -364)"):
 		return false
 
-	print("PASS: v1.4.1 Forest Chopping, Global Auto-Chop & West Wall Archer Guard")
+	# 4. Actionable plot selection: Farm East (x=120) COMPLETED tidak menghalangi Watchtower (x=210) PLACEHOLDER saat player di x=125
+	var f_ledger: EconomyLedger = EconomyLedgerScript.new({"gold": 10, "wood": 10, "stone": 10})
+	bm.request_start_construction(BuildingManager.FARM_EAST_POSITION_X, f_ledger, BuildingManager.FARM_EAST_ID)
+	bm.advance_construction(3.5, BuildingManager.FARM_EAST_ID)
+	var hs_chk: HearthSystem = HearthSystemScript.new()
+	var overlap_tgt: Dictionary = InteractionResolverScript.resolve_nearest(125.0, rnm, bm, null, hs_chk, 0, -1350.0, 1350.0, false)
+	if not _check(String(overlap_tgt.get("target_id", "")) == BuildingManager.WATCHTOWER_ID, "v1.4.2 Completed Farm East (x=120) does not block actionable Watchtower (x=210) at x=125"):
+		return false
+
+	# 5. Validasi ketat SaveManager: tolak tree_states invalid, plot type mismatch, & active enemy dengan 0 HP
+	var sm_chk: SaveManager = SaveManagerScript.new()
+	if not _check(not ForestTreeManager.is_valid_saved_tree_states({"unknown_tree": 2}) and not ForestTreeManager.is_valid_saved_tree_states({"tree_west_01": 99}), "v1.4.2 ForestTreeManager rejects unknown tree ID or out-of-range HP"):
+		return false
+	if not _check(not BuildingManager.is_valid_saved_building_dict({"id": "wall_east_01", "type": "wooden_wall", "state": "COMPLETED", "durability": 0, "max_durability": 150}), "v1.4.2 BuildingManager rejects COMPLETED building with 0 durability"):
+		return false
+	if not _check(not NightEncounterManager.is_valid_saved_encounter_dict({"night_active": true, "night_elapsed": 5.0, "spawned_wave_count": 1, "enemy_active": true, "enemy_x": 500.0, "enemy_hp": 0, "settlement_breached": false, "first_night_survived": false}), "v1.4.2 NightEncounterManager rejects enemy_active=true with enemy_hp=0"):
+		return false
+	var bad_type_payload: Dictionary = {
+		"schema_version": 2, "world_id": "aetherion", "island_id": "forgotten_shore",
+		"day_count": 1, "world_time": 0.0, "world_phase": "daylight",
+		"resources": {"gold": 2, "wood": 2, "stone": 1},
+		"buildings": [{"id": "watchtower_east_01", "type": "farm_plot", "state": "COMPLETED", "durability": 80, "max_durability": 80}],
+		"npcs": [{"id": "npc_01", "recruited": true, "role": "builder", "state": "IDLE", "position_x": 0.0}],
+		"night_encounter": NightEncounterManagerScript.new().to_save_dict(),
+		"progression_flags": {"first_night_survived": false},
+	}
+	if not _check(not sm_chk.validate_payload(bad_type_payload), "v1.4.2 SaveManager rejects watchtower_east_01 disguised as farm_plot"):
+		return false
+
+	# 6. Session command execution test: Shrine Offering, Kindle Flare, Stoke Fire persistence & Shipwreck Stage 1-3 -> Set Sail
+	var session_script: GDScript = load("res://scripts/world/ForgottenShoreSession.gd")
+	var sess: ForgottenShoreSession = session_script.new()
+	sess.building_mgr.register_forgotten_shore_expansion_plots()
+	sess.economy.set_balances_from_dict({"gold": 10, "wood": 20, "stone": 15})
+	sess.set_actor_position("local", -780.0)
+	if not _check(bool(sess.execute_world_command("local", &"shrine_offering", "shrine_cache_far_west")["ok"]) and sess.shrine_offering_used_today, "v1.4.2 Session command shrine_offering succeeds"):
+		return false
+	sess.set_actor_position("local", 0.0)
+	if not _check(bool(sess.execute_world_command("local", &"boost_hearth", "town_hearth")["ok"]) and sess.hearth_sys.is_boost_active() and is_equal_approx(sess.hearth_sys.get_effective_texture_scale(), 2.6 * 1.3), "v1.4.2 Session boost_hearth activates boost & effective texture scale"):
+		return false
+	var boost_save_path: String = "user://test_v142_boost_save.json"
+	if not _check(sess.save_game_state(boost_save_path), "v1.4.2 Save session with active hearth boost"):
+		return false
+	sess.hearth_sys.apply_save_boost(0.0)
+	if not _check(sess.load_game_state(boost_save_path) and is_equal_approx(sess.hearth_sys.boost_remaining, HearthSystem.BOOST_DURATION_SEC), "v1.4.2 Continue restores hearth_boost_remaining"):
+		return false
+	# Shipwreck command range check + 3-stage repair + Set Sail
+	sess.set_actor_position("local", 0.0)
+	if not _check(not bool(sess.execute_world_command("local", &"shipwreck", "shipwreck")["ok"]), "v1.4.2 Shipwreck command rejected out of range"):
+		return false
+	sess.set_actor_position("local", -1350.0)
+	for _st: int in range(3):
+		if not _check(bool(sess.execute_world_command("local", &"shipwreck", "shipwreck")["ok"]), "v1.4.2 Shipwreck repair stage command succeeds"):
+			return false
+	if not _check(sess.shipwreck_stage == 3 and bool(sess.execute_world_command("local", &"shipwreck", "shipwreck")["ok"]) and sess.reign_state == ForgottenShoreSession.ReignState.ISLAND_CLEARED, "v1.4.2 Shipwreck Stage 3 Set Sail sets ISLAND_CLEARED"):
+		return false
+	sess.free()
+
+	print("PASS: v1.4.1/v1.4.2 Forest Chopping, Actionable Plot Selection, Strict Validation & Session Commands")
 	return true

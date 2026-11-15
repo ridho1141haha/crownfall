@@ -113,13 +113,15 @@ func register_forgotten_shore_expansion_plots() -> void:
 					int(d.get("max_durability", REINFORCED_MAX_DURABILITY)),
 					extra_props
 				)
-	if not loaded_from_data:
-		if not has_plot(WATCHTOWER_ID):
-			register_plot(WATCHTOWER_ID, "watchtower", WATCHTOWER_POSITION_X, WATCHTOWER_BUILD_COST, WALL_REPAIR_COST, 3.5, WATCHTOWER_MAX_DURABILITY)
-		if not has_plot(FARM_WEST_ID):
-			register_plot(FARM_WEST_ID, "farm_plot", FARM_WEST_POSITION_X, FARM_BUILD_COST, FARM_REPAIR_COST, 3.5, FARM_MAX_DURABILITY)
-		if not has_plot(FARM_EAST_ID):
-			register_plot(FARM_EAST_ID, "farm_plot", FARM_EAST_POSITION_X, FARM_BUILD_COST, FARM_REPAIR_COST, 3.5, FARM_MAX_DURABILITY)
+	# Fallback per-plot jika file JSON korup/kosong atau ada plot ekspansi yang terlewat
+	if not has_plot(WATCHTOWER_ID):
+		register_plot(WATCHTOWER_ID, "watchtower", WATCHTOWER_POSITION_X, WATCHTOWER_BUILD_COST, WALL_REPAIR_COST, 3.5, WATCHTOWER_MAX_DURABILITY)
+	if not has_plot(FARM_WEST_ID):
+		register_plot(FARM_WEST_ID, "farm_plot", FARM_WEST_POSITION_X, FARM_BUILD_COST, FARM_REPAIR_COST, 3.5, FARM_MAX_DURABILITY)
+	if not has_plot(FARM_EAST_ID):
+		register_plot(FARM_EAST_ID, "farm_plot", FARM_EAST_POSITION_X, FARM_BUILD_COST, FARM_REPAIR_COST, 3.5, FARM_MAX_DURABILITY)
+	if not has_plot(WEST_WALL_ID):
+		register_plot(WEST_WALL_ID, "wooden_wall", WEST_WALL_POSITION_X, WALL_BUILD_COST, WALL_REPAIR_COST, BUILD_DURATION, REINFORCED_MAX_DURABILITY)
 
 
 func register_plot(
@@ -174,6 +176,31 @@ func get_nearest_plot_id(candidate_x: float, max_range: float = INTERACT_RANGE) 
 		var plot: Dictionary = _plots[plot_id]
 		var dist: float = absf(candidate_x - float(plot["position_x"]))
 		if dist < best_dist:
+			best_dist = dist
+			best_id = plot_id
+	return best_id
+
+
+func get_nearest_actionable_plot_id(candidate_x: float, max_range: float = INTERACT_RANGE, mode: String = "any") -> String:
+	var best_id: String = ""
+	var best_dist: float = max_range + 0.001
+	for plot_id: String in _plots.keys():
+		var plot: Dictionary = _plots[plot_id]
+		var dist: float = absf(candidate_x - float(plot["position_x"]))
+		if dist > max_range or dist >= best_dist:
+			continue
+		var st: int = int(plot["state"])
+		var actionable: bool = false
+		match mode:
+			"build_or_upgrade":
+				actionable = (st == WallState.PLACEHOLDER or st == WallState.DESTROYED or can_upgrade_wall(candidate_x, plot_id))
+			"repair":
+				actionable = (st == WallState.DAMAGED)
+			"upgrade":
+				actionable = can_upgrade_wall(candidate_x, plot_id)
+			_:
+				actionable = (st == WallState.PLACEHOLDER or st == WallState.DESTROYED or st == WallState.DAMAGED or can_upgrade_wall(candidate_x, plot_id))
+		if actionable:
 			best_dist = dist
 			best_id = plot_id
 	return best_id
@@ -582,6 +609,22 @@ static func is_valid_saved_building_dict(data: Variant) -> bool:
 		return false
 	var prog: float = float(d.get("progress", 0.0))
 	if is_nan(prog) or is_inf(prog) or prog < 0.0 or prog > 1.0:
+		return false
+	if d.has("level"):
+		if not EconomyLedger.is_exact_int_value(d["level"]):
+			return false
+		var lvl_chk: int = int(roundf(float(d["level"])))
+		if lvl_chk < 1 or lvl_chk > 2:
+			return false
+	var btype_chk: String = String(d.get("type", "wooden_wall"))
+	var eff_lvl: int = int(roundf(float(d.get("level", 1))))
+	if btype_chk == "stone_wall" and eff_lvl < 2:
+		return false
+	if (btype_chk == "watchtower" or btype_chk == "farm_plot") and eff_lvl != 1:
+		return false
+	if (st_str == "PLACEHOLDER" or st_str == "DESTROYED") and dur != 0:
+		return false
+	if (st_str == "COMPLETED" or st_str == "DAMAGED") and dur <= 0:
 		return false
 	return true
 

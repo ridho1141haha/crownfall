@@ -87,9 +87,9 @@ static func resolve_nearest(
 				"distance": d_camp,
 			}
 
-	# 4. Building Plots (Watchtower x=210, Wall x=380, Farms x=-310/120)
+	# 4. Building Plots (pilih plot terdekat yang benar-benar punya aksi aktif)
 	if building_mgr != null:
-		var pid: String = building_mgr.get_nearest_plot_id(actor_x, BuildingManager.INTERACT_RANGE)
+		var pid: String = building_mgr.get_nearest_actionable_plot_id(actor_x, BuildingManager.INTERACT_RANGE, "any")
 		if not pid.is_empty():
 			var plot: Dictionary = building_mgr.get_plot(pid)
 			var d_plot: float = absf(actor_x - float(plot["position_x"]))

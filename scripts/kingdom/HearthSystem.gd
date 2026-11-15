@@ -28,14 +28,34 @@ func _init() -> void:
 	load_from_data()
 
 
+static func is_valid_tier_dict(d: Dictionary, expected_level: int) -> bool:
+	if int(d.get("level", 0)) != expected_level:
+		return false
+	if not d.has("radius_px") or not d.has("texture_scale") or not d.has("burn_dps") or not d.has("upgrade_cost"):
+		return false
+	var rad: float = float(d["radius_px"])
+	var scl: float = float(d["texture_scale"])
+	var dps: float = float(d["burn_dps"])
+	if is_nan(rad) or is_inf(rad) or rad <= 0.0 or is_nan(scl) or is_inf(scl) or scl <= 0.0 or is_nan(dps) or is_inf(dps) or dps < 0.0:
+		return false
+	return typeof(d["upgrade_cost"]) == TYPE_DICTIONARY
+
+
 func load_from_data(path: String = "res://data/lighting.json") -> void:
 	tiers.clear()
 	if FileAccess.file_exists(path):
 		var parsed: Variant = JSON.parse_string(FileAccess.get_file_as_string(path))
-		if typeof(parsed) == TYPE_DICTIONARY and (parsed as Dictionary).has("hearth_tiers"):
-			for item: Variant in (parsed as Dictionary)["hearth_tiers"]:
-				if typeof(item) == TYPE_DICTIONARY:
-					tiers.append(item as Dictionary)
+		if typeof(parsed) == TYPE_DICTIONARY and (parsed as Dictionary).has("hearth_tiers") and typeof((parsed as Dictionary)["hearth_tiers"]) == TYPE_ARRAY:
+			var raw_arr: Array = (parsed as Dictionary)["hearth_tiers"]
+			var valid_all: bool = (raw_arr.size() >= MAX_LEVEL)
+			var staged: Array[Dictionary] = []
+			for i: int in range(mini(raw_arr.size(), MAX_LEVEL)):
+				if typeof(raw_arr[i]) != TYPE_DICTIONARY or not is_valid_tier_dict(raw_arr[i] as Dictionary, i + 1):
+					valid_all = false
+					break
+				staged.append(raw_arr[i] as Dictionary)
+			if valid_all:
+				tiers.assign(staged)
 	if tiers.size() < MAX_LEVEL:
 		tiers.assign(DEFAULT_TIERS)
 
@@ -56,6 +76,13 @@ func get_radius_px() -> float:
 
 func get_texture_scale() -> float:
 	return float(get_tier()["texture_scale"])
+
+
+func get_effective_texture_scale() -> float:
+	var scl: float = get_texture_scale()
+	if is_boost_active():
+		scl *= BOOST_RADIUS_MULT
+	return scl
 
 
 func get_burn_dps() -> float:
@@ -133,3 +160,10 @@ func try_upgrade(actor_x: float, ledger: EconomyLedger) -> Dictionary:
 
 func apply_save_level(lvl: int) -> void:
 	hearth_level = clampi(lvl, 1, MAX_LEVEL)
+
+
+func apply_save_boost(rem: float) -> void:
+	if is_nan(rem) or is_inf(rem):
+		boost_remaining = 0.0
+		return
+	boost_remaining = clampf(rem, 0.0, BOOST_DURATION_SEC)

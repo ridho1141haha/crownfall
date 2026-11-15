@@ -70,11 +70,16 @@ func load_archetypes_from_data(path: String = "res://data/enemies.json") -> void
 					var entry: Variant = (raw_map as Dictionary)[k]
 					if typeof(entry) == TYPE_DICTIONARY:
 						var ed: Dictionary = entry as Dictionary
+						var hp_v: int = int(roundf(float(ed.get("hp", 0))))
+						var spd_v: float = float(ed.get("speed", 0.0))
+						var dmg_v: int = int(roundf(float(ed.get("damage", 0))))
+						if hp_v <= 0 or hp_v > MAX_POSSIBLE_ENEMY_HP or is_nan(spd_v) or is_inf(spd_v) or spd_v <= 0.0 or dmg_v <= 0:
+							continue
 						archetypes[String(k)] = {
 							"name": String(ed.get("name", String(k))),
-							"hp": int(roundf(float(ed.get("hp", ENEMY_MAX_HP)))),
-							"speed": float(ed.get("speed", MOVE_SPEED)),
-							"damage": int(roundf(float(ed.get("damage", ATTACK_DAMAGE)))),
+							"hp": hp_v,
+							"speed": spd_v,
+							"damage": dmg_v,
 						}
 
 
@@ -448,6 +453,49 @@ static func is_valid_saved_encounter_dict(data: Variant) -> bool:
 	var ex: float = float(d["enemy_x"])
 	if is_nan(el) or is_inf(el) or el < 0.0 or is_nan(ex) or is_inf(ex):
 		return false
+	if bool(d["enemy_active"]) and hp <= 0:
+		return false
+	if d.has("enemy_archetype"):
+		var arch_s: String = String(d["enemy_archetype"])
+		if not DEFAULT_ARCHETYPES.has(arch_s):
+			return false
+	if d.has("enemy_max_hp"):
+		if not EconomyLedger.is_exact_int_value(d["enemy_max_hp"]):
+			return false
+		var emax: int = int(roundf(float(d["enemy_max_hp"])))
+		if emax <= 0 or emax > MAX_POSSIBLE_ENEMY_HP or hp > emax:
+			return false
+	if d.has("current_day_number"):
+		if not EconomyLedger.is_exact_int_value(d["current_day_number"]) or int(roundf(float(d["current_day_number"]))) < 1:
+			return false
+	if d.has("west_spawned_count"):
+		if not EconomyLedger.is_exact_int_value(d["west_spawned_count"]):
+			return false
+		var wsc: int = int(roundf(float(d["west_spawned_count"])))
+		if wsc < 0 or wsc > WEST_SCOUT_TIMES.size():
+			return false
+	if d.has("west_enemy_active") and typeof(d["west_enemy_active"]) != TYPE_BOOL:
+		return false
+	if d.has("west_enemy_x"):
+		var wx: float = float(d["west_enemy_x"])
+		if is_nan(wx) or is_inf(wx):
+			return false
+	if d.has("west_enemy_hp"):
+		if not EconomyLedger.is_exact_int_value(d["west_enemy_hp"]):
+			return false
+		var whp: int = int(roundf(float(d["west_enemy_hp"])))
+		if whp < 0 or whp > MAX_POSSIBLE_ENEMY_HP:
+			return false
+		if bool(d.get("west_enemy_active", false)) and whp <= 0:
+			return false
+	if d.has("west_enemy_max_hp"):
+		if not EconomyLedger.is_exact_int_value(d["west_enemy_max_hp"]):
+			return false
+		var wmax: int = int(roundf(float(d["west_enemy_max_hp"])))
+		if wmax <= 0 or wmax > MAX_POSSIBLE_ENEMY_HP:
+			return false
+		if d.has("west_enemy_hp") and int(roundf(float(d["west_enemy_hp"]))) > wmax:
+			return false
 	for timer_key: String in ["attack_timer", "light_burn_acc", "west_attack_timer", "west_burn_acc"]:
 		if d.has(timer_key):
 			if typeof(d[timer_key]) not in [TYPE_FLOAT, TYPE_INT]:

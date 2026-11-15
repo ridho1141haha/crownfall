@@ -100,6 +100,25 @@ func to_save_dict() -> Dictionary:
 	return out
 
 
+static func is_valid_saved_tree_states(saved_states: Variant) -> bool:
+	if typeof(saved_states) != TYPE_DICTIONARY:
+		return false
+	var known_max: Dictionary = {}
+	for t: Dictionary in DEFAULT_TREES:
+		known_max[String(t["id"])] = int(t.get("max_hp", DEFAULT_MAX_HP))
+	var d: Dictionary = saved_states as Dictionary
+	for raw_k: Variant in d.keys():
+		var tid: String = String(raw_k)
+		if not known_max.has(tid):
+			return false
+		if not EconomyLedger.is_exact_int_value(d[raw_k]):
+			return false
+		var hp_val: int = int(roundf(float(d[raw_k])))
+		if hp_val < 0 or hp_val > int(known_max[tid]):
+			return false
+	return true
+
+
 func apply_save_state(saved_states: Variant) -> void:
 	for t: Dictionary in trees:
 		tree_hp[String(t["id"])] = int(t.get("max_hp", DEFAULT_MAX_HP))

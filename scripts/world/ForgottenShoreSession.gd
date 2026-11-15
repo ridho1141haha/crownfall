@@ -132,7 +132,11 @@ func _process(delta: float) -> void:
 	pop_mgr.tick_all(sim_delta, building_mgr, night_mgr, resource_mgr, economy)
 	flare_active_timer = maxf(0.0, flare_active_timer - sim_delta)
 	flare_cooldown_timer = maxf(0.0, flare_cooldown_timer - sim_delta)
-	hearth_sys.tick_boost(sim_delta)
+	var was_boosted: bool = hearth_sys.is_boost_active()
+	if not is_daylight:
+		hearth_sys.tick_boost(sim_delta)
+	if was_boosted != hearth_sys.is_boost_active():
+		_sync_hearth_visuals()
 	night_mgr.tick(sim_delta, is_night, building_mgr, hearth_sys.get_effective_radius_px(), hearth_sys.get_effective_burn_dps(), flare_active_timer > 0.0)
 	_tick_monarch_light_risk(sim_delta, is_night)
 	_sync_dynamic_actors()
@@ -260,6 +264,10 @@ func _record_rejection(reason: String) -> void:
 	feedback_message.emit(reason)
 
 
+func get_last_rejection_reason() -> String:
+	return _last_rejection_reason
+
+
 func _resolve_target_for_actor(actor_x: float) -> Dictionary:
 	return InteractionResolver.resolve_nearest(
 		actor_x,
@@ -320,6 +328,8 @@ func execute_world_command(actor_id: String, command: StringName, target_id: Str
 
 		&"build":
 			if resolved_target.is_empty():
+				resolved_target = building_mgr.get_nearest_actionable_plot_id(actor_x, BuildingManager.INTERACT_RANGE, "build_or_upgrade")
+			if resolved_target.is_empty():
 				resolved_target = building_mgr.get_nearest_plot_id(actor_x, BuildingManager.INTERACT_RANGE)
 			if resolved_target.is_empty():
 				resolved_target = BuildingManager.WALL_ID
@@ -329,6 +339,8 @@ func execute_world_command(actor_id: String, command: StringName, target_id: Str
 				feedback_message.emit("%s blueprint funded! Builder will construct it." % resolved_target)
 
 		&"repair":
+			if resolved_target.is_empty():
+				resolved_target = building_mgr.get_nearest_actionable_plot_id(actor_x, BuildingManager.INTERACT_RANGE, "repair")
 			if resolved_target.is_empty():
 				resolved_target = building_mgr.get_nearest_plot_id(actor_x, BuildingManager.INTERACT_RANGE)
 			if resolved_target.is_empty():
@@ -340,6 +352,8 @@ func execute_world_command(actor_id: String, command: StringName, target_id: Str
 				feedback_message.emit("Structure (%s) repaired to full durability!" % resolved_target)
 
 		&"upgrade_building":
+			if resolved_target.is_empty():
+				resolved_target = building_mgr.get_nearest_actionable_plot_id(actor_x, BuildingManager.INTERACT_RANGE, "upgrade")
 			if resolved_target.is_empty():
 				resolved_target = building_mgr.get_nearest_plot_id(actor_x, BuildingManager.INTERACT_RANGE)
 			if resolved_target.is_empty():
@@ -476,6 +490,8 @@ func _on_player_upgrade_tier(player_x: float) -> bool:
 func _on_player_build_wall(player_x: float, plot_id: String = "") -> bool:
 	var target_id: String = plot_id
 	if target_id.is_empty():
+		target_id = building_mgr.get_nearest_actionable_plot_id(player_x, BuildingManager.INTERACT_RANGE, "build_or_upgrade")
+	if target_id.is_empty():
 		target_id = building_mgr.get_nearest_plot_id(player_x, BuildingManager.INTERACT_RANGE)
 	if target_id.is_empty():
 		target_id = BuildingManager.WALL_ID
@@ -486,6 +502,8 @@ func _on_player_build_wall(player_x: float, plot_id: String = "") -> bool:
 
 func _on_player_repair_wall(player_x: float, plot_id: String = "") -> bool:
 	var target_id: String = plot_id
+	if target_id.is_empty():
+		target_id = building_mgr.get_nearest_actionable_plot_id(player_x, BuildingManager.INTERACT_RANGE, "repair")
 	if target_id.is_empty():
 		target_id = building_mgr.get_nearest_plot_id(player_x, BuildingManager.INTERACT_RANGE)
 	if target_id.is_empty():
@@ -746,7 +764,7 @@ func _build_population_summary() -> String:
 func _sync_hearth_visuals() -> void:
 	var light: PointLight2D = get_node_or_null("WorldObjects/TownCenterAnchor/CampfireLight") as PointLight2D
 	if light != null:
-		light.texture_scale = hearth_sys.get_texture_scale()
+		light.texture_scale = hearth_sys.get_effective_texture_scale()
 	var t_lbl: Label = get_node_or_null("WorldObjects/TownCenterAnchor/TownLabel") as Label
 	if t_lbl != null:
 		if hearth_sys.hearth_level == 1:
@@ -1199,6 +1217,7 @@ func build_save_payload() -> Dictionary:
 			"tree_states": tree_mgr.to_save_dict(),
 			"reign_state": _reign_state_to_string(reign_state),
 			"hearth_level": hearth_sys.hearth_level,
+			"hearth_boost_remaining": snappedf(hearth_sys.boost_remaining, 0.01),
 			"shipwreck_stage": shipwreck_stage,
 			"portal_relic_looted": portal_relic_looted,
 			"shrine_offering_used_today": shrine_offering_used_today,
@@ -1231,6 +1250,7 @@ func load_game_state(save_path: String = SaveManager.DEFAULT_SAVE_PATH) -> bool:
 	night_mgr.first_night_survived = bool(flags.get("first_night_survived", night_mgr.first_night_survived))
 	reign_state = _string_to_reign_state(flags.get("reign_state", "ACTIVE"))
 	hearth_sys.apply_save_level(int(flags.get("hearth_level", 1)))
+	hearth_sys.apply_save_boost(float(flags.get("hearth_boost_remaining", 0.0)))
 	shipwreck_stage = clampi(int(flags.get("shipwreck_stage", 0)), 0, 3)
 	portal_relic_looted = bool(flags.get("portal_relic_looted", false))
 	shrine_offering_used_today = bool(flags.get("shrine_offering_used_today", false))
