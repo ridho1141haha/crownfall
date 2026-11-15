@@ -151,7 +151,7 @@ Required visual scope:
 - Wall-attack indication if the behavior is implemented.
 - Optional damage feedback needed to test the encounter.
 
-Approved P0 enemy (`OD-06`): **Greedling Raider** (`45 HP`, `15 dmg/hit`, `15 thorn dmg/hit`, `95 px/s`, 3 waves per night). Only the single Greedling Raider visual/placeholder is required in P0; Crawler, Brute, and boss asset sets remain deferred to P1/P2.
+Approved P0 enemy (`OD-06`): **Greedling Raider** (`45 HP`, `15 dmg/hit`, `5 thorn dmg/hit` from `Wooden Wall Lv.1` (`20` at `Lv.2`/`Stone`), `95 px/s`, 3 waves per night). Only the single Greedling Raider visual/placeholder is required in P0; Crawler, Brute, and boss asset sets remain deferred to P1/P2.
 
 ### 3.7 First-Slice Effects
 

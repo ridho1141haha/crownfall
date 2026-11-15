@@ -7,6 +7,22 @@ This changelog records repository changes that actually occurred. Planned featur
 
 ---
 
+## [2026-11-15] Baseline v1.4.0 — Night Balance, Archer Flank Defense, Auto-Chop & Feedback Pass
+
+**Type:** Gameplay Logic Audit (Combat, Economy & UI/UX), Balance Rebuild & Documentation Sync  
+**Engine Verified:** `Godot 4.7.2.stable`
+
+### Summary
+Rebuilt the Night 1 defense math (Wooden Wall Lv.1 thorn `15 -> 5`, so passive-only defense now breaches and the free first `Archer` becomes the intended answer), gave the `Archer` full combat behavior (1s volley cadence, Watchtower perch `x2` damage, west-flank pursuit of Day 2+ West Scouts), made idle `Builders` auto-chop Wood, added the renewable west `Stone Quarry` (`x=-600, +3S`), locked `ISLAND_CLEARED` behind `Shipwreck Stage 3` (removed the Day-2 auto-win), and shipped a feedback pass (population/vagrant HUD, victory banner, floating text at actor positions, `building_attacked` signals for wall hits and tramples, adaptive sunset/night warnings).
+
+### Key Changes
+- **Combat (`NightEncounterManager.gd`, `BuildingManager.gd`, `NPCBuilderAgent.gd`):** Wooden Wall Lv.1 thorn `5` (Lv.2/Stone stay `20`), breach trample of interior buildings, `get_nearest_active_enemy`/`damage_nearest_enemy` west-lane API, `is_fully_operational` gate for Watchtower support and Archer perch, Archer pursuit at `190px` trailing gap (clamped west of `-600`), greedling tool confiscation at night.
+- **Economy (`ResourceNodeManager.gd`, `NPCPopulationManager.gd`, `data/resource_nodes.json`):** `Stone Quarry` west node (`+3S`, renewable), Builder auto-chop (wood-only, daylight-only) with `auto_chop_collected`, `2` starting Vagrants, first Archer assignment free, `resource`/`renewable` node filters.
+- **Win condition & UI (`ForgottenShoreSession.gd`, `ClockHUD.gd`, `ForgottenShore.tscn`):** `ISLAND_CLEARED` only on `Shipwreck Stage 3` with Victory Banner overlay, `PopulationLabel` (`NPCs / roles / Idle / Vagrants`), West Scout HP alerts, `building_attacked` floating feedback, post-victory calm nights, adaptive Night 2+ warnings.
+- **Tests & Docs:** M6 scenarios A/D rebuilt around the new balance (passive breach, tower-held `15 HP`), M8 + vertical slice upgraded to 2-NPC Archer defense (`150 HP` wall) with simulated raid damage + repair flow, P0 compat fixes (`get_balance`, `apply_damage`), and GDD/PRD/SYSTEMS/DECISIONS/ASSET_GUIDELINES/REVISED_BASELINE thorn narratives synced to the shipped balance.
+
+---
+
 ## [2026-11-14] Baseline v1.3.6 — Modular Architecture, Gold Anti-Softlock, West Defense & 2D Shaders
 
 **Type:** Architecture Refactor (Task 1) & Gameplay/Visual Expansion (Task 2)  

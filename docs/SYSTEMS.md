@@ -326,7 +326,7 @@ Release an invalid task cleanly. Do not repeatedly request paths every frame.
 - Wooden Wall as the first intended defensive target.
 - One encounter that can resolve at sunrise.
 
-Approved P0 encounter (`OD-06`): **Greedling Raider** spawns in **3 waves** (`t = 0.0s, 55.0s, 110.0s`) at `x=820.0` during `Night` (`180s`), marching west at `95 px/s` with `45 HP`, `15 damage/hit` (`1.0s` interval), and taking `15 thorn damage/hit` (`45 wall damage/wave`, `135 total wall damage` across 3 waves).
+Approved P0 encounter (`OD-06`): **Greedling Raider** spawns in **3 waves** (`t = 0.0s, 55.0s, 110.0s`) at `x=820.0` during `Night` (`180s`), marching west at `95 px/s` with `45 HP` and `15 damage/hit` (`1.0s` interval), taking `5 thorn damage/hit` from a `Wooden Wall Lv.1` (`20 thorn` at `Lv.2`/`Stone`); passive-only defense falls in Night 1, while the free first `Archer` or `Watchtower` support holds the line.
 
 ### Behavioral Contract
 

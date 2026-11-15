@@ -161,7 +161,7 @@ The current tuning target is a 12-minute in-game day:
 
 These timings are provisional and must be tested.
 
-Approved first-night encounter (`OD-06`): **Greedling Raider** spawns at `x=820.0` in **3 paced waves** (`t = 0.0s, 55.0s, 110.0s`) during `Night` (`180s`), marching west at `95 px/s`. Each raider has `45 HP`, deals `15 damage/hit` (`1.0s` interval) to the Wooden Wall, and takes `15 thorn damage/hit` (`45 wall damage/wave`, `135 total wall damage` across 3 waves, leaving a completed `150 HP` wall standing at `15 HP` at sunrise).
+Approved first-night encounter (`OD-06`): **Greedling Raider** spawns at `x=820.0` in **3 paced waves** (`t = 0.0s, 55.0s, 110.0s`) during `Night` (`180s`), marching west at `95 px/s`. Each raider has `45 HP`, deals `15 damage/hit` (`1.0s` interval) to the wall, and takes `5 thorn damage/hit` from a `Wooden Wall Lv.1` (`20 thorn` from `Lv.2`/`Stone` walls). Passive thorn alone no longer holds Night 1 (the wall falls during wave 2); the free first `Archer` or `Watchtower` support (`5 thorn + 10 support = 15 dmg/attack`, kill in 3 hits) keeps the wall standing.
 
 ### 3.7 Outcome and Persistence
 
@@ -195,7 +195,7 @@ All first-slice design decisions have been formally approved and synchronized wi
 | GDD-OD-02 (`OD-02`) | Starting balances & recruitment cost | Start with `2G, 2W, 1S`; recruit Villager at Camp (`x=-220`) for `2 Gold` |
 | GDD-OD-03 (`OD-03/04`) | Wooden Wall placement, cost, duration, repair | Plot at `x=360`; build cost `2G, 4W, 2S` (`4.0s`, `150 HP`); partial barricade `progress * 80 HP`; repair `2W, 1S` |
 | GDD-OD-04 (`OD-05`) | Builder representation | Persistent `NPCBuilderAgent` (`id="npc_01"`, `role: "villager" -> "builder"`) |
-| GDD-OD-05 (`OD-06`) | First enemy identity, behavior, tuning, spawn | Greedling Raider: 3 waves (`0s, 55s, 110s`), `45 HP`, `15 dmg/hit`, `15 thorn dmg/hit`, `95 px/s` |
+| GDD-OD-05 (`OD-06`) | First enemy identity, behavior, tuning, spawn | Greedling Raider: 3 waves (`0s, 55s, 110s`), `45 HP`, `15 dmg/hit`, `5 thorn dmg/hit` (Wooden Lv.1; `20` at Lv.2/Stone), `95 px/s` |
 | GDD-OD-06 (`OD-07`) | Wall destruction & breach consequences | Non-destructive `settlement_breached = true` at `x=0.0`; rebuildable on next day |
 | GDD-OD-07 (`OD-08`) | Exploration reward / POI interaction | Far-western Forgotten Shrine (`x=-780.0`) granting `+3 Gold` |
 | GDD-OD-08 (`OD-09`) | Persistent NPC attributes in save | `id`, `recruited`, `role`, `state`, and `position_x` serialized in `user://save_slot_0.json` |

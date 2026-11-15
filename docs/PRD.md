@@ -336,7 +336,7 @@ All P0 balancing and interaction decisions are resolved and documented in [`docs
 | Starting balances & recruitment (`OD-02`) | Start `2G, 2W, 1S`; recruit Villager at Camp (`x=-220`) for `2G` |
 | Stone purpose & Wall rules (`OD-03`, `OD-04`) | East plot `x=360`; build cost `2G, 4W, 2S` (`4.0s`, `150 HP`); repair `2W, 1S` |
 | Builder data model (`OD-05`) | Persistent `NPCBuilderAgent` (`id="npc_01"`, `role: "villager" -> "builder"`) |
-| First-night enemy tuning (`OD-06`) | 3 Greedling Raider waves (`0s, 55s, 110s`), `45 HP`, `15 dmg/hit`, `15 thorn dmg/hit` |
+| First-night enemy tuning (`OD-06`) | 3 Greedling Raider waves (`0s, 55s, 110s`), `45 HP`, `15 dmg/hit`, `5 thorn dmg/hit` (Wooden Lv.1; `20` at Lv.2/Stone) |
 | Breach outcome (`OD-07`) | Non-destructive `settlement_breached = true` at Town Center (`x=0.0`) |
 | Exploration POI (`OD-08`) | Forgotten Shrine at `x=-780.0` granting `+3 Gold` |
 | Save payload (`OD-09`, `OD-10`) | `schema_version: 1` JSON with multi-plot `buildings[]`, `npcs[]`, and `night_encounter` on Godot `4.7.2.stable` |
