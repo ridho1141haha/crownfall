@@ -48,6 +48,7 @@ var west_spawned_count: int = 0
 var west_enemy_active: bool = false
 var west_enemy_x: float = WEST_SPAWN_X
 var west_enemy_hp: int = 0
+var west_enemy_max_hp: int = ENEMY_MAX_HP
 var _west_attack_timer: float = 0.0
 var _west_burn_acc: float = 0.0
 var _east_trampled: Array[String] = []
@@ -77,7 +78,25 @@ func load_archetypes_from_data(path: String = "res://data/enemies.json") -> void
 						}
 
 
+static var _hearth_tiers_cache: Array[Dictionary] = []
+
+const LIGHTING_DATA_PATH: String = "res://data/lighting.json"
+
+static func _load_hearth_tiers() -> Array[Dictionary]:
+	if not _hearth_tiers_cache.is_empty():
+		return _hearth_tiers_cache
+	if FileAccess.file_exists(LIGHTING_DATA_PATH):
+		var parsed: Variant = JSON.parse_string(FileAccess.get_file_as_string(LIGHTING_DATA_PATH))
+		if typeof(parsed) == TYPE_DICTIONARY and (parsed as Dictionary).has("hearth_tiers"):
+			for item: Variant in (parsed as Dictionary)["hearth_tiers"]:
+				if typeof(item) == TYPE_DICTIONARY:
+					_hearth_tiers_cache.append(item as Dictionary)
+	return _hearth_tiers_cache
+
 static func get_hearth_radius(hearth_level: int) -> float:
+	for t: Dictionary in _load_hearth_tiers():
+		if int(t.get("level", 0)) == hearth_level:
+			return float(t.get("radius_px", 0.0))
 	match hearth_level:
 		2:
 			return 320.0
@@ -86,8 +105,10 @@ static func get_hearth_radius(hearth_level: int) -> float:
 		_:
 			return 180.0
 
-
 static func get_hearth_burn_dps(hearth_level: int) -> float:
+	for t: Dictionary in _load_hearth_tiers():
+		if int(t.get("level", 0)) == hearth_level:
+			return float(t.get("burn_dps", 2.0))
 	return 4.0 if hearth_level >= 3 else 2.0
 
 
@@ -166,18 +187,21 @@ func damage_nearest_enemy(from_x: float, max_range: float, amount: int) -> Dicti
 	return {"hit": ok, "x": tx}
 
 
-func _trample_interior(building_mgr: BuildingManager, enemy_x: float, plot_ids: Array[String], trampled: Array[String], dmg: int) -> void:
+func _trample_interior(building_mgr: BuildingManager, prev_enemy_x: float, enemy_x: float, plot_ids: Array[String], trampled: Array[String], dmg: int) -> void:
 	if building_mgr == null or dmg <= 0:
 		return
+	var seg_min: float = minf(prev_enemy_x, enemy_x)
+	var seg_max: float = maxf(prev_enemy_x, enemy_x)
 	for pid: String in plot_ids:
 		if trampled.has(pid) or not building_mgr.is_standing(pid):
 			continue
 		var px: float = float((building_mgr.get_plot(pid) as Dictionary)["position_x"])
-		if absf(enemy_x - px) <= ATTACK_RANGE:
-			trampled.append(pid)
-			var applied: int = building_mgr.apply_enemy_damage(dmg, pid)
-			if applied > 0:
-				building_attacked.emit(pid, applied, enemy_x)
+		if px < seg_min - ATTACK_RANGE or px > seg_max + ATTACK_RANGE:
+			continue
+		trampled.append(pid)
+		var applied: int = building_mgr.apply_enemy_damage(dmg, pid)
+		if applied > 0:
+			building_attacked.emit(pid, applied, enemy_x)
 
 
 func on_night_started(day_num: int = 1) -> void:
@@ -199,7 +223,11 @@ func on_night_started(day_num: int = 1) -> void:
 
 
 func on_sunrise_reached(building_mgr: BuildingManager) -> void:
-	var wall_held: bool = building_mgr != null and building_mgr.is_standing()
+	var wall_held: bool = false
+	if building_mgr != null:
+		wall_held = building_mgr.is_standing(BuildingManager.WALL_ID)
+		if building_mgr.has_plot(BuildingManager.WEST_WALL_ID) and building_mgr.get_state_name(BuildingManager.WEST_WALL_ID) != "PLACEHOLDER":
+			wall_held = wall_held and building_mgr.is_standing(BuildingManager.WEST_WALL_ID)
 	var survived: bool = not settlement_breached
 	if survived:
 		first_night_survived = true
@@ -212,13 +240,27 @@ func on_sunrise_reached(building_mgr: BuildingManager) -> void:
 	night_encounter_resolved.emit(survived, wall_held)
 
 
-func tick(delta: float, is_night: bool, building_mgr: BuildingManager, hearth_level: int = 1, flare_active: bool = false) -> void:
+func stop_encounter() -> void:
+	if not night_active:
+		return
+	night_active = false
+	enemy_active = false
+	enemy_hp = 0
+	west_enemy_active = false
+	west_enemy_hp = 0
+	settlement_breached = false
+	enemy_updated.emit(false, enemy_x, enemy_hp, enemy_max_hp)
+
+
+func tick(delta: float, is_night: bool, building_mgr: BuildingManager, hearth_radius: float = -1.0, hearth_burn_dps: float = -1.0, flare_active: bool = false) -> void:
 	if not is_night or not night_active or delta <= 0.0:
 		return
 
 	night_elapsed += delta
 	var schedule: Array[float] = get_wave_schedule(current_day_number)
 	var light_mult: float = 1.5 if flare_active else 1.0
+	var radius: float = get_hearth_radius(1) if hearth_radius < 0.0 else hearth_radius
+	var burn: float = get_hearth_burn_dps(1) if hearth_burn_dps < 0.0 else hearth_burn_dps
 
 	if not enemy_active and not settlement_breached and spawned_wave_count < schedule.size():
 		if night_elapsed >= schedule[spawned_wave_count]:
@@ -230,21 +272,20 @@ func tick(delta: float, is_night: bool, building_mgr: BuildingManager, hearth_le
 			_spawn_west_scout()
 
 	if enemy_active:
-		_tick_east_enemy(delta, building_mgr, hearth_level, light_mult)
+		_tick_east_enemy(delta, building_mgr, radius, burn, light_mult)
 
 	if west_enemy_active:
-		_tick_west_enemy(delta, building_mgr, hearth_level, light_mult)
+		_tick_west_enemy(delta, building_mgr, radius, burn, light_mult)
 
 
-func _tick_east_enemy(delta: float, building_mgr: BuildingManager, hearth_level: int, light_mult: float) -> void:
+func _tick_east_enemy(delta: float, building_mgr: BuildingManager, hearth_radius: float, hearth_burn_dps: float, light_mult: float) -> void:
 	var stats: Dictionary = archetypes.get(enemy_archetype, DEFAULT_ARCHETYPES["raider"]) as Dictionary
 	var spd: float = float(stats["speed"])
 	var base_dmg: int = int(stats["damage"])
 
-	var hearth_radius: float = get_hearth_radius(hearth_level)
 	var in_hearth_light: bool = absf(enemy_x - TOWN_CENTER_X) <= hearth_radius
 	if in_hearth_light:
-		_light_burn_acc += delta * get_hearth_burn_dps(hearth_level) * light_mult
+		_light_burn_acc += delta * hearth_burn_dps * light_mult
 		var burn_pts: int = int(_light_burn_acc)
 		if burn_pts >= 1:
 			_light_burn_acc -= float(burn_pts)
@@ -277,22 +318,22 @@ func _tick_east_enemy(delta: float, building_mgr: BuildingManager, hearth_level:
 		return
 
 	if enemy_x > TOWN_CENTER_X:
+		var prev_x: float = enemy_x
 		enemy_x = maxf(TOWN_CENTER_X, enemy_x - spd * delta)
-		_trample_interior(building_mgr, enemy_x, [BuildingManager.WATCHTOWER_ID, BuildingManager.FARM_EAST_ID], _east_trampled, base_dmg)
+		_trample_interior(building_mgr, prev_x, enemy_x, [BuildingManager.WATCHTOWER_ID, BuildingManager.FARM_EAST_ID], _east_trampled, effective_dmg)
 		if enemy_x <= TOWN_CENTER_X + 8.0:
 			settlement_breached = true
 			enemy_active = false
 	enemy_updated.emit(enemy_active, enemy_x, enemy_hp, enemy_max_hp)
 
 
-func _tick_west_enemy(delta: float, building_mgr: BuildingManager, hearth_level: int, light_mult: float) -> void:
+func _tick_west_enemy(delta: float, building_mgr: BuildingManager, hearth_radius: float, hearth_burn_dps: float, light_mult: float) -> void:
 	var stats: Dictionary = archetypes.get("raider", DEFAULT_ARCHETYPES["raider"]) as Dictionary
 	var spd: float = float(stats["speed"])
 	var base_dmg: int = int(stats["damage"])
-	var hearth_radius: float = get_hearth_radius(hearth_level)
 	var in_light: bool = absf(west_enemy_x - TOWN_CENTER_X) <= hearth_radius
 	if in_light:
-		_west_burn_acc += delta * get_hearth_burn_dps(hearth_level) * light_mult
+		_west_burn_acc += delta * hearth_burn_dps * light_mult
 		var bpts: int = int(_west_burn_acc)
 		if bpts >= 1:
 			_west_burn_acc -= float(bpts)
@@ -322,8 +363,9 @@ func _tick_west_enemy(delta: float, building_mgr: BuildingManager, hearth_level:
 		return
 
 	if west_enemy_x < TOWN_CENTER_X:
+		var prev_x: float = west_enemy_x
 		west_enemy_x = minf(TOWN_CENTER_X, west_enemy_x + spd * delta)
-		_trample_interior(building_mgr, west_enemy_x, [BuildingManager.FARM_WEST_ID], _west_trampled, base_dmg)
+		_trample_interior(building_mgr, prev_x, west_enemy_x, [BuildingManager.FARM_WEST_ID], _west_trampled, eff_dmg)
 		if west_enemy_x >= TOWN_CENTER_X - 8.0:
 			settlement_breached = true
 			west_enemy_active = false
@@ -351,7 +393,8 @@ func _spawn_west_scout() -> void:
 	west_spawned_count += 1
 	west_enemy_active = true
 	west_enemy_x = WEST_SPAWN_X
-	west_enemy_hp = int(stats["hp"])
+	west_enemy_max_hp = int(stats["hp"])
+	west_enemy_hp = west_enemy_max_hp
 	_west_attack_timer = 0.0
 	_west_burn_acc = 0.0
 	_west_trampled.clear()
@@ -372,8 +415,15 @@ func to_save_dict() -> Dictionary:
 		"west_enemy_active": west_enemy_active,
 		"west_enemy_x": snappedf(west_enemy_x, 0.1),
 		"west_enemy_hp": west_enemy_hp,
+		"west_enemy_max_hp": west_enemy_max_hp,
 		"settlement_breached": settlement_breached,
 		"first_night_survived": first_night_survived,
+		"attack_timer": snappedf(_attack_timer, 0.001),
+		"light_burn_acc": snappedf(_light_burn_acc, 0.001),
+		"west_attack_timer": snappedf(_west_attack_timer, 0.001),
+		"west_burn_acc": snappedf(_west_burn_acc, 0.001),
+		"east_trampled": _east_trampled.duplicate(),
+		"west_trampled": _west_trampled.duplicate(),
 	}
 
 
@@ -398,6 +448,21 @@ static func is_valid_saved_encounter_dict(data: Variant) -> bool:
 	var ex: float = float(d["enemy_x"])
 	if is_nan(el) or is_inf(el) or el < 0.0 or is_nan(ex) or is_inf(ex):
 		return false
+	for timer_key: String in ["attack_timer", "light_burn_acc", "west_attack_timer", "west_burn_acc"]:
+		if d.has(timer_key):
+			if typeof(d[timer_key]) not in [TYPE_FLOAT, TYPE_INT]:
+				return false
+			var tv: float = float(d[timer_key])
+			if is_nan(tv) or is_inf(tv) or tv < 0.0:
+				return false
+	for trampled_key: String in ["east_trampled", "west_trampled"]:
+		if d.has(trampled_key):
+			if typeof(d[trampled_key]) != TYPE_ARRAY:
+				return false
+			for pid: Variant in (d[trampled_key] as Array):
+				var plot_id: String = String(pid)
+				if plot_id != BuildingManager.WATCHTOWER_ID and plot_id != BuildingManager.FARM_EAST_ID and plot_id != BuildingManager.FARM_WEST_ID:
+					return false
 	return true
 
 
@@ -418,13 +483,26 @@ func apply_save_dict(data: Dictionary) -> bool:
 	west_enemy_active = bool(data.get("west_enemy_active", false))
 	west_enemy_x = float(data.get("west_enemy_x", WEST_SPAWN_X))
 	west_enemy_hp = int(roundf(float(data.get("west_enemy_hp", 0))))
+	west_enemy_max_hp = maxi(0, int(roundf(float(data.get("west_enemy_max_hp", ENEMY_MAX_HP)))))
 	settlement_breached = bool(data["settlement_breached"])
 	first_night_survived = bool(data["first_night_survived"])
-	_attack_timer = 0.0
-	_light_burn_acc = 0.0
-	_west_attack_timer = 0.0
-	_west_burn_acc = 0.0
+	_attack_timer = clampf(float(data.get("attack_timer", 0.0)), 0.0, ATTACK_INTERVAL)
+	_light_burn_acc = clampf(float(data.get("light_burn_acc", 0.0)), 0.0, 1.0)
+	_west_attack_timer = clampf(float(data.get("west_attack_timer", 0.0)), 0.0, ATTACK_INTERVAL)
+	_west_burn_acc = clampf(float(data.get("west_burn_acc", 0.0)), 0.0, 1.0)
 	_east_trampled.clear()
 	_west_trampled.clear()
+	var east_arr: Variant = data.get("east_trampled", [])
+	if typeof(east_arr) == TYPE_ARRAY:
+		for pid_e: Variant in (east_arr as Array):
+			var east_pid: String = String(pid_e)
+			if east_pid == BuildingManager.WATCHTOWER_ID or east_pid == BuildingManager.FARM_EAST_ID:
+				_east_trampled.append(east_pid)
+	var west_arr: Variant = data.get("west_trampled", [])
+	if typeof(west_arr) == TYPE_ARRAY:
+		for pid_w: Variant in (west_arr as Array):
+			var west_pid: String = String(pid_w)
+			if west_pid == BuildingManager.FARM_WEST_ID:
+				_west_trampled.append(west_pid)
 	enemy_updated.emit(enemy_active, enemy_x, enemy_hp, enemy_max_hp)
 	return true

@@ -59,6 +59,7 @@ func recruit_next_vagrant(player_x: float, ledger: EconomyLedger) -> NPCBuilderA
 
 	var next_id: String = "npc_%02d" % (agents.size() + 1)
 	var newcomer: NPCBuilderAgent = NPCBuilderAgent.new(next_id)
+	newcomer.recruitment_rejected.connect(population_action_rejected.emit)
 	if newcomer.request_recruit(player_x, ledger, "villager"):
 		agents.append(newcomer)
 		camp_vagrants_available = maxi(0, camp_vagrants_available - 1)
@@ -126,6 +127,8 @@ func to_save_array() -> Array[Dictionary]:
 
 func apply_save_array(npcs_arr: Array) -> bool:
 	if npcs_arr.is_empty() or agents.is_empty():
+		return false
+	if npcs_arr.size() > MAX_POPULATION:
 		return false
 	var staged_agents: Array[NPCBuilderAgent] = []
 	for i: int in range(npcs_arr.size()):

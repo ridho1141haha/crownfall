@@ -132,7 +132,8 @@ func _process(delta: float) -> void:
 	pop_mgr.tick_all(sim_delta, building_mgr, night_mgr, resource_mgr, economy)
 	flare_active_timer = maxf(0.0, flare_active_timer - sim_delta)
 	flare_cooldown_timer = maxf(0.0, flare_cooldown_timer - sim_delta)
-	night_mgr.tick(sim_delta, is_night, building_mgr, hearth_sys.hearth_level, flare_active_timer > 0.0)
+	hearth_sys.tick_boost(sim_delta)
+	night_mgr.tick(sim_delta, is_night, building_mgr, hearth_sys.get_effective_radius_px(), hearth_sys.get_effective_burn_dps(), flare_active_timer > 0.0)
 	_tick_monarch_light_risk(sim_delta, is_night)
 	_sync_dynamic_actors()
 
@@ -184,8 +185,20 @@ func _wire_signals() -> void:
 	night_mgr.night_encounter_resolved.connect(_on_night_resolved)
 	night_mgr.enemy_defeated.connect(_on_enemy_defeated)
 
+	save_mgr.save_failed.connect(_on_save_failed)
+	save_mgr.load_recovered_from_backup.connect(_on_load_recovered_from_backup)
+	load_failed.connect(_record_rejection)
+
 	if slice_hud != null and slice_hud.has_method("bind_session"):
 		slice_hud.call("bind_session", self)
+
+
+func _on_save_failed(reason: String) -> void:
+	_record_rejection("Auto-save FAILED: %s" % reason)
+
+
+func _on_load_recovered_from_backup(backup_path: String) -> void:
+	feedback_message.emit("Save file was corrupted — recovered from backup (%s)" % backup_path)
 
 
 func _play_sfx(sfx_name: String) -> void:
@@ -347,6 +360,17 @@ func execute_world_command(actor_id: String, command: StringName, target_id: Str
 			else:
 				_record_rejection(String(hres.get("reason", "Hearth upgrade failed")))
 
+		&"boost_hearth":
+			var bres: Dictionary = hearth_sys.try_stoke(actor_x, economy)
+			ok = bool(bres.get("ok", false))
+			if ok:
+				_sync_hearth_visuals()
+				_play_sfx("sfx_sunset")
+				_spawn_floating_text(0.0, "STOKED!", Color(1.0, 0.85, 0.4, 1.0))
+				feedback_message.emit("Fire stoked! Light radius +30%% and burn +2 DPS for %.0f seconds!" % HearthSystem.BOOST_DURATION_SEC)
+			else:
+				_record_rejection(String(bres.get("reason", "Stoke Fire failed")))
+
 		&"shipwreck":
 			ok = _on_player_interact_shipwreck(actor_x)
 
@@ -363,8 +387,10 @@ func execute_world_command(actor_id: String, command: StringName, target_id: Str
 				_record_rejection("Shrine Offering already used today")
 			elif not economy.try_spend({"wood": 4, "stone": 2}):
 				_record_rejection("Shrine Offering needs 4 Wood, 2 Stone")
+			elif not economy.try_add(&"gold", 2):
+				economy.try_add_bundle({"wood": 4, "stone": 2})
+				_record_rejection("Shrine Offering failed — ledger rejected the reward")
 			else:
-				economy.try_add(&"gold", 2)
 				shrine_offering_used_today = true
 				ok = true
 				_play_sfx("sfx_coin")
@@ -509,8 +535,10 @@ func _on_player_interact_shipwreck(player_x: float) -> bool:
 		_record_rejection("Move closer to the Shipwreck (x=-1350)")
 		return false
 	if shipwreck_stage >= 3:
+		night_mgr.stop_encounter()
 		reign_state = ReignState.ISLAND_CLEARED
-		save_game_state()
+		if not save_game_state():
+			_record_rejection("Island cleared, but auto-save FAILED — progress may be lost")
 		_play_sfx("sfx_coin")
 		if slice_hud != null and slice_hud.has_method("show_victory_banner"):
 			slice_hud.call("show_victory_banner", "ISLAND CLEARED", "The vessel sets sail from Forgotten Shore toward Eldergrove Forest!")
@@ -601,12 +629,15 @@ func _on_archer_volley_fired(_npc_id: String, damage: int, from_tower: bool, tar
 
 func _on_building_attacked(plot_id: String, damage: int, enemy_x: float) -> void:
 	_play_sfx("sfx_hit")
-	var label: String = "Farm" if plot_id.contains("farm") else "Wall"
+	var nodes: Dictionary = _get_plot_nodes(plot_id)
+	var label: String = String(nodes.get("title", plot_id)) if not nodes.is_empty() else plot_id
 	_spawn_floating_text(enemy_x, "-%d %s!" % [damage, label], Color(1.0, 0.35, 0.3, 1.0))
 	if plot_id == BuildingManager.WEST_WALL_ID:
 		feedback_message.emit("West Wall is under attack by a West Scout!")
-	elif label == "Farm":
+	elif label.contains("Farm"):
 		feedback_message.emit("Greedlings trampled one of our Farms! Repair it at dawn.")
+	elif label.contains("Watchtower"):
+		feedback_message.emit("Our Watchtower is under attack!")
 	else:
 		feedback_message.emit("Our East Wall is under attack!")
 
@@ -622,10 +653,8 @@ func _on_daylight_started(day_number: int) -> void:
 	pop_mgr.set_dusk_or_night_safety(false, building_mgr)
 	if day_number > 1:
 		shrine_offering_used_today = false
-	resource_mgr.refresh_renewable_nodes()
-	tree_mgr.regrow_all()
-	_update_resource_node_visuals()
-	_update_forest_visuals()
+	# NOTE: renewable refresh/regrow happen in _on_sunrise_reached (fires just before
+	# this), so the sunrise autosave captures refreshed node and tree states.
 	feedback_message.emit("Day %d Daylight — Wood & Stone nodes refreshed! Expand Farms, Watchtower & Stone Wall." % day_number)
 
 
@@ -655,7 +684,7 @@ func _on_night_started(day_number: int) -> void:
 
 func _on_sunrise_reached(completed_day: int) -> void:
 	night_mgr.on_sunrise_reached(building_mgr)
-	if night_mgr.settlement_breached:
+	if night_mgr.settlement_breached and reign_state != ReignState.ISLAND_CLEARED:
 		reign_state = ReignState.BREACH_PENALTY
 		var cur_gold: int = economy.get_amount(&"gold")
 		var penalty: int = cur_gold / 2
@@ -663,12 +692,17 @@ func _on_sunrise_reached(completed_day: int) -> void:
 			economy.try_spend({"gold": penalty})
 	elif reign_state != ReignState.ISLAND_CLEARED:
 		reign_state = ReignState.ACTIVE
+	# Refresh renewables BEFORE the autosave so the save records nodes as available
+	# (daylight_started fires after this signal, too late for the payload).
 	resource_mgr.refresh_renewable_nodes()
 	tree_mgr.regrow_all()
 	_update_resource_node_visuals()
 	_update_forest_visuals()
 	pop_mgr.on_sunrise_refill()
-	save_game_state()
+	if save_game_state():
+		feedback_message.emit("Kingdom state auto-saved!")
+	else:
+		feedback_message.emit("WARNING: Auto-save FAILED — progress may be lost!")
 
 
 
@@ -681,11 +715,11 @@ func _on_enemy_defeated(_archetype: String, reward_gold: int, pos_x: float) -> v
 
 func _on_night_resolved(survived: bool, wall_held: bool) -> void:
 	if reign_state == ReignState.ISLAND_CLEARED:
-		feedback_message.emit("Dawn of Day 3+! Forgotten Shore secured. State auto-saved!")
+		feedback_message.emit("Dawn of Day 3+! Forgotten Shore secured.")
 	elif survived and wall_held:
-		feedback_message.emit("Sunrise reached! Your defenses held the line. Kingdom state auto-saved!")
+		feedback_message.emit("Sunrise reached! Your defenses held the line.")
 	elif survived:
-		feedback_message.emit("Sunrise reached! The wall fell, but dawn broke in time. Auto-saved!")
+		feedback_message.emit("Sunrise reached! The wall fell, but dawn broke in time.")
 	else:
 		feedback_message.emit("Raiders breached Town Center! Half your Gold was lost; rebuild before next dusk.")
 
@@ -716,11 +750,11 @@ func _sync_hearth_visuals() -> void:
 	var t_lbl: Label = get_node_or_null("WorldObjects/TownCenterAnchor/TownLabel") as Label
 	if t_lbl != null:
 		if hearth_sys.hearth_level == 1:
-			t_lbl.text = "Town Center (Hearth Lv.1)\n[Q] Beacon Lv2: 4G 4W 2S"
+			t_lbl.text = "Town Center (Hearth Lv.1)\n[E] Stoke (1W) | [Q] Beacon Lv2: 4G 4W 2S"
 		elif hearth_sys.hearth_level == 2:
-			t_lbl.text = "Town Center (Hearth Lv.2)\n[Q] Solar Lv3: 6G 5W 4S"
+			t_lbl.text = "Town Center (Hearth Lv.2)\n[E] Stoke (1W) | [Q] Solar Lv3: 6G 5W 4S"
 		else:
-			t_lbl.text = "Town Center (Solar Brazier Lv.3)"
+			t_lbl.text = "Town Center (Solar Brazier Lv.3)\n[E] Stoke (1W)"
 
 
 func _sync_landmark_visuals() -> void:
@@ -744,15 +778,25 @@ func _sync_landmark_visuals() -> void:
 
 func _tick_monarch_light_risk(sim_delta: float, is_night: bool) -> void:
 	_stagger_cooldown = maxf(0.0, _stagger_cooldown - sim_delta)
-	if not is_night or not night_mgr.enemy_active or player == null or _stagger_cooldown > 0.0:
+	if not is_night or player == null or _stagger_cooldown > 0.0:
+		return
+	if not (night_mgr.enemy_active or night_mgr.west_enemy_active):
 		return
 	var px: float = player.global_position.x
-	if not hearth_sys.is_in_light(px) and absf(px - night_mgr.enemy_x) <= 44.0:
-		_stagger_cooldown = 2.0
-		player.global_position.x = clampf(px - 48.0, player.min_bound_x, player.max_bound_x)
-		if economy.get_amount(&"gold") > 0:
-			economy.try_spend({"gold": 1})
-		feedback_message.emit("Shadow Stagger! Stay inside the Light at Night (-1 Gold)!")
+	var nearest: Dictionary = night_mgr.get_nearest_active_enemy(px)
+	if nearest.is_empty() or hearth_sys.is_in_light(px):
+		return
+	if absf(px - float(nearest["x"])) > 44.0:
+		return
+	_stagger_cooldown = 2.0
+	var enemy_x: float = float(nearest["x"])
+	var away_dir: float = signf(px - enemy_x)
+	if is_zero_approx(away_dir):
+		away_dir = -1.0
+	player.global_position.x = clampf(px + away_dir * 48.0, player.min_bound_x, player.max_bound_x)
+	if economy.get_amount(&"gold") > 0:
+		economy.try_spend({"gold": 1})
+	feedback_message.emit("Shadow Stagger! Stay inside the Light at Night (-1 Gold)!")
 
 
 func _get_plot_nodes(plot_id: String) -> Dictionary:
@@ -986,7 +1030,7 @@ func _sync_dynamic_actors() -> void:
 		if night_mgr.enemy_active or night_mgr.west_enemy_active:
 			var alert: String = "ALERT: %s (%d/%d HP) at x=%.0f" % [night_mgr.get_enemy_display_name(), night_mgr.enemy_hp, night_mgr.enemy_max_hp, night_mgr.enemy_x] if night_mgr.enemy_active else "ALERT: Greedling raiders inbound!"
 			if night_mgr.west_enemy_active:
-				alert += " | West Scout (%d/%d HP) at x=%.0f" % [night_mgr.west_enemy_hp, night_mgr.enemy_max_hp, night_mgr.west_enemy_x]
+				alert += " | West Scout (%d/%d HP) at x=%.0f" % [night_mgr.west_enemy_hp, night_mgr.west_enemy_max_hp, night_mgr.west_enemy_x]
 			slice_hud.call("set_forecast_text", alert)
 		else:
 			slice_hud.call("set_forecast_text", NightEncounterManager.get_night_forecast(day_n))
@@ -1146,6 +1190,7 @@ func build_save_payload() -> Dictionary:
 		"resources": economy.get_all_balances(),
 		"buildings": building_mgr.to_save_array(),
 		"npcs": pop_mgr.to_save_array(),
+		"camp_vagrants_available": pop_mgr.camp_vagrants_available,
 		"night_encounter": night_mgr.to_save_dict(),
 		"progression_flags": {
 			"first_night_survived": night_mgr.first_night_survived,
@@ -1171,6 +1216,10 @@ func load_game_state(save_path: String = SaveManager.DEFAULT_SAVE_PATH) -> bool:
 		return false
 	var data: Dictionary = res["data"]
 
+	# Restore order: player -> progression flags -> encounter -> clock (silently,
+	# no phase signals) -> economy -> buildings -> NPCs. Restoring the clock
+	# before reign_state used to re-trigger night_started with a default
+	# reign_state and spawn a phantom encounter.
 	if player != null and data.has("player") and typeof(data["player"]) == TYPE_DICTIONARY:
 		var p_dict: Dictionary = data["player"]
 		var saved_px: float = float(p_dict.get("position_x", 0.0))
@@ -1178,15 +1227,26 @@ func load_game_state(save_path: String = SaveManager.DEFAULT_SAVE_PATH) -> bool:
 		player.facing_direction = 1 if int(p_dict.get("facing_direction", 1)) >= 0 else -1
 		set_actor_position("player_1", player.global_position.x)
 
+	var flags: Dictionary = data["progression_flags"]
+	night_mgr.first_night_survived = bool(flags.get("first_night_survived", night_mgr.first_night_survived))
+	reign_state = _string_to_reign_state(flags.get("reign_state", "ACTIVE"))
+	hearth_sys.apply_save_level(int(flags.get("hearth_level", 1)))
+	shipwreck_stage = clampi(int(flags.get("shipwreck_stage", 0)), 0, 3)
+	portal_relic_looted = bool(flags.get("portal_relic_looted", false))
+	shrine_offering_used_today = bool(flags.get("shrine_offering_used_today", false))
+	resource_mgr.apply_save_state(flags.get("node_states", null), flags.get("collected_nodes", []))
+	tree_mgr.apply_save_state(flags.get("tree_states", null))
+
 	if data.has("night_encounter") and typeof(data["night_encounter"]) == TYPE_DICTIONARY:
 		if not night_mgr.apply_save_dict(data["night_encounter"]):
 			load_failed.emit("Failed to restore night_encounter state")
 			return false
 
 	if time_manager != null:
-		if not time_manager.apply_save_dict(data):
+		if not time_manager.apply_save_dict(data, true):
 			load_failed.emit("Failed to restore time_manager state")
 			return false
+
 	if not economy.set_balances_from_dict(data["resources"]):
 		load_failed.emit("Failed to restore economy balances")
 		return false
@@ -1200,19 +1260,11 @@ func load_game_state(save_path: String = SaveManager.DEFAULT_SAVE_PATH) -> bool:
 	if not pop_mgr.apply_save_array(n_arr):
 		load_failed.emit("Failed to restore NPC population state")
 		return false
+	if data.has("camp_vagrants_available"):
+		pop_mgr.camp_vagrants_available = clampi(int(roundf(float(data["camp_vagrants_available"]))), 0, NPCPopulationManager.MAX_CAMP_VAGRANTS)
 	for a: NPCBuilderAgent in pop_mgr.agents:
 		_wire_follower_signals(a)
 	_sync_follower_nodes()
-
-	var flags: Dictionary = data["progression_flags"]
-	night_mgr.first_night_survived = bool(flags.get("first_night_survived", night_mgr.first_night_survived))
-	reign_state = _string_to_reign_state(flags.get("reign_state", "ACTIVE"))
-	hearth_sys.apply_save_level(int(flags.get("hearth_level", 1)))
-	shipwreck_stage = clampi(int(flags.get("shipwreck_stage", 0)), 0, 3)
-	portal_relic_looted = bool(flags.get("portal_relic_looted", false))
-	shrine_offering_used_today = bool(flags.get("shrine_offering_used_today", false))
-	resource_mgr.apply_save_state(flags.get("node_states", null), flags.get("collected_nodes", []))
-	tree_mgr.apply_save_state(flags.get("tree_states", null))
 
 	if time_manager != null:
 		var is_unsafe: bool = time_manager.current_phase != TimeManager.Phase.DAYLIGHT
@@ -1227,3 +1279,5 @@ func _consume_pending_load_if_requested() -> void:
 		Engine.set_meta("crownfall_load_on_start", false)
 		if load_game_state():
 			feedback_message.emit("Loaded saved kingdom state from user://save_slot_0.json")
+		else:
+			feedback_message.emit("Failed to load saved kingdom state — starting a fresh reign")

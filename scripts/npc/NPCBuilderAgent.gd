@@ -227,10 +227,12 @@ func _tick_farmer(delta: float, building_mgr: BuildingManager) -> void:
 				_move_toward(cached_target_x, delta)
 			else:
 				state = State.WORKING
+				var interval: float = building_mgr.get_farm_harvest_interval(assigned_task_id)
+				var gold_amt: int = building_mgr.get_farm_gold_yield(assigned_task_id)
 				_farm_timer += delta
-				while _farm_timer >= FARMER_HARVEST_SEC:
-					_farm_timer -= FARMER_HARVEST_SEC
-					farm_gold_earned.emit(npc_id, FARMER_GOLD_YIELD)
+				while _farm_timer >= interval:
+					_farm_timer -= interval
+					farm_gold_earned.emit(npc_id, gold_amt)
 			_emit_state()
 			return
 	_move_to_safe_idle(delta)
@@ -274,7 +276,7 @@ func _tick_archer(delta: float, building_mgr: BuildingManager, night_mgr: NightE
 					building_mgr.claim_plot(BuildingManager.WATCHTOWER_ID, npc_id)
 					assigned_task_id = BuildingManager.WATCHTOWER_ID
 					guard_x = BuildingManager.WATCHTOWER_POSITION_X
-					on_tower = true
+					on_tower = absf(position_x - guard_x) <= 12.0
 			if not on_tower and building_mgr.is_standing(BuildingManager.WALL_ID):
 				guard_x = BuildingManager.WALL_POSITION_X - 36.0
 
@@ -323,6 +325,7 @@ func to_save_dict() -> Dictionary:
 		"role": role,
 		"state": get_state_name(),
 		"position_x": snappedf(position_x, 0.1),
+		"farm_timer": snappedf(_farm_timer, 0.001),
 	}
 
 
@@ -336,12 +339,22 @@ static func is_valid_saved_npc_dict(data: Variant) -> bool:
 		return false
 	if typeof(d["recruited"]) != TYPE_BOOL:
 		return false
+	if not ["builder", "farmer", "archer", "villager"].has(String(d["role"])):
+		return false
 	var st: String = String(d["state"])
 	if not ["UNRECRUITED", "IDLE", "MOVING_TO_TASK", "WORKING", "RETURNING_TO_SAFETY"].has(st):
 		return false
 	var pos: float = float(d.get("position_x", CAMP_POSITION_X))
 	if is_nan(pos) or is_inf(pos):
 		return false
+	if pos < WorldConstants.MIN_PLAYABLE_X or pos > WorldConstants.MAX_PLAYABLE_X:
+		return false
+	if d.has("farm_timer"):
+		if typeof(d["farm_timer"]) not in [TYPE_FLOAT, TYPE_INT]:
+			return false
+		var ft: float = float(d["farm_timer"])
+		if is_nan(ft) or is_inf(ft) or ft < 0.0 or ft > FARMER_HARVEST_SEC:
+			return false
 	return true
 
 
@@ -352,6 +365,7 @@ func apply_save_dict(data: Dictionary) -> bool:
 	recruited = bool(data["recruited"])
 	role = String(data["role"])
 	position_x = float(data.get("position_x", CAMP_POSITION_X))
+	_farm_timer = clampf(float(data.get("farm_timer", 0.0)), 0.0, FARMER_HARVEST_SEC)
 	assigned_task_id = ""
 	var st: String = String(data["state"])
 	match st:

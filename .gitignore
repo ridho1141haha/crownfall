@@ -15,3 +15,6 @@ Thumbs.db
 .env
 *.token
 *.pem
+
+# Python cache
+__pycache__/

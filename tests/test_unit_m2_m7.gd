@@ -26,42 +26,35 @@ func _check(cond: bool, msg: String) -> bool:
 
 
 func _init() -> void:
-	if not _test_m2_world_clock():
-		return
-	if not _test_m3_economy_invariants():
-		return
-	if not _test_m4_building_and_multiplot():
-		return
-	if not _test_m5_npc_builder_and_safety():
-		return
-	if not _test_m6_three_balance_scenarios():
-		return
-	if not _test_m6_watchtower_support():
-		return
-	if not _test_m7_atomic_save_and_rollback():
-		return
-	if not _test_p1_p2_farm_watchtower_stone_wall():
-		return
-	if not _test_m7_schema_v1_migration():
-		return
-	if not _test_p3_multi_npc_tool_stands_and_lock():
-		return
-	if not _test_p4_light_burn_and_enemy_archetypes():
-		return
-	if not _test_p5_shipwreck_and_v2_save():
-		return
-	if not _test_task1_modules_and_save_roundtrip():
-		return
-	if not _test_task2_softlock_flare_west_lane():
-		return
-	if not _test_p0_atomicity_and_bounds():
-		return
-	if not _test_v141_forest_autochop_and_west_guard():
-		return
-	if _failures > 0:
+	# Run EVERY suite even after failures, then report a full recap
+	var suite_names: Array[String] = [
+		"M2 World Clock", "M3 Economy", "M4 Buildings/Multi-plot", "M5 NPC Builder",
+		"M6 Balance", "M6 Watchtower Support", "M7 Atomic Save", "P1/P2 Tier2",
+		"M7 v1->v2 Migration", "P3 Multi-NPC", "P4 Last Light", "P5/P7 Shipwreck",
+		"Task1 Modules", "Task2 Softlock/Flare", "P0 Atomicity/Bounds", "v1.4.1 Forest",
+	]
+	var suites: Array[Callable] = [
+		_test_m2_world_clock, _test_m3_economy_invariants, _test_m4_building_and_multiplot,
+		_test_m5_npc_builder_and_safety, _test_m6_three_balance_scenarios,
+		_test_m6_watchtower_support, _test_m7_atomic_save_and_rollback,
+		_test_p1_p2_farm_watchtower_stone_wall, _test_m7_schema_v1_migration,
+		_test_p3_multi_npc_tool_stands_and_lock, _test_p4_light_burn_and_enemy_archetypes,
+		_test_p5_shipwreck_and_v2_save, _test_task1_modules_and_save_roundtrip,
+		_test_task2_softlock_flare_west_lane, _test_p0_atomicity_and_bounds,
+		_test_v141_forest_autochop_and_west_guard,
+	]
+	var failed_suites: Array[String] = []
+	for i: int in range(suites.size()):
+		var checks_before: int = _checks
+		var ok: bool = false
+		ok = suites[i].call()
+		if not ok:
+			failed_suites.append("%s (after %d checks)" % [suite_names[i], _checks - checks_before])
+	if _failures > 0 or not failed_suites.is_empty():
+		printerr("RECAP: %d/%d suites FAILED -> %s" % [failed_suites.size(), suites.size(), ", ".join(failed_suites)])
 		quit(1)
 		return
-	print("PASS: All %d P0 Unit Checks (M2-M7) completed with 0 failures." % _checks)
+	print("PASS: All %d P0 Unit Checks (M2-M7) completed with 0 failures across %d suites." % [_checks, suites.size()])
 	quit(0)
 
 
@@ -454,9 +447,20 @@ func _test_p4_light_burn_and_enemy_archetypes() -> bool:
 
 	# Tick 12s inside Hearth Lv3 light (enemy starts at 820, reaches 386 in ~4.6s, enters 460px at ~3.8s)
 	for _s: int in range(12):
-		night.tick(1.0, true, bm, 3)
+		night.tick(1.0, true, bm, NightEncounterManager.get_hearth_radius(3), NightEncounterManager.get_hearth_burn_dps(3))
 	# Under Lv3 light, Raider deals 12 dmg/hit instead of 15 (weakened 20%) and takes burn DoT
 	if not _check(bm.durability > 260 - 45, "P4 Hearth Lv3 Weakened Strike reduced wall damage"):
+		return false
+	if not _check(not night.enemy_active and night.enemy_hp <= 0, "P4 Hearth Lv3 burn DoT + thorn damage defeated the Raider"):
+		return false
+
+	# Isolated burn check: unbuilt wall -> no thorn/attack damage, so any HP loss is burn DoT only
+	var night_burn: NightEncounterManager = NightEncounterManagerScript.new()
+	var bm_burn: BuildingManager = BuildingManagerScript.new()
+	night_burn.on_night_started(1)
+	for _s: int in range(12):
+		night_burn.tick(1.0, true, bm_burn, NightEncounterManager.get_hearth_radius(1), NightEncounterManager.get_hearth_burn_dps(1))
+	if not _check(night_burn.enemy_hp < 60 and night_burn.enemy_hp > 0, "P4 burn DoT alone reduced enemy HP (no wall, hp=%d)" % night_burn.enemy_hp):
 		return false
 	if not _check(NightEncounterManager.get_night_forecast(3).contains("Brute"), "P4 Day 3 forecast telegraphs Brute"):
 		return false
@@ -466,11 +470,11 @@ func _test_p4_light_burn_and_enemy_archetypes() -> bool:
 
 func _test_p5_shipwreck_and_v2_save() -> bool:
 	var ledger: EconomyLedger = EconomyLedgerScript.new({"gold": 6, "wood": 8, "stone": 4})
-	var stage_costs: Array[Dictionary] = [
-		{"gold": 2, "wood": 3, "stone": 1},
-		{"gold": 2, "wood": 3, "stone": 2},
-		{"gold": 2, "wood": 2, "stone": 1},
-	]
+	# Source stage costs from the production session constant instead of fabricating them
+	var session_script: GDScript = load("res://scripts/world/ForgottenShoreSession.gd")
+	var stage_costs: Array[Dictionary] = []
+	for stage: int in range(3):
+		stage_costs.append(session_script.SHIPWRECK_COSTS[stage])
 	for cost: Dictionary in stage_costs:
 		if not _check(ledger.try_spend(cost), "P5 shipwreck stage spend succeeds"):
 			return false
@@ -515,6 +519,30 @@ func _test_task1_modules_and_save_roundtrip() -> bool:
 	var hs: HearthSystem = HearthSystemScript.new()
 	var h_res: Dictionary = hs.try_upgrade(0.0, ledger)
 	if not _check(bool(h_res.get("ok", false)) and hs.hearth_level == 2 and is_equal_approx(hs.get_radius_px(), 320.0), "Task1 HearthSystem upgrades to Lv2 (320 px)"):
+		return false
+
+	# Stoke Fire [E]: 1W -> +30% radius & +2 burn DPS for 60s; not stackable; expires via tick_boost
+	var broke_ledger: EconomyLedger = EconomyLedgerScript.new({"gold": 5, "wood": 0, "stone": 5})
+	if not _check(not bool(hs.try_stoke(0.0, broke_ledger).get("ok", false)), "Task1 Stoke Fire rejected without Wood"):
+		return false
+	if not _check(not bool(hs.try_stoke(200.0, ledger).get("ok", false)), "Task1 Stoke Fire rejected out of range"):
+		return false
+	var wood_before_stoke: int = ledger.get_amount(&"wood")
+	if not _check(bool(hs.try_stoke(0.0, ledger).get("ok", false)) and ledger.get_amount(&"wood") == wood_before_stoke - 1, "Task1 Stoke Fire spends 1 Wood"):
+		return false
+	if not _check(hs.is_boost_active() and is_equal_approx(hs.get_effective_radius_px(), 320.0 * HearthSystem.BOOST_RADIUS_MULT) and is_equal_approx(hs.get_effective_burn_dps(), 2.0 + HearthSystem.BOOST_BURN_ADD), "Task1 Stoke Fire boosts radius 30% and burn +2 DPS"):
+		return false
+	if not _check(not bool(hs.try_stoke(0.0, ledger).get("ok", false)), "Task1 Stoke Fire rejected while boost active"):
+		return false
+	hs.tick_boost(HearthSystem.BOOST_DURATION_SEC)
+	if not _check(not hs.is_boost_active() and is_equal_approx(hs.get_effective_radius_px(), 320.0) and is_equal_approx(hs.get_effective_burn_dps(), 2.0), "Task1 Stoke Fire boost expires after 60s"):
+		return false
+
+	# Hearth resolve: [E] = boost_hearth primary, [Q] = upgrade_hearth (E/Q split)
+	var bm_hearth: BuildingManager = BuildingManagerScript.new()
+	bm_hearth.register_forgotten_shore_expansion_plots()
+	var hearth_tgt: Dictionary = InteractionResolverScript.resolve_nearest(0.0, rnm, bm_hearth, null, hs, 0, -1350.0, 1350.0, false)
+	if not _check(String(hearth_tgt.get("target_id", "")) == "town_hearth" and (hearth_tgt.get("primary_command", null) as StringName) == &"boost_hearth" and (hearth_tgt.get("upgrade_command", null) as StringName) == &"upgrade_hearth", "Task1 Hearth resolve: [E] Stoke Fire primary + [Q] upgrade"):
 		return false
 
 	# Spatial overlap test: Watchtower (210) vs Wall (380) >= 140 px apart; InteractionResolver picks 1 nearest target
@@ -577,7 +605,7 @@ func _test_task2_softlock_flare_west_lane() -> bool:
 	night.on_night_started(2)
 	night.apply_external_damage(200)
 	for _s: int in range(30):
-		night.tick(1.0, true, bm, 3, true)
+		night.tick(1.0, true, bm, NightEncounterManager.get_hearth_radius(3), NightEncounterManager.get_hearth_burn_dps(3), true)
 	if not _check(night.west_spawned_count >= 1, "Task2 Day 2+ spawned West Scout lane"):
 		return false
 	if not _check(kill_gold_box[0] >= 1, "Task2 enemy defeat awards +1G"):

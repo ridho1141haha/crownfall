@@ -10,6 +10,7 @@ Outputs 6 .wav files into assets/audio/:
 - sfx_sunset.wav
 - sfx_night.wav
 """
+import argparse
 import math
 import os
 import random
@@ -67,6 +68,14 @@ def gen_tone(duration: float, freq_start: float, freq_end: float, amp: float = 0
 
 
 def main() -> None:
+    parser = argparse.ArgumentParser(description="Generate placeholder SFX WAV files.")
+    parser.add_argument(
+        "--force",
+        action="store_true",
+        help="Overwrite existing WAV files (default: skip files that already exist)",
+    )
+    args = parser.parse_args()
+
     audio_dir = resolve_repo_root() / "assets" / "audio"
     coin = gen_tone(0.08, 880.0, 880.0, 0.32, 0.0, "tri") + gen_tone(0.14, 1318.5, 1318.5, 0.35, 0.0, "tri")
     build = gen_tone(0.11, 190.0, 75.0, 0.45, 0.35, "square")
@@ -84,7 +93,11 @@ def main() -> None:
         "sfx_night.wav": night,
     }
     for fname, samples in outputs.items():
-        write_wav(audio_dir / fname, samples)
+        dst = audio_dir / fname
+        if dst.exists() and not args.force:
+            print(f"Skipped (exists, use --force to overwrite): assets/audio/{fname}")
+            continue
+        write_wav(dst, samples)
         print(f"Generated: assets/audio/{fname} ({len(samples)} samples)")
 
 

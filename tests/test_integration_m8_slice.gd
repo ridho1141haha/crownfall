@@ -49,7 +49,7 @@ func _process(_delta: float) -> bool:
 				return true
 			session.time_manager.auto_advance = false
 
-			if not _check(not session.execute_command(&"interact", 0.0), "Empty interact returns false"):
+			if not _check(not session.execute_command(&"interact", 1500.0), "Empty interact returns false"):
 				return true
 			if not _check(session.execute_command(&"interact", -480.0), "Collect west gold chest"):
 				return true

@@ -96,7 +96,7 @@ func to_save_dict() -> Dictionary:
 	}
 
 
-func apply_save_dict(data: Dictionary) -> bool:
+func apply_save_dict(data: Dictionary, restore_silent: bool = false) -> bool:
 	if not data.has("day_count") or not data.has("world_time") or not data.has("world_phase"):
 		return false
 	var day_val: int = int(data["day_count"])
@@ -116,13 +116,14 @@ func apply_save_dict(data: Dictionary) -> bool:
 	current_day = day_val
 	phase_elapsed = clampf(time_val, 0.0, get_current_phase_duration())
 	_started = true
-	match current_phase:
-		Phase.DAYLIGHT:
-			daylight_started.emit(current_day)
-		Phase.SUNSET:
-			sunset_started.emit(current_day)
-		Phase.NIGHT:
-			night_started.emit(current_day)
+	if not restore_silent:
+		match current_phase:
+			Phase.DAYLIGHT:
+				daylight_started.emit(current_day)
+			Phase.SUNSET:
+				sunset_started.emit(current_day)
+			Phase.NIGHT:
+				night_started.emit(current_day)
 	return true
 
 

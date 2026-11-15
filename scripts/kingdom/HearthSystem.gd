@@ -2,10 +2,16 @@ class_name HearthSystem
 extends RefCounted
 
 signal hearth_upgraded(new_level: int, tier_name: String, new_radius_px: float)
+signal hearth_boost_started(duration: float)
 
 const HEARTH_POSITION_X: float = 0.0
 const INTERACT_RANGE: float = 80.0
 const MAX_LEVEL: int = 3
+
+const BOOST_RADIUS_MULT: float = 1.3
+const BOOST_BURN_ADD: float = 2.0
+const BOOST_DURATION_SEC: float = 60.0
+const BOOST_COST: Dictionary = {"wood": 1}
 
 const DEFAULT_TIERS: Array[Dictionary] = [
 	{"level": 1, "name": "Ember Hearth", "radius_px": 180.0, "texture_scale": 2.6, "burn_dps": 2.0, "weakened_pct": 0.20, "upgrade_cost": {}},
@@ -15,6 +21,7 @@ const DEFAULT_TIERS: Array[Dictionary] = [
 
 var tiers: Array[Dictionary] = []
 var hearth_level: int = 1
+var boost_remaining: float = 0.0
 
 
 func _init() -> void:
@@ -55,12 +62,48 @@ func get_burn_dps() -> float:
 	return float(get_tier()["burn_dps"])
 
 
+func is_boost_active() -> bool:
+	return boost_remaining > 0.0
+
+
+func get_effective_radius_px() -> float:
+	var radius: float = get_radius_px()
+	if is_boost_active():
+		radius *= BOOST_RADIUS_MULT
+	return radius
+
+
+func get_effective_burn_dps() -> float:
+	var dps: float = get_burn_dps()
+	if is_boost_active():
+		dps += BOOST_BURN_ADD
+	return dps
+
+
+func tick_boost(delta: float) -> void:
+	boost_remaining = maxf(0.0, boost_remaining - delta)
+
+
+func try_stoke(actor_x: float, ledger: EconomyLedger) -> Dictionary:
+	if absf(actor_x - HEARTH_POSITION_X) > INTERACT_RANGE:
+		return {"ok": false, "reason": "Move closer to Town Center Hearth (x=0) to stoke the fire"}
+	if ledger == null:
+		return {"ok": false, "reason": "Economy ledger unavailable"}
+	if is_boost_active():
+		return {"ok": false, "reason": "The stoked fire is already burning (%.0fs left)" % boost_remaining}
+	if not ledger.try_spend(BOOST_COST):
+		return {"ok": false, "reason": "Stoke Fire needs 1 Wood"}
+	boost_remaining = BOOST_DURATION_SEC
+	hearth_boost_started.emit(BOOST_DURATION_SEC)
+	return {"ok": true, "reason": "", "duration": BOOST_DURATION_SEC}
+
+
 func get_weakened_pct() -> float:
 	return float(get_tier()["weakened_pct"])
 
 
 func is_in_light(pos_x: float) -> bool:
-	return absf(pos_x - HEARTH_POSITION_X) <= get_radius_px()
+	return absf(pos_x - HEARTH_POSITION_X) <= get_effective_radius_px()
 
 
 func can_upgrade() -> bool:

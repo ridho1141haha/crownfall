@@ -156,18 +156,23 @@ static func resolve_nearest(
 					"distance": d_tree,
 				}
 
-	# 6. Town Center Hearth Upgrade ([Q])
-	if hearth_sys != null and hearth_sys.can_upgrade():
+	# 6. Town Center Hearth ([E] Stoke Fire, [Q] Upgrade)
+	if hearth_sys != null:
 		var d_hearth: float = absf(actor_x - HearthSystem.HEARTH_POSITION_X)
-		if d_hearth <= HearthSystem.INTERACT_RANGE and d_hearth < float(best["distance"]):
-			best = {
-				"has_target": true,
-				"kind": "hearth",
-				"target_id": "town_hearth",
-				"primary_command": &"upgrade_hearth",
-				"upgrade_command": &"upgrade_hearth",
-				"prompt_text": "Hearth [Q] Upgrade",
-				"distance": d_hearth,
-			}
+		if d_hearth <= HearthSystem.INTERACT_RANGE:
+			var u_cmd: StringName = &"upgrade_hearth" if hearth_sys.can_upgrade() else &""
+			if d_hearth < float(best["distance"]):
+				var prompt: String = "Hearth [E] Stoke Fire (1W)"
+				if hearth_sys.can_upgrade():
+					prompt += " | [Q] Upgrade"
+				best = {
+					"has_target": true,
+					"kind": "hearth",
+					"target_id": "town_hearth",
+					"primary_command": &"boost_hearth",
+					"upgrade_command": u_cmd,
+					"prompt_text": prompt,
+					"distance": d_hearth,
+				}
 
 	return best

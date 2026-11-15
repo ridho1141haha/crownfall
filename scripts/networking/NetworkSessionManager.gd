@@ -7,6 +7,7 @@ signal peer_joined(peer_id: int, total_peers: int)
 signal peer_left(peer_id: int, total_peers: int)
 signal command_rejected(peer_id: int, command_id: StringName, reason: String)
 signal state_snapshot_broadcast(snapshot: Dictionary)
+signal state_snapshot_received(snapshot: Dictionary)
 
 const DEFAULT_PORT: int = 7777
 const MAX_PLAYERS: int = 4
@@ -32,6 +33,51 @@ var _session_target: ForgottenShoreSession
 
 func bind_gameplay_session(session: ForgottenShoreSession) -> void:
 	_session_target = session
+
+
+func _ready() -> void:
+	multiplayer.peer_connected.connect(_on_peer_connected)
+	multiplayer.peer_disconnected.connect(_on_peer_disconnected)
+
+
+func _process(delta: float) -> void:
+	if is_online_active:
+		advance_server_clock(delta)
+
+
+func _on_peer_connected(peer_id: int) -> void:
+	_add_peer(peer_id, 0.0)
+	if peer_id != 1 and connected_peers.has(peer_id) and is_host_authority and _session_target != null:
+		_send_state_snapshot()
+
+
+func _on_peer_disconnected(peer_id: int) -> void:
+	unregister_peer(peer_id)
+
+
+func _add_peer(peer_id: int, initial_x: float) -> void:
+	if peer_id <= 1 or connected_peers.has(peer_id):
+		return
+	if connected_peers.size() >= MAX_PLAYERS:
+		return
+	connected_peers.append(peer_id)
+	peer_positions[peer_id] = clampf(initial_x, MIN_WORLD_X, MAX_WORLD_X)
+	peer_last_move_time[peer_id] = server_clock_sec
+	peer_joined.emit(peer_id, connected_peers.size())
+
+
+@rpc("authority", "call_remote", "reliable")
+func receive_state_snapshot(snapshot: Dictionary) -> void:
+	state_snapshot_received.emit(snapshot)
+
+
+func _send_state_snapshot() -> void:
+	if _session_target == null:
+		return
+	var snap: Dictionary = _session_target.build_save_payload()
+	state_snapshot_broadcast.emit(snap)
+	if is_online_active and multiplayer.multiplayer_peer != null:
+		receive_state_snapshot.rpc(snap)
 
 
 func advance_server_clock(delta: float) -> void:
@@ -93,10 +139,7 @@ func register_test_peer(peer_id: int, initial_x: float = 0.0) -> bool:
 		return false
 	if connected_peers.size() >= MAX_PLAYERS:
 		return false
-	connected_peers.append(peer_id)
-	peer_positions[peer_id] = clampf(initial_x, MIN_WORLD_X, MAX_WORLD_X)
-	peer_last_move_time[peer_id] = server_clock_sec
-	peer_joined.emit(peer_id, connected_peers.size())
+	_add_peer(peer_id, initial_x)
 	return true
 
 
@@ -152,7 +195,7 @@ func submit_client_command(peer_id: int, command_id: StringName, claimed_x: floa
 			return false
 		peer_positions[peer_id] = claimed_x
 		peer_last_move_time[peer_id] = server_clock_sec
-		state_snapshot_broadcast.emit(_session_target.build_save_payload())
+		_send_state_snapshot()
 		return true
 
 	peer_positions[peer_id] = claimed_x

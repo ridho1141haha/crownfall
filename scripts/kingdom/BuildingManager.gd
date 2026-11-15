@@ -93,6 +93,16 @@ func register_forgotten_shore_expansion_plots() -> void:
 				var pid: String = String(d.get("id", ""))
 				if pid.is_empty() or has_plot(pid):
 					continue
+				var extra_props: Dictionary = {}
+				if d.has("support_damage"):
+					extra_props["support_damage"] = int(d["support_damage"])
+				if d.has("harvest_interval"):
+					extra_props["harvest_interval"] = float(d["harvest_interval"])
+				if d.has("gold_yield"):
+					extra_props["gold_yield"] = int(d["gold_yield"])
+				var upg: Dictionary = d.get("upgrade", {}) as Dictionary
+				if upg.has("thorn_damage"):
+					extra_props["upgrade_thorn_damage"] = int(upg["thorn_damage"])
 				register_plot(
 					pid,
 					String(d.get("type", "wooden_wall")),
@@ -100,7 +110,8 @@ func register_forgotten_shore_expansion_plots() -> void:
 					d.get("build_cost", WALL_BUILD_COST) as Dictionary,
 					d.get("repair_cost", WALL_REPAIR_COST) as Dictionary,
 					float(d.get("build_duration", BUILD_DURATION)),
-					int(d.get("max_durability", REINFORCED_MAX_DURABILITY))
+					int(d.get("max_durability", REINFORCED_MAX_DURABILITY)),
+					extra_props
 				)
 	if not loaded_from_data:
 		if not has_plot(WATCHTOWER_ID):
@@ -118,7 +129,8 @@ func register_plot(
 	build_cost: Dictionary = WALL_BUILD_COST,
 	repair_cost: Dictionary = WALL_REPAIR_COST,
 	duration: float = BUILD_DURATION,
-	max_dur: int = REINFORCED_MAX_DURABILITY
+	max_dur: int = REINFORCED_MAX_DURABILITY,
+	extra_props: Dictionary = {}
 ) -> void:
 	_plots[plot_id] = {
 		"id": plot_id,
@@ -135,6 +147,8 @@ func register_plot(
 		"cancelled": false,
 		"claimed_by_npc_id": "",
 	}
+	for prop_key: String in extra_props.keys():
+		_plots[plot_id][prop_key] = extra_props[prop_key]
 	_sync_primary_mirror()
 
 
@@ -168,8 +182,13 @@ func get_nearest_plot_id(candidate_x: float, max_range: float = INTERACT_RANGE) 
 func get_thorn_damage(plot_id: String = WALL_ID) -> int:
 	if not _plots.has(plot_id):
 		return 15
-	var lvl: int = int(_plots[plot_id].get("level", 1))
-	return 20 if lvl >= 2 else 5
+	var plot: Dictionary = _plots[plot_id]
+	var lvl: int = int(plot.get("level", 1))
+	if lvl >= 2:
+		if plot.has("upgrade_thorn_damage"):
+			return int(plot["upgrade_thorn_damage"])
+		return 20
+	return 5
 
 
 func is_fully_operational(plot_id: String = WALL_ID) -> bool:
@@ -178,10 +197,27 @@ func is_fully_operational(plot_id: String = WALL_ID) -> bool:
 	return int(_plots[plot_id]["state"]) == WallState.COMPLETED
 
 
-func get_watchtower_support_damage() -> int:
-	if is_fully_operational(WATCHTOWER_ID):
+func get_watchtower_support_damage(plot_id: String = WATCHTOWER_ID) -> int:
+	if is_fully_operational(plot_id):
+		var plot: Dictionary = _plots.get(plot_id, {})
+		if plot.has("support_damage"):
+			return int(plot["support_damage"])
 		return WATCHTOWER_SUPPORT_DAMAGE
 	return 0
+
+
+func get_farm_harvest_interval(plot_id: String = FARM_WEST_ID) -> float:
+	var plot: Dictionary = _plots.get(plot_id, {})
+	if plot.has("harvest_interval"):
+		return maxf(0.1, float(plot["harvest_interval"]))
+	return 60.0
+
+
+func get_farm_gold_yield(plot_id: String = FARM_WEST_ID) -> int:
+	var plot: Dictionary = _plots.get(plot_id, {})
+	if plot.has("gold_yield"):
+		return int(plot["gold_yield"])
+	return 2
 
 
 func apply_damage(amount: int, plot_id: String = WALL_ID) -> int:

@@ -228,16 +228,48 @@ func validate_payload(data: Variant) -> bool:
 	var b_arr: Array = dict["buildings"]
 	if b_arr.is_empty():
 		return false
+	var known_plot_ids: Dictionary = {
+		BuildingManager.WALL_ID: true,
+		BuildingManager.WEST_WALL_ID: true,
+		BuildingManager.WATCHTOWER_ID: true,
+		BuildingManager.FARM_WEST_ID: true,
+		BuildingManager.FARM_EAST_ID: true,
+	}
+	var known_building_types: Dictionary = {
+		"wooden_wall": true,
+		"stone_wall": true,
+		"watchtower": true,
+		"farm_plot": true,
+	}
+	var seen_plot_ids: Dictionary = {}
 	for b_item: Variant in b_arr:
 		if not BuildingManager.is_valid_saved_building_dict(b_item):
 			return false
+		var b_dict: Dictionary = b_item as Dictionary
+		var plot_id: String = String(b_dict["id"])
+		if not known_plot_ids.has(plot_id) or seen_plot_ids.has(plot_id):
+			return false
+		seen_plot_ids[plot_id] = true
+		if not known_building_types.has(String(b_dict.get("type", "wooden_wall"))):
+			return false
+		if b_dict.has("position_x"):
+			var bpx: float = float(b_dict["position_x"])
+			if is_nan(bpx) or is_inf(bpx) or bpx < WorldConstants.MIN_PLAYABLE_X or bpx > WorldConstants.MAX_PLAYABLE_X:
+				return false
 
 	var n_arr: Array = dict["npcs"]
 	if n_arr.is_empty():
 		return false
+	if n_arr.size() > NPCPopulationManager.MAX_POPULATION:
+		return false
+	var seen_npc_ids: Dictionary = {}
 	for n_item: Variant in n_arr:
 		if not NPCBuilderAgent.is_valid_saved_npc_dict(n_item):
 			return false
+		var npc_id: String = String((n_item as Dictionary)["id"])
+		if seen_npc_ids.has(npc_id):
+			return false
+		seen_npc_ids[npc_id] = true
 
 	if not NightEncounterManager.is_valid_saved_encounter_dict(dict["night_encounter"]):
 		return false
@@ -262,8 +294,26 @@ func validate_payload(data: Variant) -> bool:
 	if pf_chk.has("reign_state") and typeof(pf_chk["reign_state"]) == TYPE_STRING:
 		if not ["ACTIVE", "BREACH_PENALTY", "ISLAND_CLEARED"].has(String(pf_chk["reign_state"])):
 			return false
+	if pf_chk.has("shipwreck_stage"):
+		if not EconomyLedger.is_exact_int_value(pf_chk["shipwreck_stage"]):
+			return false
+		var sw: int = int(roundf(float(pf_chk["shipwreck_stage"])))
+		if sw < 0 or sw > 3:
+			return false
 	if pf_chk.has("node_states") and typeof(pf_chk["node_states"]) != TYPE_DICTIONARY:
 		return false
+	if pf_chk.has("node_states"):
+		var ns_chk: Dictionary = pf_chk["node_states"] as Dictionary
+		for ns_key: String in ns_chk.keys():
+			if typeof(ns_chk[ns_key]) != TYPE_BOOL:
+				return false
+
+	if dict.has("camp_vagrants_available"):
+		if not EconomyLedger.is_exact_int_value(dict["camp_vagrants_available"]):
+			return false
+		var cva: int = int(roundf(float(dict["camp_vagrants_available"])))
+		if cva < 0 or cva > NPCPopulationManager.MAX_CAMP_VAGRANTS:
+			return false
 
 	return true
 

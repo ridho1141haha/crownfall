@@ -14,6 +14,7 @@ Follows ASSET_GUIDELINES.md v1.3 naming and directory conventions:
 - assets/items/resources/items_resources_sheet.png         (128x32, 4 icons: gold, wood, stone, shrine)
 - assets/environment/terrain/terrain_shore_tile.png        (32x32, seamless shore grass + earth tile)
 """
+import argparse
 import os
 from pathlib import Path
 from PIL import Image
@@ -632,6 +633,14 @@ def build_greed_portal() -> Image.Image:
 
 
 def main() -> None:
+    parser = argparse.ArgumentParser(description="Generate pixel-art asset sheets.")
+    parser.add_argument(
+        "--force",
+        action="store_true",
+        help="Overwrite existing PNG files (default: skip files that already exist)",
+    )
+    args = parser.parse_args()
+
     outputs = {
         "characters/player/player_monarch_sheet.png": build_monarch_sheet(),
         "characters/npc/npc_builder_sheet.png": build_builder_sheet(),
@@ -655,6 +664,9 @@ def main() -> None:
 
     for rel_path, img in outputs.items():
         dst = ASSETS_DIR / rel_path
+        if dst.exists() and not args.force:
+            print(f"Skipped (exists, use --force to overwrite): assets/{rel_path}")
+            continue
         dst.parent.mkdir(parents=True, exist_ok=True)
         img.save(dst, format="PNG")
         print(f"Generated: assets/{rel_path} ({img.width}x{img.height})")

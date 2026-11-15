@@ -1,6 +1,22 @@
 class_name ContentExpansionM10
 extends RefCounted
 
+## Experimental M10 design PROTOTYPE — intentionally isolated.
+##
+## This module is a self-contained sandbox for milestone-10 experiments and is
+## ONLY referenced by tests/test_experimental_p1_m9_m10.gd. It is never wired
+## into ForgottenShoreSession or the live game loop.
+##
+## Its constants deliberately DIVERGE from production values and must not be
+## treated as source of truth:
+##   - WATCHTOWER_POSITION_X = 290.0 (production: 210.0 via data/buildings.json)
+##   - FARM_CYCLE_SECONDS = 10.0 (production: 60.0 per-plot harvest_interval)
+##   - archers_count/farmers_count are simple counters, not real NPC agents
+##   - compute_archer_volley_damage() only fires a signal; it deals no damage
+##
+## Production counterparts live in BuildingManager, NPCBuilderAgent and
+## NightEncounterManager (data-driven via data/*.json).
+
 signal structure_upgraded(plot_id: String, new_tier: int, new_max_durability: int)
 signal unit_assigned(unit_id: String, role: String)
 signal farm_harvested(gold_yield: int)
