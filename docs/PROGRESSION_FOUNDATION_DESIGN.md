@@ -1,6 +1,6 @@
 # Crownfall — Progression Foundation Design
 
-**Status:** Proposed implementation design; not yet implemented.
+**Status:** Phase 1 foundation implemented on `feat/progression-foundation-phase-1` (fact service, unlock definition loader, deterministic evaluator, Stone Age milestone integration, save compatibility). Sections 4-10 below remain the standing design reference; section 11 records what Phase 1 actually shipped and what stays deferred. Later phases (era correction, specialists, research, resource access, islands, mounts) are still design-only.
 **Scope:** Foundational progression architecture for the existing single-player Forgotten Shore build.
 **Authority:** This document supplements `REVISED_PROJECT_BASELINE.md`; it does not silently replace approved vertical-slice requirements.
 
@@ -174,3 +174,58 @@ The foundation is ready when:
 - existing v1/v2 save migration behavior is preserved;
 - no specialist, research, mount, or multi-island feature appears prematurely in the playable build;
 - docs accurately distinguish implemented behavior from future design.
+
+
+## 11. Phase 1 implementation notes (shipped behavior, not future design)
+
+Phase 1 implements the smallest testable foundation on the Forgotten Shore vertical slice:
+
+- **Facts (`scripts/progression/ProgressionState.gd`).** Durable milestone facts
+  with stable lowercase snake_case IDs. `KNOWN_FACT_IDS` is the code-level fact
+  registry (Phase 1 ships exactly one fact: `forgotten_shore_first_stone_wall_tier_2`);
+  a `data/progression_facts.json` file was deliberately NOT created because a
+  registry of one fact does not justify a second data file. Recording is idempotent,
+  rejects malformed and unknown IDs, emits `fact_recorded` only on the absent ->
+  present transition, and never exposes the internal collection.
+- **Definitions (`scripts/progression/ProgressionUnlockCatalog.gd`, `data/unlocks.json`).**
+  Data-driven unlock definitions validated at load time: strict field set, stable
+  IDs, unique definition IDs, `all_of` / `any_of` groups of known fact IDs, empty
+  groups rejected, unknown requirement IDs rejected with a reported reason, and
+  all-or-nothing loading (any error leaves the catalog empty so no unlock can be
+  granted from malformed data). No script expressions, no eval.
+- **Evaluation (`scripts/progression/ProgressionUnlockEvaluator.gd`).** Deterministic
+  pure reads: every present group must pass; empty, missing, or unknown groups
+  never unlock (fail-closed even for definitions that bypass the catalog);
+  evaluation never mutates progression state. Only the locked -> available
+  distinction exists in Phase 1; a separate "unlocked/owned" acquisition state is
+  deferred until a real feature has an acquisition step.
+- **Stone Age integration (`ForgottenShoreSession.gd`).** After a successful wall
+  upgrade transaction, the session records the milestone fact; the fact is
+  idempotent, so repeating the milestone (or upgrading the west wall later) never
+  duplicates progression. Era advancement itself stays owned by
+  `EraProgressionManager`; its behavior, save format, and player-facing messages
+  are unchanged.
+- **Save compatibility (`SaveManager.gd`).** Facts persist as the optional
+  `progression_flags.progression_facts` array (sorted known fact ID strings).
+  The schema stays version 2, matching how other optional `progression_flags`
+  fields were introduced. Strict validation rejects unknown or malformed fact
+  IDs in saves. Migration deterministically and idempotently backfills the
+  stone-wall fact for saves whose `era_id` is `stone_age` (the era is only
+  reachable through that milestone, so it proves the fact). Iron Age saves are
+  never backfilled: the vessel-ready path can reach Iron Age without any stone
+  wall, so no factual inference exists. Old saves without the field load with an
+  empty fact set, and malformed fact arrays are rejected, never repaired
+  mid-load.
+- **Wiring boundary.** The session owns the fact service (milestone recording +
+  save/restore). The catalog/evaluator are tested against the real data file but
+  are not yet instantiated in gameplay, because no HUD or interaction consumer
+  exists in Phase 1; the first availability UI will consume
+  `ProgressionUnlockCatalog` + `ProgressionUnlockEvaluator` directly.
+
+Acceptance evidence: `tests/test_progression_foundation.gd` (137 checks across 6
+suites) covers fact recording/idempotency/ID validation, serialization round-trips
+with transactional rejection, definition validation and fail-safe loading, the
+`all_of`/`any_of` truth tables, the Stone Age milestone integration, and save
+migration/round-trip behavior; the full headless suite
+(`tests/run_all.sh`, static verifier + world clock + P0 unit + M8 integration +
+experimental + progression) stays green.

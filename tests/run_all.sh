@@ -23,6 +23,7 @@ run_godot "World clock" "--script res://tests/test_time_manager.gd" "PASS: test_
 run_godot "P0 unit" "--script res://tests/test_unit_m2_m7.gd" "PASS: All .* P0 Unit Checks"
 run_godot "P0 scene integration" "--script res://tests/test_integration_m8_slice.gd" "PASS: All .* M8 Multi-Frame Scene Transition"
 run_godot "P1 experimental" "--script res://tests/test_experimental_p1_m9_m10.gd" "PASS: All .* Experimental P1 Skeleton Checks"
+run_godot "Progression foundation" "--script res://tests/test_progression_foundation.gd" "PASS: All .* Progression Foundation"
 if [ "${failed}" -ne 0 ]; then
   echo "SOME SUITES FAILED (logs in ${LOG_DIR})"
   exit 1

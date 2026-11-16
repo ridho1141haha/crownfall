@@ -21,6 +21,12 @@ Design the long-term progression model now, but implement only the smallest reus
 
 ## Phase 1 — Progression foundation
 
+**Status:** Implemented on `feat/progression-foundation-phase-1` (fact service, definition
+loader/validator, deterministic evaluator, Stone Age milestone integration, optional
+`progression_flags.progression_facts` save field with schema v2 kept, deterministic
+era-based fact backfill). See `PROGRESSION_FOUNDATION_DESIGN.md` section 11 for the
+shipped boundary. Phases 2+ below remain planning only.
+
 **Goal:** create a small, data-driven, testable unlock evaluator.
 
 Implementation tasks:

@@ -71,3 +71,10 @@ jobs:
           godot --headless --script res://tests/test_experimental_p1_m9_m10.gd 2>&1 | tee /tmp/godot_p1.log
           ! grep -E "(SCRIPT ERROR:|Parser Error:|TEST FAILURE:)" /tmp/godot_p1.log
           grep -q "PASS: All .* Experimental P1 Skeleton Checks" /tmp/godot_p1.log
+
+      - name: Run Progression Foundation Tests (Phase 1)
+        run: |
+          set -o pipefail
+          godot --headless --script res://tests/test_progression_foundation.gd 2>&1 | tee /tmp/godot_progression.log
+          ! grep -E "(SCRIPT ERROR:|Parser Error:|TEST FAILURE:)" /tmp/godot_progression.log
+          grep -q "PASS: All .* Progression Foundation" /tmp/godot_progression.log
