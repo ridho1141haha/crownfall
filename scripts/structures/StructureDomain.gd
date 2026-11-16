@@ -16,6 +16,9 @@ extends RefCounted
 ##     spend -> record fact. A failed activation never deducts resources or
 ##     mutates facts; a repeated activation is a rejected no-op that never
 ##     spends twice (idempotent fact guard).
+##   - Buff effects granted by activated structures are aggregated by
+##     BuffDomain from the activation facts (derived on every query — nothing
+##     is pushed, stored, or re-applied on load).
 ##   - The session only forwards player requests and renders feedback; it owns
 ##     no activation rules.
 
@@ -29,10 +32,12 @@ const STATE_ACTIVATED: String = "activated"
 const INTERACT_RANGE: float = 96.0
 
 var catalog: StructureCatalog
+var buff_domain: BuffDomain
 
 
-func _init(catalog_override: StructureCatalog = null) -> void:
+func _init(catalog_override: StructureCatalog = null, buff_domain_override: BuffDomain = null) -> void:
 	catalog = catalog_override if catalog_override != null else StructureCatalog.new()
+	buff_domain = buff_domain_override if buff_domain_override != null else BuffDomain.new(catalog)
 
 
 func get_structure_ids() -> Array[String]:
@@ -92,6 +97,14 @@ func get_lifecycle_state(structure_id: String, progression: ProgressionState) ->
 	if _requirements_satisfied(def, progression):
 		return STATE_AVAILABLE
 	return STATE_LOCKED
+
+
+## Buff effect totals granted by every activated structure. Delegates the
+## authoritative aggregation to BuffDomain; unknown effect types return 0.
+func get_effect_total(effect_type: String, progression: ProgressionState) -> int:
+	if progression == null:
+		return 0
+	return buff_domain.get_effect_total(effect_type, get_activated_structure_ids(progression))
 
 
 ## Display summary of active structure blessings for the HUD (presentation
