@@ -1,0 +1,60 @@
+{
+  "specialists": [
+    {
+      "id": "scientist",
+      "role": "research",
+      "display_name": "The Scientist",
+      "description": "A shipwrecked natural philosopher who studies the Forgotten Shore and provides research for the kingdom.",
+      "island_id": "forgotten_shore",
+      "discovery_fact": "scientist_discovered",
+      "recruitment_fact": "scientist_recruited",
+      "recruitment_cost": {
+        "gold": 3,
+        "wood": 2
+      },
+      "housing_plot_id": "hut_scientist_01",
+      "world_x": -1010.0
+    },
+    {
+      "id": "blacksmith",
+      "role": "crafting",
+      "display_name": "The Blacksmith",
+      "description": "A smith who forges equipment and tools. Joins the kingdom on Eldergrove Forest (Island 2).",
+      "island_id": "eldergrove_forest",
+      "discovery_fact": "blacksmith_discovered",
+      "recruitment_fact": "blacksmith_recruited",
+      "recruitment_cost": {
+        "gold": 4,
+        "wood": 2,
+        "stone": 2
+      }
+    },
+    {
+      "id": "architect",
+      "role": "construction",
+      "display_name": "The Architect",
+      "description": "A master builder of advanced structures. Joins the kingdom on Eldergrove Forest (Island 2).",
+      "island_id": "eldergrove_forest",
+      "discovery_fact": "architect_discovered",
+      "recruitment_fact": "architect_recruited",
+      "recruitment_cost": {
+        "gold": 5,
+        "wood": 4,
+        "stone": 3
+      }
+    },
+    {
+      "id": "scholar",
+      "role": "knowledge",
+      "display_name": "The Scholar",
+      "description": "A keeper of ancient history and lost knowledge. Joins the kingdom on the Ancient Kingdom (Island 3).",
+      "island_id": "ancient_kingdom",
+      "discovery_fact": "scholar_discovered",
+      "recruitment_fact": "scholar_recruited",
+      "recruitment_cost": {
+        "gold": 4,
+        "stone": 3
+      }
+    }
+  ]
+}

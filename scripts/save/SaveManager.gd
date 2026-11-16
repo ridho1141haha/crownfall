@@ -330,6 +330,7 @@ func validate_payload(data: Variant) -> bool:
 		BuildingManager.WATCHTOWER_ID: ["watchtower"],
 		BuildingManager.FARM_WEST_ID: ["farm_plot"],
 		BuildingManager.FARM_EAST_ID: ["farm_plot"],
+		SpecialistDomain.SCIENTIST_HUT_PLOT_ID: ["specialist_hut"],
 	}
 	var seen_plot_ids: Dictionary = {}
 	for b_item: Variant in b_arr:

@@ -12,6 +12,7 @@ enum ReignState {
 
 const FARM_HARVEST_INTERVAL: float = 60.0
 const FARM_GOLD_YIELD: int = 2
+const ACTIVE_ISLAND_ID: String = "forgotten_shore"
 const SHIPWRECK_X: float = -1350.0
 const PORTAL_X: float = 1350.0
 const SHIPWRECK_COSTS: Array[Dictionary] = [
@@ -33,6 +34,7 @@ var builder_npc: NPCBuilderAgent = null
 var night_mgr: NightEncounterManager = NightEncounterManager.new()
 var era_mgr: EraProgressionManager = EraProgressionManager.new()
 var progression: ProgressionState = ProgressionState.new()
+var specialists: SpecialistDomain = SpecialistDomain.new()
 var save_mgr: SaveManager = SaveManager.new()
 
 # Backward-compatible mirror for tests inspecting collected_node_ids directly
@@ -88,6 +90,7 @@ func _ready() -> void:
 	building_mgr.register_forgotten_shore_expansion_plots()
 	_sync_resource_prompts_from_data()
 	_setup_forest_visuals()
+	_setup_specialist_visuals()
 	_setup_pause_menu()
 	_wire_signals()
 	_consume_pending_load_if_requested()
@@ -183,6 +186,9 @@ func _wire_signals() -> void:
 		player.kindle_flare_requested.connect(func() -> void: execute_world_command("player_1", &"kindle_flare", ""))
 
 	economy.transaction_rejected.connect(_record_rejection)
+	specialists.specialist_discovered.connect(_on_specialist_discovered)
+	specialists.specialist_recruited.connect(_on_specialist_recruited)
+	specialists.specialist_action_rejected.connect(_record_rejection)
 	building_mgr.building_action_rejected.connect(_record_rejection)
 	building_mgr.wall_state_changed.connect(_on_wall_state_changed)
 	night_mgr.building_attacked.connect(_on_building_attacked)
@@ -323,7 +329,9 @@ func _resolve_target_for_actor(actor_x: float) -> Dictionary:
 		PORTAL_X,
 		portal_relic_looted,
 		shrine_offering_used_today,
-		tree_mgr
+		tree_mgr,
+		specialists,
+		progression
 	)
 
 
@@ -514,6 +522,12 @@ func execute_world_command(actor_id: String, command: StringName, target_id: Str
 			else:
 				_record_rejection(String(cres.get("reason", "Cannot chop tree")))
 
+		&"discover_specialist":
+			ok = _on_discover_specialist(actor_x, resolved_target)
+
+		&"recruit_specialist":
+			ok = _on_recruit_specialist(actor_x, resolved_target)
+
 		&"save_game":
 			ok = _on_manual_save()
 
@@ -667,6 +681,108 @@ func _on_player_loot_portal_relic() -> bool:
 		feedback_message.emit("Scavenged Ancient Relic near Greed Portal (+3 Gold, +2 Stone)!")
 		return true
 	return false
+
+
+## Phase 3 specialist discovery command. An empty target resolves the nearest
+## active-island specialist in range (deterministic sorted-ID order); the
+## authoritative transaction lives in SpecialistDomain.
+func _on_discover_specialist(actor_x: float, specialist_id: String) -> bool:
+	var sp_id: String = specialist_id
+	if sp_id.is_empty():
+		sp_id = _find_nearby_specialist_id(actor_x)
+	if sp_id.is_empty():
+		_record_rejection("No specialist nearby to discover")
+		return false
+	return specialists.try_discover(actor_x, sp_id, progression)
+
+
+## Phase 3 specialist recruitment command. An empty target resolves the nearest
+## active-island specialist in range. Requirements, housing, costs and
+## duplicate-recruitment guards are enforced by SpecialistDomain.try_recruit.
+func _on_recruit_specialist(actor_x: float, specialist_id: String) -> bool:
+	var sp_id: String = specialist_id
+	if sp_id.is_empty():
+		sp_id = _find_nearby_specialist_id(actor_x)
+	if sp_id.is_empty():
+		_record_rejection("No specialist nearby to recruit")
+		return false
+	return specialists.try_recruit(actor_x, sp_id, progression, building_mgr, economy)
+
+
+func _find_nearby_specialist_id(actor_x: float) -> String:
+	for sp_id: String in specialists.get_specialist_ids():
+		var sp_def: Dictionary = specialists.get_specialist_definition(sp_id)
+		if String(sp_def.get("island_id", "")) != SpecialistDomain.ACTIVE_ISLAND_ID:
+			continue
+		if not sp_def.has("world_x"):
+			continue
+		if absf(actor_x - float(sp_def["world_x"])) <= SpecialistDomain.INTERACT_RANGE:
+			return sp_id
+	return ""
+
+
+func _on_specialist_discovered(specialist_id: String) -> void:
+	var name_txt: String = specialists.get_display_name(specialist_id)
+	if name_txt.is_empty():
+		name_txt = specialist_id
+	_play_sfx("sfx_coin")
+	_spawn_floating_text(specialists.get_world_x(specialist_id), "%s found!" % name_txt, Color(0.6, 0.95, 0.85, 1.0))
+	feedback_message.emit("You found %s! Build their hut here with [B] so they can join the kingdom." % name_txt)
+
+
+func _on_specialist_recruited(specialist_id: String) -> void:
+	var name_txt: String = specialists.get_display_name(specialist_id)
+	if name_txt.is_empty():
+		name_txt = specialist_id
+	_play_sfx("sfx_coin")
+	_spawn_floating_text(specialists.get_world_x(specialist_id), "%s joined!" % name_txt, Color(0.6, 0.95, 0.85, 1.0))
+	feedback_message.emit("%s joined the kingdom!" % name_txt)
+
+
+## Programmatic specialist-camp visuals (same pattern as the forest visuals):
+## one marker sprite + one interaction label per active-island specialist with
+## a defined world position, plus one label for their housing plot.
+func _setup_specialist_visuals() -> void:
+	var world_objs: Node = get_node_or_null("WorldObjects")
+	if world_objs == null or world_objs.get_node_or_null("SpecialistCamp") != null:
+		return
+	var camp: Node2D = Node2D.new()
+	camp.name = "SpecialistCamp"
+	world_objs.add_child(camp)
+	var tex_path: String = "res://assets/characters/npc/npc_builder_sheet.png"
+	var npc_tex: Texture2D = load(tex_path) as Texture2D if ResourceLoader.exists(tex_path) else null
+	for sp_id: String in specialists.get_specialist_ids():
+		var sp_def: Dictionary = specialists.get_specialist_definition(sp_id)
+		if String(sp_def.get("island_id", "")) != SpecialistDomain.ACTIVE_ISLAND_ID or not sp_def.has("world_x"):
+			continue
+		var wx: float = float(sp_def["world_x"])
+		var spr: Sprite2D = Sprite2D.new()
+		spr.name = "SpSprite_%s" % sp_id
+		spr.position = Vector2(wx, 0.0)
+		spr.centered = false
+		spr.offset = Vector2(-16, -32)
+		spr.hframes = 8
+		spr.frame = 0
+		spr.modulate = Color(0.62, 0.9, 0.82, 1.0)
+		if npc_tex != null:
+			spr.texture = npc_tex
+		camp.add_child(spr)
+		var lbl: Label = Label.new()
+		lbl.name = "SpLabel_%s" % sp_id
+		lbl.visible = false
+		lbl.position = Vector2(wx - 56.0, -86.0)
+		lbl.size = Vector2(112, 24)
+		lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		camp.add_child(lbl)
+	var housing_plot: String = String(specialists.get_specialist_definition("scientist").get("housing_plot_id", ""))
+	if not housing_plot.is_empty() and building_mgr.has_plot(housing_plot):
+		var hut_lbl: Label = Label.new()
+		hut_lbl.name = "HutLabel"
+		hut_lbl.visible = false
+		hut_lbl.position = Vector2(float(building_mgr.get_plot(housing_plot).get("position_x", 0.0)) - 70.0, -86.0)
+		hut_lbl.size = Vector2(140, 24)
+		hut_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		camp.add_child(hut_lbl)
 
 
 func _on_manual_save() -> bool:
@@ -1104,6 +1220,35 @@ func _update_proximity_prompts() -> void:
 			var is_stand: bool = (active_kind == "tool_stand" and active_id == sid)
 			lbl.visible = is_stand
 			lbl.modulate = highlight_col if is_stand else normal_col
+
+	# Phase 3 specialist prompts: the resolved specialist prompt plus the
+	# scientist housing plot status label (presentation only).
+	var sp_camp: Node = get_node_or_null("WorldObjects/SpecialistCamp")
+	if sp_camp != null:
+		for sp_id2: String in specialists.get_specialist_ids():
+			var sp_lbl: Label = sp_camp.get_node_or_null("SpLabel_%s" % sp_id2) as Label
+			if sp_lbl != null:
+				var is_sp: bool = (active_kind == "specialist" and active_id == sp_id2)
+				sp_lbl.visible = is_sp
+				sp_lbl.modulate = highlight_col if is_sp else normal_col
+				sp_lbl.text = String(_active_target.get("prompt_text", "")) if is_sp else ""
+		var hut_id: String = String(specialists.get_specialist_definition("scientist").get("housing_plot_id", ""))
+		var hut_lbl2: Label = sp_camp.get_node_or_null("HutLabel") as Label
+		if hut_lbl2 != null and building_mgr.has_plot(hut_id):
+			var plot: Dictionary = building_mgr.get_plot(hut_id)
+			var st: int = int(plot["state"])
+			var is_hut_active: bool = (active_kind == "building" and active_id == hut_id)
+			hut_lbl2.visible = is_hut_active or st == BuildingManager.WallState.UNDER_CONSTRUCTION
+			hut_lbl2.modulate = highlight_col if is_hut_active else normal_col
+			var hut_title: String = building_mgr.get_plot_title(hut_id)
+			if st == BuildingManager.WallState.PLACEHOLDER or st == BuildingManager.WallState.DESTROYED:
+				hut_lbl2.text = "%s [E/B]\n%s" % [hut_title, building_mgr.get_plot_cost_label(hut_id)]
+			elif st == BuildingManager.WallState.UNDER_CONSTRUCTION:
+				hut_lbl2.text = "Building %s...\n%d%%" % [hut_title, int(roundf(float(plot["progress"]) * 100.0))]
+			elif st == BuildingManager.WallState.DAMAGED:
+				hut_lbl2.text = "Damaged %s [E/F]\nHP %d/%d" % [hut_title, int(plot["durability"]), int(plot["max_durability"])]
+			else:
+				hut_lbl2.text = hut_title
 
 
 func _sync_dynamic_actors() -> void:

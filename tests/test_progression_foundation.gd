@@ -64,13 +64,14 @@ func _test_fact_recording_basics() -> bool:
 		return false
 
 	# Well-formed but unknown to the registry: rejected (no ghost facts).
-	# ("eldergrove_reached" became a registered fact in Phase 2, so an ID that
-	# stays unregistered is used for the negative checks.)
-	if not _check(not p.record_fact("scientist_recruited"), "Unknown well-formed fact id is rejected by registry"):
+	# ("eldergrove_reached" became a registered fact in Phase 2, and the
+	# specialist facts became registered in Phase 3, so an ID that stays
+	# unregistered is used for the negative checks.)
+	if not _check(not p.record_fact("mount_tamed"), "Unknown well-formed fact id is rejected by registry"):
 		return false
-	if not _check(not ProgressionState.is_valid_fact_id("scientist_recruited"), "is_valid_fact_id rejects unknown id"):
+	if not _check(not ProgressionState.is_valid_fact_id("mount_tamed"), "is_valid_fact_id rejects unknown id"):
 		return false
-	if not _check(ProgressionState.is_valid_stable_id("scientist_recruited") and not ProgressionState.is_valid_fact_id("scientist_recruited"), "Unknown id is well-formed but not registry-approved"):
+	if not _check(ProgressionState.is_valid_stable_id("mount_tamed") and not ProgressionState.is_valid_fact_id("mount_tamed"), "Unknown id is well-formed but not registry-approved"):
 		return false
 
 	# Internal collection is never exposed: get_fact_ids returns a copy.
@@ -112,8 +113,8 @@ func _test_fact_serialization_roundtrip() -> bool:
 	# Invalid payloads: rejected with zero partial mutation.
 	var invalid_payloads: Array = [
 		FACT, 42, {}, {"forgotten_shore_first_stone_wall_tier_2": true},
-		[42], [""], ["BAD ID"], ["stone-wall"], ["scientist_recruited"],
-		[FACT, FACT], [FACT, ""], [FACT, "scientist_recruited"],
+		[42], [""], ["BAD ID"], ["stone-wall"], ["mount_tamed"],
+		[FACT, FACT], [FACT, ""], [FACT, "mount_tamed"],
 	]
 	for bad_payload: Variant in invalid_payloads:
 		var before: Array = p.get_fact_ids()
@@ -163,7 +164,7 @@ func _test_definition_validation() -> bool:
 		{"unlocks": [{"id": "def_a", "requires": {"all_of": []}}]},
 		{"unlocks": [{"id": "def_a", "requires": {"any_of": []}}]},
 		{"unlocks": [{"id": "def_a", "requires": {"all_of": [FACT], "bogus": [FACT]}}]},
-		{"unlocks": [{"id": "def_a", "requires": {"all_of": ["scientist_recruited"]}}]},
+		{"unlocks": [{"id": "def_a", "requires": {"all_of": ["mount_tamed"]}}]},
 		{"unlocks": [{"id": "def_a", "requires": {"all_of": FACT}}]},
 		{"unlocks": [{"id": "def_a", "requires": {"all_of": [FACT, FACT]}}]},
 		{"unlocks": [{"id": "def_a", "requires": {"all_of": [FACT]}}, {"id": "def_a", "requires": {"any_of": [FACT]}}]},
@@ -247,7 +248,7 @@ func _test_unlock_evaluation() -> bool:
 		{"id": "e1", "requires": {"all_of": []}},
 		{"id": "e2", "requires": {"any_of": []}},
 		{"id": "e3", "requires": {}},
-		{"id": "e4", "requires": {"all_of": ["scientist_recruited"]}},
+		{"id": "e4", "requires": {"all_of": ["mount_tamed"]}},
 		{"id": "e5", "requires": {"bogus_group": [FACT]}},
 		null, 42, "x", {}, {"id": "e6"},
 		{"id": "e7", "requires": "x"},

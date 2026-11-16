@@ -112,6 +112,23 @@
         "thorn_damage": 20,
         "cost_label": "3G 2W 5S"
       }
+    },
+    {
+      "id": "hut_scientist_01",
+      "title": "Scientist's Hut",
+      "type": "specialist_hut",
+      "position_x": -980.0,
+      "build_cost": {
+        "gold": 2,
+        "wood": 5,
+        "stone": 1
+      },
+      "repair_cost": {
+        "wood": 2
+      },
+      "build_duration": 4.0,
+      "max_durability": 80,
+      "cost_label": "2G 5W 1S"
     }
   ]
 }

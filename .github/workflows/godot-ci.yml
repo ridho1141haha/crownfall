@@ -85,3 +85,10 @@ jobs:
           godot --headless --script res://tests/test_progression_phase2_era_correction.gd 2>&1 | tee /tmp/godot_progression_phase2.log
           ! grep -E "(SCRIPT ERROR:|Parser Error:|TEST FAILURE:)" /tmp/godot_progression_phase2.log
           grep -q "PASS: All .* Phase 2 Era Correction" /tmp/godot_progression_phase2.log
+
+      - name: Run Specialist Domain Foundation Tests (Phase 3)
+        run: |
+          set -o pipefail
+          godot --headless --script res://tests/test_specialist_domain.gd 2>&1 | tee /tmp/godot_specialists.log
+          ! grep -E "(SCRIPT ERROR:|Parser Error:|TEST FAILURE:)" /tmp/godot_specialists.log
+          grep -q "PASS: All .* Specialist Domain Foundation" /tmp/godot_specialists.log
