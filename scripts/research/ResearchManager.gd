@@ -325,3 +325,16 @@ func apply_save_dict(data: Variant) -> bool:
 	_active_tech_id = next_active_id
 	_active_elapsed = next_elapsed
 	return true
+
+## Transactional reset to the canonical empty research state (no completed
+## technologies, no active project, zero elapsed). Used when restoring a save
+## whose payload has no "research" key: the payload is the authority, so an
+## absent key means an empty research state — never "keep whatever the live
+## session happens to hold" (that would resurrect research the save does not
+## contain). Delegates to the same validated apply path as a normal restore,
+## so replacement stays atomic with zero partial mutation; the canonical empty
+## payload is valid by construction, and the bool return keeps the
+## transactional contract uniform for the caller (a defensive failure aborts
+## the whole load and triggers the session rollback).
+func reset_to_empty_state() -> bool:
+	return apply_save_dict({"completed_techs": [], "active_research": null})

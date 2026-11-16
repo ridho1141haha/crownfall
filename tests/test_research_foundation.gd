@@ -18,9 +18,29 @@ const SCIENTIST_X: float = -1010.0
 const SAVE_ROUNDTRIP_PATH: String = "user://test_research_roundtrip.json"
 const SAVE_ACTIVE_PATH: String = "user://test_research_active.json"
 const SAVE_MALFORMED_PATH: String = "user://test_research_malformed.json"
+const SAVE_LEGACY_COMPLETED_PATH: String = "user://test_research_legacy_completed.json"
+const SAVE_LEGACY_ACTIVE_PATH: String = "user://test_research_legacy_active.json"
+const SAVE_MODERN_FULL_PATH: String = "user://test_research_modern_full.json"
+const SAVE_NULL_RESEARCH_PATH: String = "user://test_research_null_key.json"
+const SAVE_ROLLBACK_PATH: String = "user://test_research_rollback.json"
 
 var _failures: int = 0
 var _checks: int = 0
+
+
+## Phase 4.1 Case E test double: fails exactly one apply_save_array call (the
+## first one, i.e. the failed load attempt) and delegates every later call to
+## the real implementation (the session rollback retry). This deterministically
+## simulates "research restoration succeeded, then a later subsystem failed"
+## so the existing session rollback path can be exercised end to end.
+class FailOncePopulationManager extends NPCPopulationManager:
+	var _failing_calls_left: int = 1
+
+	func apply_save_array(npcs_arr: Array) -> bool:
+		if _failing_calls_left > 0:
+			_failing_calls_left -= 1
+			return false
+		return super.apply_save_array(npcs_arr)
 
 
 func _check(cond: bool, msg: String) -> bool:
@@ -511,16 +531,201 @@ func _test_session_effects_and_regression() -> bool:
 	return true
 
 
+# ---------------------------------------------------------------- Suite 7 ---
+func _test_legacy_save_research_reset() -> bool:
+	var sm: SaveManager = SaveManager.new()
+
+	# --- Case A: legacy save (no research key) loaded after completed research ---
+	var sess_a: ForgottenShoreSession = _fresh_session()
+	_expand_plots(sess_a)
+	if not _check(_recruit_scientist(sess_a), "CaseA setup: scientist recruited through the real path"):
+		return false
+	if not _fund(sess_a, 10, 10, 10):
+		return false
+	if not _check(sess_a.research_mgr.try_start(T1, sess_a.progression, sess_a.economy), "CaseA setup: inscription_studies started"):
+		return false
+	if not _check(sess_a.research_mgr.advance_research(90.0) and sess_a.research_mgr.is_completed(T1), "CaseA setup: inscription_studies completed"):
+		return false
+	if not _check(sess_a.research_mgr.get_effect_total(ResearchManager.EFFECT_SHRINE_OFFERING_GOLD_BONUS) == 3, "CaseA setup: completed effect observable before the load"):
+		return false
+	var legacy_completed: Dictionary = sess_a.build_save_payload()
+	legacy_completed.erase("research")
+	if not _check(sm.validate_payload(legacy_completed), "CaseA: payload without the research key still passes strict validation (schema v2 unchanged)"):
+		return false
+	if not _check(sm.save_state(legacy_completed.duplicate(true), SAVE_LEGACY_COMPLETED_PATH), "CaseA: legacy save written"):
+		return false
+	if not _check(sess_a.load_game_state(SAVE_LEGACY_COMPLETED_PATH), "CaseA: legacy save loads into the session holding completed research"):
+		return false
+	if not _check(sess_a.research_mgr.get_completed_tech_ids().is_empty(), "CaseA: completed research is empty after loading a legacy save"):
+		return false
+	if not _check(not sess_a.research_mgr.has_active_research(), "CaseA: no research project is active after loading a legacy save"):
+		return false
+	if not _check(sess_a.research_mgr.get_effect_total(ResearchManager.EFFECT_SHRINE_OFFERING_GOLD_BONUS) == 0, "CaseA: technology effects from the pre-load research state are gone"):
+		return false
+	if not _fund(sess_a, 10, 10, 10):
+		return false
+	sess_a.shrine_offering_used_today = false
+	sess_a.set_actor_position("player_1", -780.0)
+	if not _check(bool(sess_a.execute_world_command("player_1", &"shrine_offering", "").get("ok", false)), "CaseA: shrine offering accepted after the legacy load"):
+		return false
+	if not _check(sess_a.economy.get_amount(&"gold") == 12, "CaseA: shrine offering yields the base +2 gold (research bonus reset through the real command path)"):
+		return false
+
+	# --- Case B: legacy save loaded while a project is active ---
+	var sess_b: ForgottenShoreSession = _fresh_session()
+	_expand_plots(sess_b)
+	if not _check(_recruit_scientist(sess_b), "CaseB setup: scientist recruited through the real path"):
+		return false
+	if not _fund(sess_b, 10, 10, 10):
+		return false
+	if not _check(sess_b.research_mgr.try_start(T1, sess_b.progression, sess_b.economy), "CaseB setup: research started"):
+		return false
+	if not _check(not sess_b.research_mgr.advance_research(30.0) and is_equal_approx(sess_b.research_mgr.get_active_elapsed(), 30.0), "CaseB setup: partial progress accumulated"):
+		return false
+	var legacy_active: Dictionary = sess_b.build_save_payload()
+	legacy_active.erase("research")
+	if not _check(sm.validate_payload(legacy_active), "CaseB: legacy payload passes strict validation"):
+		return false
+	if not _check(sm.save_state(legacy_active.duplicate(true), SAVE_LEGACY_ACTIVE_PATH), "CaseB: legacy save written"):
+		return false
+	if not _check(sess_b.load_game_state(SAVE_LEGACY_ACTIVE_PATH), "CaseB: legacy save loads while a project is active"):
+		return false
+	if not _check(not sess_b.research_mgr.has_active_research() and sess_b.research_mgr.get_active_tech_id().is_empty(), "CaseB: active research is cleared"):
+		return false
+	if not _check(is_equal_approx(sess_b.research_mgr.get_active_elapsed(), 0.0) and is_equal_approx(sess_b.research_mgr.get_active_progress_ratio(), 0.0), "CaseB: elapsed research progress is zero"):
+		return false
+	if not _check(sess_b.economy.get_amount(&"gold") == 7 and sess_b.economy.get_amount(&"wood") == 8 and sess_b.economy.get_amount(&"stone") == 10, "CaseB: balances match the payload exactly (no refund of the start cost, no second deduction)"):
+		return false
+	if not _check(not sess_b.research_mgr.advance_research(500.0), "CaseB: advancing after the reset is a no-op (no ghost project)"):
+		return false
+
+	# --- Case C: valid modern save restores completed + active + exact elapsed ---
+	var donor: ForgottenShoreSession = _fresh_session()
+	_expand_plots(donor)
+	if not _check(_recruit_scientist(donor), "CaseC setup: scientist recruited"):
+		return false
+	if not _fund(donor, 10, 10, 10):
+		return false
+	if not _check(donor.research_mgr.try_start(T1, donor.progression, donor.economy), "CaseC setup: first technology started"):
+		return false
+	if not _check(donor.research_mgr.advance_research(90.0) and donor.research_mgr.is_completed(T1), "CaseC setup: first technology completed"):
+		return false
+	if not _check(donor.progression.record_fact(ProgressionState.FACT_FORGOTTEN_SHORE_FIRST_STONE_WALL_TIER_2), "CaseC setup: Stone Age fact recorded"):
+		return false
+	if not _fund(donor, 10, 10, 10):
+		return false
+	if not _check(donor.research_mgr.try_start(T2, donor.progression, donor.economy), "CaseC setup: second technology started"):
+		return false
+	if not _check(not donor.research_mgr.advance_research(25.0) and is_equal_approx(donor.research_mgr.get_active_elapsed(), 25.0), "CaseC setup: second project at 25s elapsed"):
+		return false
+	var modern: Dictionary = donor.build_save_payload()
+	if not _check(sm.validate_payload(modern), "CaseC: payload with completed AND active research passes strict validation"):
+		return false
+	if not _check(sm.save_state(modern.duplicate(true), SAVE_MODERN_FULL_PATH), "CaseC: modern save written"):
+		return false
+	var target: ForgottenShoreSession = _fresh_session()
+	_expand_plots(target)
+	if not _check(_recruit_scientist(target), "CaseC setup: target session recruited its own scientist"):
+		return false
+	if not _fund(target, 10, 10, 10):
+		return false
+	if not _check(target.research_mgr.try_start(T1, target.progression, target.economy), "CaseC setup: target session holds its own active project"):
+		return false
+	if not _check(not target.research_mgr.advance_research(10.0), "CaseC setup: target project at 10s elapsed"):
+		return false
+	if not _check(target.load_game_state(SAVE_MODERN_FULL_PATH), "CaseC: modern save loads over non-empty live research state"):
+		return false
+	if not _check(target.research_mgr.is_completed(T1), "CaseC: completed technologies restored"):
+		return false
+	if not _check(target.research_mgr.get_active_tech_id() == T2 and is_equal_approx(target.research_mgr.get_active_elapsed(), 25.0), "CaseC: active research ID and exact elapsed progress restored (replaces the pre-load project, no merge)"):
+		return false
+	if not _check(target.research_mgr.get_effect_total(ResearchManager.EFFECT_SHRINE_OFFERING_GOLD_BONUS) == 3 and target.research_mgr.get_effect_total(ResearchManager.EFFECT_FLARE_DURATION_BONUS_SEC) == 0, "CaseC: completion effects match the restored completed set exactly"):
+		return false
+	if not _check(target.economy.get_amount(&"gold") == 8 and target.economy.get_amount(&"wood") == 7 and target.economy.get_amount(&"stone") == 9, "CaseC: loading the modern save never deducts or refunds resources (balances match the payload exactly)"):
+		return false
+	if not _check(not target.research_mgr.advance_research(94.0) and target.research_mgr.has_active_research(), "CaseC: restored project still active below its duration"):
+		return false
+	if not _check(target.research_mgr.advance_research(1.0) and target.research_mgr.is_completed(T2) and not target.research_mgr.has_active_research(), "CaseC: restored project completes exactly once at its duration boundary"):
+		return false
+	if not _check(target.research_mgr.get_effect_total(ResearchManager.EFFECT_FLARE_DURATION_BONUS_SEC) == 4, "CaseC: second completion effect becomes observable exactly once"):
+		return false
+
+	# --- Case D: explicit "research": null stays invalid and live state survives ---
+	var victim_d: ForgottenShoreSession = _fresh_session()
+	_expand_plots(victim_d)
+	if not _check(_recruit_scientist(victim_d), "CaseD setup: scientist recruited"):
+		return false
+	if not _fund(victim_d, 10, 10, 10):
+		return false
+	if not _check(victim_d.research_mgr.try_start(T1, victim_d.progression, victim_d.economy), "CaseD setup: research started"):
+		return false
+	if not _check(victim_d.research_mgr.advance_research(90.0) and victim_d.research_mgr.is_completed(T1), "CaseD setup: research completed"):
+		return false
+	var null_research: Dictionary = victim_d.build_save_payload()
+	null_research["research"] = null
+	if not _check(not sm.validate_payload(null_research), "CaseD: explicit null research key fails strict payload validation"):
+		return false
+	var nf: FileAccess = FileAccess.open(SAVE_NULL_RESEARCH_PATH, FileAccess.WRITE)
+	nf.store_string(JSON.stringify(null_research))
+	nf.close()
+	var facts_before_d: Array = victim_d.progression.get_fact_ids()
+	if not _check(not victim_d.load_game_state(SAVE_NULL_RESEARCH_PATH), "CaseD: explicit null research save is rejected"):
+		return false
+	if not _check(victim_d.research_mgr.is_completed(T1) and victim_d.research_mgr.get_effect_total(ResearchManager.EFFECT_SHRINE_OFFERING_GOLD_BONUS) == 3, "CaseD: live completed research state unchanged after the rejected load"):
+		return false
+	if not _check(victim_d.progression.get_fact_ids() == facts_before_d, "CaseD: live progression state unchanged after the rejected load"):
+		return false
+
+	# --- Case E: rollback after a later subsystem failure restores research too ---
+	var victim_e: ForgottenShoreSession = _fresh_session()
+	_expand_plots(victim_e)
+	if not _check(_recruit_scientist(victim_e), "CaseE setup: scientist recruited"):
+		return false
+	if not _fund(victim_e, 10, 10, 10):
+		return false
+	if not _check(victim_e.research_mgr.try_start(T1, victim_e.progression, victim_e.economy), "CaseE setup: research started"):
+		return false
+	if not _check(victim_e.research_mgr.advance_research(90.0) and victim_e.research_mgr.is_completed(T1), "CaseE setup: research completed (live state to preserve)"):
+		return false
+	var rollback_payload: Dictionary = victim_e.build_save_payload()
+	# Distinguishable restoration targets: the payload carries a DIFFERENT
+	# research state (active T1 at 30s, nothing completed) and different
+	# balances, so a missing rollback would be observable in both subsystems.
+	rollback_payload["research"] = {"completed_techs": [], "active_research": {"technology_id": T1, "elapsed_sec": 30.0}}
+	rollback_payload["resources"] = {"gold": 50, "wood": 50, "stone": 50}
+	if not _check(sm.validate_payload(rollback_payload), "CaseE: rollback payload passes strict validation"):
+		return false
+	if not _check(sm.save_state(rollback_payload.duplicate(true), SAVE_ROLLBACK_PATH), "CaseE: rollback save written"):
+		return false
+	victim_e.pop_mgr = FailOncePopulationManager.new()
+	var load_ok_e: bool = victim_e.load_game_state(SAVE_ROLLBACK_PATH)
+	if not _check(not load_ok_e, "CaseE: load fails when a later subsystem (population roster) fails to restore"):
+		return false
+	if not _check(victim_e.research_mgr.is_completed(T1) and not victim_e.research_mgr.has_active_research(), "CaseE: session rollback restored the previous research state (completed tech intact, payload's ghost active project discarded)"):
+		return false
+	if not _check(victim_e.research_mgr.get_effect_total(ResearchManager.EFFECT_SHRINE_OFFERING_GOLD_BONUS) == 3, "CaseE: previous research effects restored"):
+		return false
+	if not _check(victim_e.economy.get_amount(&"gold") == 7 and victim_e.economy.get_amount(&"wood") == 8 and victim_e.economy.get_amount(&"stone") == 10, "CaseE: previous economy balances restored (payload balances discarded by the rollback)"):
+		return false
+	if not _check(victim_e.pop_mgr.agents.size() == 1 and String(victim_e.pop_mgr.agents[0].npc_id) == "npc_01", "CaseE: rollback retry completed the population restore"):
+		return false
+
+	print("PASS: Legacy Save Research Reset (Phase 4.1)")
+	return true
+
+
 func _init() -> void:
 	var suite_names: Array[String] = [
 		"Technology Validation & Catalog", "Requirements & Availability",
 		"Transactional Starts", "Timing & Completion",
 		"Save/Load & Compatibility", "Session Effects & Regression",
+		"Legacy Save Research Reset",
 	]
 	var suites: Array[Callable] = [
 		_test_technology_catalog_validation, _test_requirements_and_status,
 		_test_transactions, _test_timing_and_completion,
 		_test_save_load_and_compatibility, _test_session_effects_and_regression,
+		_test_legacy_save_research_reset,
 	]
 	var failed_suites: Array[String] = []
 	for i: int in range(suites.size()):

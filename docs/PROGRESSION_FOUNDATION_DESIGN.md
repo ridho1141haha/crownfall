@@ -428,6 +428,11 @@ same branch:
   the progression-facts policy. Loading an active project restores its exact
   elapsed time and never re-deducts the cost; loading completed technologies
   never re-applies rewards; failed loads never partially mutate live state.
+  (Phase 4.1 corrected the enforcement of the absent-key case: the session
+  apply path now resets research to the empty state via the transactional
+  `ResearchManager.reset_to_empty_state()` when the key is absent, instead of
+  silently keeping the live session's research; all other load semantics are
+  unchanged.)
 - **Ownership boundaries.** Definitions live in the catalog, durable research
   state in `ResearchManager`, requirement facts stay in `ProgressionState`,
   costs flow through `EconomyLedger`, and UI only renders. Completed research
@@ -435,12 +440,15 @@ same branch:
   a future unlock definition that needs to require a technology can add that
   bridge explicitly in a later phase.
 
-Acceptance evidence: `tests/test_research_foundation.gd` (130 checks across 6
+Acceptance evidence: `tests/test_research_foundation.gd` (188 checks across 7
 suites) covers definition validation including prerequisite cycles, the
 availability truth table, transactional starts (insufficient resources,
 unknown technology, duplicate project), authoritative timing with exactly-once
 completion, save round-trips (active project resumes without re-deduction,
 completed effects never re-applied, legacy saves, explicit-null and unknown-ID
-rejection with no partial mutation), session effect integration through the
-real command paths, and era-safety regression (no Iron Age, no fabricated
-Eldergrove fact, fail-closed era gate).
+rejection with no partial mutation), the Phase 4.1 legacy-save reset
+regression (missing key = empty research state after completed or active
+research; modern saves still restore exactly; explicit null rejected; session
+rollback preserves the previous research state), session effect integration
+through the real command paths, and era-safety regression (no Iron Age, no
+fabricated Eldergrove fact, fail-closed era gate).

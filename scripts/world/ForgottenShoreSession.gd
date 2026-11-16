@@ -1599,6 +1599,14 @@ func _apply_loaded_payload(data: Dictionary) -> bool:
 	if data.has("research"):
 		if not research_mgr.apply_save_dict(data["research"]):
 			return false
+	else:
+		# The optional "research" key is absent (legacy schema-v2 save): the
+		# payload is the authority, so research resets to the empty state
+		# instead of silently keeping the live session's research. An
+		# explicitly present "research": null still fails the has() branch
+		# above and is rejected by apply_save_dict.
+		if not research_mgr.reset_to_empty_state():
+			return false
 	resource_mgr.apply_save_state(flags.get("node_states", null), flags.get("collected_nodes", []))
 	tree_mgr.apply_save_state(flags.get("tree_states", null))
 
