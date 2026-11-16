@@ -329,7 +329,7 @@ Testing should grow with the project rather than requiring a complex framework b
 | Manual runtime tests | Verify movement, collisions, visuals, controls, and gameplay feel |
 | Regression checks | Re-run critical prior tests after changes |
 
-Automated testing uses Godot 4 headless SceneTree scripts (`tests/test_unit_m2_m7.gd`, `tests/test_integration_m8_slice.gd`, `tests/test_experimental_p1_m9_m10.gd`), `tests/verify_repo_integrity.py`, and `.github/workflows/godot-ci.yml`.
+Automated testing uses Godot 4 headless SceneTree scripts (`tests/test_unit_m2_m7.gd`, `tests/test_integration_m8_slice.gd`, `tests/test_experimental_p1_m9_m10.gd`, `tests/test_progression_foundation.gd`, `tests/test_progression_phase2_era_correction.gd`, `tests/test_specialist_domain.gd`, `tests/test_research_foundation.gd`, `tests/test_structure_buff_phase5.gd`), `tests/verify_repo_integrity.py`, and `.github/workflows/godot-ci.yml`.
 
 ### 6.2 Required Feature Tests
 
@@ -359,6 +359,22 @@ Automated testing uses Godot 4 headless SceneTree scripts (`tests/test_unit_m2_m
 - Verify round-trip and schema validation.
 - Verify backup recovery.
 - Verify failed write does not destroy valid data.
+
+**Structures / Resource Access / Buffs (Phase 5)**
+- Structure, buff, and resource definitions load all-or-nothing; duplicate IDs,
+  unknown references, unsupported categories/effect types/stacking modes, and
+  unregistered fact IDs are rejected with a reason (fail closed).
+- Activation is a transaction: validate -> requirements -> atomic
+  EconomyLedger spend -> durable activation fact -> signal; duplicate
+  activation is rejected before any spend and never deducts twice.
+- Resource access is derived from registered unlock conditions plus durable
+  progression facts, never from ledger balances (zero balance while unlocked,
+  nonzero balance while locked, unknown IDs inaccessible).
+- Buff totals are derived per query from activation evidence (additive
+  stacking; duplicate application structurally impossible; no stored or
+  re-applied derived values).
+- Loading replaces activation state (legacy saves never fabricate
+  activations or access); a failed restore rolls the whole session back.
 
 ---
 

@@ -1,0 +1,13 @@
+{
+  "buffs": [
+    {
+      "id": "grove_timber_blessing",
+      "effect_type": "wood_gathering_bonus",
+      "magnitude": 1,
+      "stacking": "additive",
+      "duration_sec": 0,
+      "source_structure": "shrine_of_growth",
+      "display_name": "Growth Blessing"
+    }
+  ]
+}

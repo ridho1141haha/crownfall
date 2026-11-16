@@ -632,6 +632,48 @@ def build_greed_portal() -> Image.Image:
     return sheet
 
 
+def build_shrine_structure() -> Image.Image:
+    """Shrine of Growth landmark (Phase 5): 2 frames of 48x48.
+    Frame 0 = dormant moss-grown stone shrine; frame 1 = activated shrine with
+    glowing growth motes. Same 2-frame dormant/activated pattern as the greed
+    portal landmark."""
+    sheet = new_canvas(48 * 2, 48)
+    moss = GRASS
+    moss_l = GRASS_L
+    growth = SHRINE_C
+    growth_l = (150, 232, 244, 255)
+    for i in range(2):
+        f = new_canvas(48, 48)
+        # Stepped stone base
+        rect(f, 8, 40, 32, 6, STONE_D)
+        rect(f, 10, 36, 28, 5, STONE)
+        # Shrine body
+        rect(f, 14, 18, 20, 19, STONE)
+        rect(f, 16, 20, 16, 15, STONE_D)
+        # Inner alcove
+        if i == 1:
+            rect(f, 19, 24, 10, 11, growth)
+            rect(f, 22, 27, 4, 5, growth_l)
+        else:
+            rect(f, 19, 24, 10, 11, SHADOW)
+        # Capstone
+        rect(f, 12, 12, 24, 6, STONE_L)
+        rect(f, 14, 10, 20, 3, STONE_L)
+        # Top sprout
+        rect(f, 22, 4, 3, 6, WOOD_D)
+        rect(f, 18, 6, 4, 3, moss)
+        rect(f, 25, 5, 4, 3, moss_l)
+        # Moss patches on the stone
+        rect(f, 14, 30, 5, 4, moss)
+        rect(f, 30, 22, 4, 4, moss_l)
+        # Activated frame: growth motes drifting around the shrine
+        if i == 1:
+            for (mx, my) in [(10, 20), (36, 16), (14, 8), (33, 34), (8, 32)]:
+                rect(f, mx, my, 2, 2, growth_l)
+        sheet.paste(add_outline(f), (i * 48, 0))
+    return sheet
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Generate pixel-art asset sheets.")
     parser.add_argument(
@@ -659,6 +701,7 @@ def main() -> None:
         "buildings/tool_stands/props_tool_stands.png": build_tool_stands(),
         "buildings/shipwreck/building_shipwreck_stages.png": build_shipwreck_stages(),
         "environment/landmarks/env_greed_portal.png": build_greed_portal(),
+        "environment/landmarks/env_shrine_structure.png": build_shrine_structure(),
         "environment/vegetation/env_pine_tree_states.png": build_pine_tree_states(),
     }
 

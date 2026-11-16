@@ -59,6 +59,22 @@ const FACT_ARCHITECT_RECRUITED: String = "architect_recruited"
 const FACT_SCHOLAR_DISCOVERED: String = "scholar_discovered"
 const FACT_SCHOLAR_RECRUITED: String = "scholar_recruited"
 
+## Structure activation facts (Phase 5). Each registered structure owns exactly
+## one durable activation fact pinned to the stable pattern
+## `<structure_id>_activated`, recorded by StructureDomain ONLY after the
+## corresponding activation transaction succeeds (requirements satisfied and
+## the atomic EconomyLedger spend committed). Activation is one-time and
+## idempotent: the fact guard is what makes repeated activation a no-op that
+## never spends resources twice. Persisting activations as facts (instead of a
+## dedicated save field) reuses the strictly validated progression pipeline,
+## so schema v2 stays untouched and legacy saves never fabricate activations.
+## The Statue and Temple IDs are registered now (same rationale as the future
+## specialist roster) so definitions stay consistent; no gameplay path records
+## their facts until those structures are placed in a world.
+const FACT_SHRINE_OF_GROWTH_ACTIVATED: String = "shrine_of_growth_activated"
+const FACT_STATUE_OF_THE_FIRST_SAILOR_ACTIVATED: String = "statue_of_the_first_sailor_activated"
+const FACT_TEMPLE_OF_THE_DAWN_ACTIVATED: String = "temple_of_the_dawn_activated"
+
 ## Registry of every fact this build can record or restore. Save data and
 ## unlock definitions referencing IDs outside this registry are rejected, so
 ## unknown IDs can never be silently granted or smuggled into a save.
@@ -74,6 +90,9 @@ const KNOWN_FACT_IDS: Array[String] = [
 	FACT_ARCHITECT_RECRUITED,
 	FACT_SCHOLAR_DISCOVERED,
 	FACT_SCHOLAR_RECRUITED,
+	FACT_SHRINE_OF_GROWTH_ACTIVATED,
+	FACT_STATUE_OF_THE_FIRST_SAILOR_ACTIVATED,
+	FACT_TEMPLE_OF_THE_DAWN_ACTIVATED,
 ]
 
 ## Stable IDs are compact; the cap only rejects absurd payloads, not future IDs.
