@@ -433,6 +433,13 @@ func validate_payload(data: Variant) -> bool:
 		if not ProgressionState.is_valid_fact_array(pf_chk["progression_facts"]):
 			return false
 
+	if dict.has("research"):
+		# Fase 4 fondasi riset: struktur ketat, ID teknologi well-formed dan unik,
+		# proyek aktif tidak boleh bertabrakan dengan teknologi yang selesai.
+		# Kepemilikan ID (unknown technology) divalidasi di apply_save_dict.
+		if not ResearchManager.is_valid_saved_research_dict(dict["research"]):
+			return false
+
 	if dict.has("camp_vagrants_available"):
 		if not EconomyLedger.is_exact_int_value(dict["camp_vagrants_available"]):
 			return false

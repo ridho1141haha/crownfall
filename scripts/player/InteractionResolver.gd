@@ -15,7 +15,8 @@ static func resolve_nearest(
 	shrine_offering_used: bool = false,
 	tree_mgr: ForestTreeManager = null,
 	specialist_domain: SpecialistDomain = null,
-	progression: ProgressionState = null
+	progression: ProgressionState = null,
+	research_mgr: ResearchManager = null
 ) -> Dictionary:
 	var best: Dictionary = {
 		"has_target": false,
@@ -177,6 +178,23 @@ static func resolve_nearest(
 					"prompt_text": "[E] Recruit %s (%s)" % [sp_name, BuildingManager.format_cost_text(specialist_domain.get_recruitment_cost(sp_id))],
 					"distance": d_sp,
 				}
+			elif lifecycle == SpecialistDomain.STATE_RECRUITED and research_mgr != null and research_mgr.has_active_research() == false:
+				# Phase 4: a recruited specialist provides research. Offer the
+				# first available technology in stable ID order; the tech ID is
+				# the interaction target and the specialist stays the provider.
+				var next_tech: String = research_mgr.get_first_available_technology_id(progression)
+				if not next_tech.is_empty():
+					var tech_def: Dictionary = research_mgr.get_technology_definition(next_tech)
+					best = {
+						"has_target": true,
+						"kind": "research",
+						"target_id": next_tech,
+						"primary_command": &"start_research",
+						"upgrade_command": &"",
+						"prompt_text": "[E] Research %s (%s)" % [String(tech_def.get("display_name", next_tech)), BuildingManager.format_cost_text(tech_def.get("cost", {}) as Dictionary)],
+						"distance": d_sp,
+						"provider_id": sp_id,
+					}
 
 	# 5b. Forest Trees ([E] Chop)
 	if tree_mgr != null:

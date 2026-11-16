@@ -92,3 +92,10 @@ jobs:
           godot --headless --script res://tests/test_specialist_domain.gd 2>&1 | tee /tmp/godot_specialists.log
           ! grep -E "(SCRIPT ERROR:|Parser Error:|TEST FAILURE:)" /tmp/godot_specialists.log
           grep -q "PASS: All .* Specialist Domain Foundation" /tmp/godot_specialists.log
+
+      - name: Run Research System Foundation Tests (Phase 4)
+        run: |
+          set -o pipefail
+          godot --headless --script res://tests/test_research_foundation.gd 2>&1 | tee /tmp/godot_research.log
+          ! grep -E "(SCRIPT ERROR:|Parser Error:|TEST FAILURE:)" /tmp/godot_research.log
+          grep -q "PASS: All .* Research System Foundation" /tmp/godot_research.log

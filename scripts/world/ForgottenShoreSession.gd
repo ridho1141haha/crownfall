@@ -35,6 +35,7 @@ var night_mgr: NightEncounterManager = NightEncounterManager.new()
 var era_mgr: EraProgressionManager = EraProgressionManager.new()
 var progression: ProgressionState = ProgressionState.new()
 var specialists: SpecialistDomain = SpecialistDomain.new()
+var research_mgr: ResearchManager = ResearchManager.new()
 var save_mgr: SaveManager = SaveManager.new()
 
 # Backward-compatible mirror for tests inspecting collected_node_ids directly
@@ -138,6 +139,7 @@ func _process(delta: float) -> void:
 	var is_night: bool = time_manager != null and time_manager.current_phase == TimeManager.Phase.NIGHT
 	var is_daylight: bool = time_manager == null or time_manager.current_phase == TimeManager.Phase.DAYLIGHT
 	pop_mgr.tick_all(sim_delta, building_mgr, night_mgr, resource_mgr, economy)
+	research_mgr.advance_research(sim_delta)
 	flare_active_timer = maxf(0.0, flare_active_timer - sim_delta)
 	flare_cooldown_timer = maxf(0.0, flare_cooldown_timer - sim_delta)
 	var was_boosted: bool = hearth_sys.is_boost_active()
@@ -189,6 +191,9 @@ func _wire_signals() -> void:
 	specialists.specialist_discovered.connect(_on_specialist_discovered)
 	specialists.specialist_recruited.connect(_on_specialist_recruited)
 	specialists.specialist_action_rejected.connect(_record_rejection)
+	research_mgr.research_started.connect(_on_research_started)
+	research_mgr.research_completed.connect(_on_research_completed)
+	research_mgr.research_rejected.connect(_record_rejection)
 	building_mgr.building_action_rejected.connect(_record_rejection)
 	building_mgr.wall_state_changed.connect(_on_wall_state_changed)
 	night_mgr.building_attacked.connect(_on_building_attacked)
@@ -331,7 +336,8 @@ func _resolve_target_for_actor(actor_x: float) -> Dictionary:
 		shrine_offering_used_today,
 		tree_mgr,
 		specialists,
-		progression
+		progression,
+		research_mgr
 	)
 
 
@@ -471,13 +477,14 @@ func execute_world_command(actor_id: String, command: StringName, target_id: Str
 				_record_rejection("Move closer to Greed Portal (x=1350)")
 
 		&"shrine_offering":
+			var offering_yield: int = 2 + research_mgr.get_effect_total(ResearchManager.EFFECT_SHRINE_OFFERING_GOLD_BONUS)
 			if absf(actor_x - (-780.0)) > ResourceNodeManager.INTERACT_RANGE:
 				_record_rejection("Move closer to Forgotten Shrine (x=-780)")
 			elif shrine_offering_used_today:
 				_record_rejection("Shrine Offering already used today")
 			elif not economy.try_spend({"wood": 4, "stone": 2}):
 				_record_rejection("Shrine Offering needs 4 Wood, 2 Stone")
-			elif not economy.try_add(&"gold", 2):
+			elif not economy.try_add(&"gold", offering_yield):
 				economy.try_add_bundle({"wood": 4, "stone": 2})
 				_record_rejection("Shrine Offering failed — ledger rejected the reward")
 			else:
@@ -485,8 +492,8 @@ func execute_world_command(actor_id: String, command: StringName, target_id: Str
 				ok = true
 				_play_sfx("sfx_coin")
 				_spawn_payment_fly({"wood": 4, "stone": 2}, actor_x, -780.0)
-				_spawn_floating_text(-780.0, "+2G Offering")
-				feedback_message.emit("Shrine Offering accepted: 4W + 2S -> +2 Gold!")
+				_spawn_floating_text(-780.0, "+%dG Offering" % offering_yield)
+				feedback_message.emit("Shrine Offering accepted: 4W + 2S -> +%d Gold!" % offering_yield)
 
 		&"kindle_flare":
 			if time_manager == null or time_manager.current_phase != TimeManager.Phase.NIGHT:
@@ -496,13 +503,14 @@ func execute_world_command(actor_id: String, command: StringName, target_id: Str
 			elif not economy.try_spend({"wood": 1}):
 				_record_rejection("Kindle Flare needs 1 Wood")
 			else:
-				flare_active_timer = 8.0
+				var flare_duration: float = 8.0 + float(research_mgr.get_effect_total(ResearchManager.EFFECT_FLARE_DURATION_BONUS_SEC))
+				flare_active_timer = flare_duration
 				flare_cooldown_timer = 25.0
 				ok = true
 				_play_sfx("sfx_sunset")
 				_spawn_payment_fly({"wood": 1}, actor_x, HearthSystem.HEARTH_POSITION_X)
 				_spawn_floating_text(actor_x, "KINDLE FLARE +50%!", Color(1.0, 0.82, 0.35, 1.0))
-				feedback_message.emit("Kindle Flare active! Hearth burn & Watchtower dmg +50% for 8s!")
+				feedback_message.emit("Kindle Flare active! Hearth burn & Watchtower dmg +50%% for %.0fs!" % flare_duration)
 
 		&"chop_tree":
 			if resolved_target.is_empty():
@@ -527,6 +535,9 @@ func execute_world_command(actor_id: String, command: StringName, target_id: Str
 
 		&"recruit_specialist":
 			ok = _on_recruit_specialist(actor_x, resolved_target)
+
+		&"start_research":
+			ok = _on_start_research(actor_x, resolved_target)
 
 		&"save_game":
 			ok = _on_manual_save()
@@ -707,6 +718,32 @@ func _on_recruit_specialist(actor_x: float, specialist_id: String) -> bool:
 		_record_rejection("No specialist nearby to recruit")
 		return false
 	return specialists.try_recruit(actor_x, sp_id, progression, building_mgr, economy)
+
+
+## Phase 4 research start command. An empty target resolves the first
+## available technology in stable ID order; proximity to a recruited
+## specialist is the world-side gate and try_start enforces the rest.
+func _on_start_research(actor_x: float, tech_id: String) -> bool:
+	var resolved: String = tech_id
+	if resolved.is_empty():
+		resolved = research_mgr.get_first_available_technology_id(progression)
+	if resolved.is_empty():
+		_record_rejection("No research is available right now")
+		return false
+	if not specialists.is_any_recruited_specialist_near(actor_x, progression):
+		_record_rejection("Stand near a recruited specialist to conduct research")
+		return false
+	return research_mgr.try_start(resolved, progression, economy)
+
+
+func _on_research_started(tech_id: String) -> void:
+	_play_sfx("sfx_build")
+	feedback_message.emit("Research started: %s" % research_mgr.get_technology_display_name(tech_id))
+
+
+func _on_research_completed(tech_id: String) -> void:
+	_play_sfx("sfx_coin")
+	feedback_message.emit("Research completed: %s! The kingdom benefits immediately." % research_mgr.get_technology_display_name(tech_id))
 
 
 func _find_nearby_specialist_id(actor_x: float) -> String:
@@ -1232,6 +1269,13 @@ func _update_proximity_prompts() -> void:
 				sp_lbl.visible = is_sp
 				sp_lbl.modulate = highlight_col if is_sp else normal_col
 				sp_lbl.text = String(_active_target.get("prompt_text", "")) if is_sp else ""
+		if active_kind == "research":
+			var provider: String = String(_active_target.get("provider_id", ""))
+			var prov_lbl: Label = sp_camp.get_node_or_null("SpLabel_%s" % provider) as Label
+			if prov_lbl != null:
+				prov_lbl.visible = true
+				prov_lbl.modulate = highlight_col
+				prov_lbl.text = String(_active_target.get("prompt_text", ""))
 		var hut_id: String = String(specialists.get_specialist_definition("scientist").get("housing_plot_id", ""))
 		var hut_lbl2: Label = sp_camp.get_node_or_null("HutLabel") as Label
 		if hut_lbl2 != null and building_mgr.has_plot(hut_id):
@@ -1296,6 +1340,9 @@ func _sync_dynamic_actors() -> void:
 
 	if slice_hud != null and slice_hud.has_method("set_population_text"):
 		slice_hud.call("set_population_text", _build_population_summary())
+
+	if slice_hud != null and slice_hud.has_method("set_research_text"):
+		slice_hud.call("set_research_text", research_mgr.get_hud_text(progression))
 
 	if building_mgr.durability < _prev_wall_hp and _prev_wall_hp > 0:
 		_play_sfx("sfx_hit")
@@ -1453,6 +1500,7 @@ func build_save_payload() -> Dictionary:
 		"npcs": pop_mgr.to_save_array(),
 		"camp_vagrants_available": pop_mgr.camp_vagrants_available,
 		"night_encounter": night_mgr.to_save_dict(),
+		"research": research_mgr.to_save_dict(),
 		"progression_flags": {
 			"first_night_survived": night_mgr.first_night_survived,
 			"collected_nodes": resource_mgr.get_collected_ids_array(),
@@ -1536,6 +1584,9 @@ func _apply_loaded_payload(data: Dictionary) -> bool:
 	# tetap menjamin sesi tidak pernah berada di kondisi setengah-terpakai.
 	if not progression.apply_save_state(flags.get("progression_facts", null)):
 		return false
+	if data.has("research"):
+		if not research_mgr.apply_save_dict(data["research"]):
+			return false
 	resource_mgr.apply_save_state(flags.get("node_states", null), flags.get("collected_nodes", []))
 	tree_mgr.apply_save_state(flags.get("tree_states", null))
 

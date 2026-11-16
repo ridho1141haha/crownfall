@@ -3,6 +3,7 @@ extends CanvasLayer
 @export var time_manager: TimeManager
 
 var _session: ForgottenShoreSession
+var research_label: Label = null
 
 @onready var status_label: Label = $MarginContainer/VBoxContainer/StatusLabel as Label
 @onready var resources_label: Label = $MarginContainer/VBoxContainer/ResourcesLabel as Label
@@ -19,6 +20,22 @@ func set_forecast_text(txt: String) -> void:
 func set_population_text(txt: String) -> void:
 	if population_label != null:
 		population_label.text = txt
+
+
+func _ensure_research_label() -> void:
+	if research_label != null:
+		return
+	var vbox: Node = get_node_or_null("MarginContainer/VBoxContainer")
+	if vbox == null:
+		return
+	research_label = Label.new()
+	vbox.add_child(research_label)
+
+
+func set_research_text(txt: String) -> void:
+	_ensure_research_label()
+	if research_label != null:
+		research_label.text = txt
 
 
 func show_victory_banner(title: String, subtitle: String) -> void:
