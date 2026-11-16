@@ -24,11 +24,28 @@ signal fact_recorded(fact_id: String)
 ## remains owned by EraProgressionManager.
 const FACT_FORGOTTEN_SHORE_FIRST_STONE_WALL_TIER_2: String = "forgotten_shore_first_stone_wall_tier_2"
 
+## Voyage readiness fact (Phase 2 era correction): the Shipwreck repair reached
+## Stage 3. Recorded only after the successful stage-3 repair transaction.
+## Per the Phase 2 correction this fact means "the vessel can leave Forgotten
+## Shore" — it deliberately does NOT unlock any era (Iron Age used to be granted
+## by this event; that grant was removed).
+const FACT_FORGOTTEN_SHORE_VESSEL_READY: String = "forgotten_shore_vessel_ready"
+
+## Eldergrove Forest milestone fact: the defined Iron Age gate. Its gameplay
+## trigger belongs to the future Eldergrove Forest (Island 2) integration; no
+## Forgotten Shore gameplay path records it today, so Iron Age is unreachable
+## while playing on Forgotten Shore. The ID is registered now so the
+## data-driven `iron_age_era` unlock definition can require it, future Eldergrove
+## saves can carry it, and the migration policy can recognize genuine evidence.
+const FACT_ELDERGROVE_REACHED: String = "eldergrove_reached"
+
 ## Registry of every fact this build can record or restore. Save data and
 ## unlock definitions referencing IDs outside this registry are rejected, so
 ## unknown IDs can never be silently granted or smuggled into a save.
 const KNOWN_FACT_IDS: Array[String] = [
 	FACT_FORGOTTEN_SHORE_FIRST_STONE_WALL_TIER_2,
+	FACT_FORGOTTEN_SHORE_VESSEL_READY,
+	FACT_ELDERGROVE_REACHED,
 ]
 
 ## Stable IDs are compact; the cap only rejects absurd payloads, not future IDs.

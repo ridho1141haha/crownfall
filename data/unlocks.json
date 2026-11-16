@@ -7,6 +7,22 @@
           "forgotten_shore_first_stone_wall_tier_2"
         ]
       }
+    },
+    {
+      "id": "forgotten_shore_voyage_ready",
+      "requires": {
+        "all_of": [
+          "forgotten_shore_vessel_ready"
+        ]
+      }
+    },
+    {
+      "id": "iron_age_era",
+      "requires": {
+        "all_of": [
+          "eldergrove_reached"
+        ]
+      }
     }
   ]
 }

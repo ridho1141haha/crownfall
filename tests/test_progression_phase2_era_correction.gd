@@ -1,0 +1,498 @@
+extends SceneTree
+
+## Phase 2 Era Progression Correction test suite. Follows the repo test
+## conventions: fail-fast _check helper, tab indentation, no raw engine assert
+## calls, and no scene-tree child injection. Covers the corrected era semantics
+## (Shipwreck Stage 3 = voyage readiness only; Iron Age requires the Eldergrove
+## milestone), the conservative legacy iron_age save migration policy, save
+## round-trips, unlock-definition data contracts, and regression coverage for
+## wall upgrade / shipwreck / economy behavior.
+
+const FACT: String = "forgotten_shore_first_stone_wall_tier_2"
+const VESSEL_FACT: String = "forgotten_shore_vessel_ready"
+const ELDERGROVE_FACT: String = "eldergrove_reached"
+
+const SAVE_LEGACY_IRON_WALL: String = "user://test_phase2_legacy_iron_wall.json"
+const SAVE_MALFORMED_IRON: String = "user://test_phase2_malformed_iron.json"
+const SAVE_ROUNDTRIP_PATH: String = "user://test_phase2_roundtrip.json"
+const SAVE_IRON_ROUNDTRIP_PATH: String = "user://test_phase2_iron_roundtrip.json"
+
+var _failures: int = 0
+var _checks: int = 0
+
+
+func _check(cond: bool, msg: String) -> bool:
+	_checks += 1
+	if not cond:
+		_failures += 1
+		printerr("TEST FAILURE [test_progression_phase2]: " + msg)
+		quit(1)
+		return false
+	return true
+
+
+func _fresh_session() -> ForgottenShoreSession:
+	var session_script: GDScript = load("res://scripts/world/ForgottenShoreSession.gd")
+	return session_script.new() as ForgottenShoreSession
+
+
+func _fund(sess: ForgottenShoreSession, gold: int, wood: int, stone: int) -> bool:
+	return sess.economy.set_balances_from_dict({"gold": gold, "wood": wood, "stone": stone})
+
+
+## Drives the real player command path: build the east wall, complete it, and
+## upgrade it to Stone Wall Tier 2 (the Stone Age milestone).
+func _reach_stone_age(sess: ForgottenShoreSession) -> bool:
+	if not sess.execute_command(&"build_wall", BuildingManager.WALL_POSITION_X):
+		return false
+	if not sess.building_mgr.advance_construction(8.0, BuildingManager.WALL_ID):
+		return false
+	return sess.execute_command(&"upgrade_wall", BuildingManager.WALL_POSITION_X)
+
+
+## Drives the real player command path for one Shipwreck repair stage.
+func _repair_ship_stage(sess: ForgottenShoreSession) -> bool:
+	return sess.execute_command(&"shipwreck", ForgottenShoreSession.SHIPWRECK_X)
+
+
+# ---------------------------------------------------------------- Suite 1 ---
+func _test_fresh_start_and_stone_age_path() -> bool:
+	var sess: ForgottenShoreSession = _fresh_session()
+	var feedback: Array = []
+	sess.feedback_message.connect(func(text: String) -> void: feedback.append(text))
+
+	# 1) New games start in Wood Age with an empty fact set.
+	if not _check(sess.era_mgr.get_era_id() == "wood_age" and sess.progression.fact_count() == 0, "New game starts in Wood Age with no progression facts"):
+		return false
+
+	var catalog: ProgressionUnlockCatalog = ProgressionUnlockCatalog.new()
+	if not _check(not catalog.is_empty() and catalog.get_definition_ids() == ["forgotten_shore_voyage_ready", "iron_age_era", "stone_age_era"], "Unlock catalog loads exactly the three Phase 2 definitions (stable IDs, no duplicates)"):
+		return false
+	if not _check(not ProgressionUnlockEvaluator.is_unlock_satisfied(catalog.get_definition("iron_age_era"), sess.progression), "iron_age_era unlock is locked for a fresh game"):
+		return false
+
+	# 2) First successful Stone Wall Tier 2 upgrade unlocks Stone Age.
+	if not _check(_fund(sess, 60, 60, 60), "Suite1 setup: economy funded"):
+		return false
+	if not _check(sess.execute_command(&"build_wall", BuildingManager.WALL_POSITION_X), "Wall blueprint funded via real command path"):
+		return false
+	if not _check(sess.building_mgr.advance_construction(8.0, BuildingManager.WALL_ID), "Builder completes wall construction"):
+		return false
+	var before_gold: int = sess.economy.get_amount(&"gold")
+	var before_wood: int = sess.economy.get_amount(&"wood")
+	var before_stone: int = sess.economy.get_amount(&"stone")
+	var upg_cost: Dictionary = sess.building_mgr.get_plot_upgrade_cost(BuildingManager.WALL_ID)
+	if not _check(sess.execute_command(&"upgrade_wall", BuildingManager.WALL_POSITION_X), "Stone Wall Tier 2 upgrade succeeds via real command path"):
+		return false
+
+	if not _check(sess.era_mgr.get_era_id() == "stone_age", "First successful Stone Wall Tier 2 upgrade unlocks Stone Age"):
+		return false
+	if not _check(sess.progression.fact_count() == 1 and sess.progression.has_fact(FACT), "Stone Age milestone fact recorded exactly once"):
+		return false
+	if not _check(String(feedback[feedback.size() - 1]).contains("The Stone Age has begun!"), "Existing Stone Age feedback message unchanged"):
+		return false
+
+	# Regression guard: the upgrade transaction still charges exactly the
+	# configured data-driven upgrade cost (no balance drift).
+	if not _check(sess.economy.get_amount(&"gold") == before_gold - int(upg_cost.get("gold", 0)) and sess.economy.get_amount(&"wood") == before_wood - int(upg_cost.get("wood", 0)) and sess.economy.get_amount(&"stone") == before_stone - int(upg_cost.get("stone", 0)), "Wall upgrade still charges exactly the configured cost"):
+		return false
+
+	# 3) A failed wall upgrade records nothing.
+	var poor: ForgottenShoreSession = _fresh_session()
+	if not _check(_fund(poor, 4, 6, 3), "Suite1 setup: poor economy funded (enough to build, not to upgrade)"):
+		return false
+	if not _check(poor.execute_command(&"build_wall", BuildingManager.WALL_POSITION_X), "Poor session builds the wall"):
+		return false
+	if not _check(poor.building_mgr.advance_construction(8.0, BuildingManager.WALL_ID), "Poor session completes wall construction"):
+		return false
+	if not _check(not poor.execute_command(&"upgrade_wall", BuildingManager.WALL_POSITION_X), "Underfunded Stone Wall Tier 2 upgrade is rejected"):
+		return false
+	if not _check(poor.era_mgr.get_era_id() == "wood_age" and poor.progression.fact_count() == 0, "Failed wall upgrade records no milestone and unlocks no era"):
+		return false
+
+	# 4) Repeated milestone notifications stay idempotent (west wall + direct re-record).
+	if not _check(not sess.era_mgr.notify_stone_wall_built(), "Repeated Stone Age era notification is idempotent"):
+		return false
+	if not _check(sess.progression.record_fact(FACT) and sess.progression.fact_count() == 1, "Re-recording the Stone Age fact is idempotent"):
+		return false
+	sess.building_mgr.register_forgotten_shore_expansion_plots()
+	if not _check(sess.execute_command(&"build_wall", BuildingManager.WEST_WALL_POSITION_X, {"plot_id": BuildingManager.WEST_WALL_ID}), "West wall blueprint funded"):
+		return false
+	if not _check(sess.building_mgr.advance_construction(8.0, BuildingManager.WEST_WALL_ID), "Builder completes west wall"):
+		return false
+	if not _check(sess.execute_command(&"upgrade_wall", BuildingManager.WEST_WALL_POSITION_X, {"plot_id": BuildingManager.WEST_WALL_ID}), "West wall upgraded to Stone Tier 2"):
+		return false
+	if not _check(sess.progression.fact_count() == 1 and sess.era_mgr.get_era_id() == "stone_age", "Second stone wall upgrade does not duplicate the fact or change the era"):
+		return false
+
+	print("PASS: Phase 2 Fresh Start, Stone Age Path & Upgrade Transaction Regression")
+	return true
+
+
+# ---------------------------------------------------------------- Suite 2 ---
+func _test_shipwreck_vessel_readiness_and_era_lock() -> bool:
+	var sess: ForgottenShoreSession = _fresh_session()
+	var feedback: Array = []
+	sess.feedback_message.connect(func(text: String) -> void: feedback.append(text))
+	if not _check(_fund(sess, 60, 60, 60), "Suite2 setup: economy funded"):
+		return false
+
+	# 5) Shipwreck Stage 3 records vessel readiness through the real command path.
+	if not _check(_repair_ship_stage(sess), "Shipwreck Stage 1 repair succeeds"):
+		return false
+	if not _check(sess.shipwreck_stage == 1 and sess.progression.fact_count() == 0, "Stage 1 records no progression fact yet"):
+		return false
+	if not _check(_repair_ship_stage(sess), "Shipwreck Stage 2 repair succeeds"):
+		return false
+	if not _check(sess.shipwreck_stage == 2 and sess.progression.fact_count() == 0, "Stage 2 records no progression fact yet"):
+		return false
+	if not _check(_repair_ship_stage(sess), "Shipwreck Stage 3 repair succeeds"):
+		return false
+	if not _check(sess.shipwreck_stage == 3 and sess.progression.fact_count() == 1 and sess.progression.has_fact(VESSEL_FACT), "Shipwreck Stage 3 records the vessel readiness fact exactly once"):
+		return false
+	if not _check(String(feedback[feedback.size() - 1]).contains("vessel is ready"), "Stage 3 feedback announces voyage readiness (no Iron Age message)"):
+		return false
+	for msg: String in feedback:
+		if not _check(not msg.contains("Iron Age"), "No gameplay message claims Shipwreck unlocks Iron Age"):
+			return false
+
+	# Regression guard: the three repair transactions still cost exactly 6G 8W 4S.
+	if not _check(sess.economy.get_amount(&"gold") == 54 and sess.economy.get_amount(&"wood") == 52 and sess.economy.get_amount(&"stone") == 56, "Shipwreck stages still cost exactly 6G 8W 4S in total"):
+		return false
+
+	# 6) Shipwreck Stage 3 does NOT unlock Iron Age.
+	if not _check(sess.era_mgr.get_era_id() == "wood_age", "Era stays Wood Age after Shipwreck Stage 3 (no Iron Age from the vessel)"):
+		return false
+	var catalog: ProgressionUnlockCatalog = ProgressionUnlockCatalog.new()
+	if not _check(not ProgressionUnlockEvaluator.is_unlock_satisfied(catalog.get_definition("iron_age_era"), sess.progression), "iron_age_era unlock remains locked with only the vessel fact"):
+		return false
+	if not _check(ProgressionUnlockEvaluator.is_unlock_satisfied(catalog.get_definition("forgotten_shore_voyage_ready"), sess.progression), "forgotten_shore_voyage_ready unlock is satisfied by the vessel fact"):
+		return false
+
+	# 7) Repeated vessel readiness notifications stay idempotent: the repeat
+	#    interaction takes the existing ISLAND_CLEARED path and duplicates nothing.
+	var era_changes: Array = []
+	sess.era_mgr.era_changed.connect(func(eid: String, ename: String) -> void: era_changes.append(eid))
+	if not _check(_repair_ship_stage(sess), "Repeated Stage 3 interaction still succeeds (Set Sail path)"):
+		return false
+	if not _check(sess.reign_state == ForgottenShoreSession.ReignState.ISLAND_CLEARED, "Repeated Stage 3 interaction keeps the existing ISLAND_CLEARED behavior"):
+		return false
+	if not _check(sess.progression.fact_count() == 1 and era_changes.is_empty(), "Repeated vessel readiness duplicates neither facts nor era changes"):
+		return false
+
+	# 5b) A failed Stage 3 repair (insufficient funds) records nothing.
+	var poor: ForgottenShoreSession = _fresh_session()
+	if not _check(_fund(poor, 4, 6, 3), "Suite2 setup: poor economy funded (covers stages 1-2 only)"):
+		return false
+	if not _check(_repair_ship_stage(poor) and _repair_ship_stage(poor), "Poor session completes Shipwreck stages 1-2"):
+		return false
+	if not _check(not _repair_ship_stage(poor), "Underfunded Stage 3 repair is rejected"):
+		return false
+	if not _check(poor.shipwreck_stage == 2 and poor.progression.fact_count() == 0 and poor.era_mgr.get_era_id() == "wood_age", "Failed Stage 3 repair records no vessel fact and changes no era"):
+		return false
+
+	print("PASS: Phase 2 Shipwreck Vessel Readiness & Iron Age Lock")
+	return true
+
+
+# ---------------------------------------------------------------- Suite 3 ---
+func _test_iron_age_requires_eldergrove_milestone() -> bool:
+	# 8) Without the Eldergrove milestone, Iron Age stays locked everywhere.
+	var prog: ProgressionState = ProgressionState.new()
+	if not _check(prog.record_fact(FACT) and prog.record_fact(VESSEL_FACT), "Suite3 setup: stone + vessel facts recorded"):
+		return false
+	var catalog: ProgressionUnlockCatalog = ProgressionUnlockCatalog.new()
+	if not _check(not ProgressionUnlockEvaluator.is_unlock_satisfied(catalog.get_definition("iron_age_era"), prog), "iron_age_era stays locked even with stone + vessel facts"):
+		return false
+
+	var era: EraProgressionManager = EraProgressionManager.new()
+	if not _check(not era.notify_eldergrove_milestone(null), "notify_eldergrove_milestone(null) is fail-closed"):
+		return false
+	if not _check(not era.notify_eldergrove_milestone(prog), "notify_eldergrove_milestone without the Eldergrove fact is fail-closed"):
+		return false
+	if not _check(era.get_era_id() == "wood_age", "Era never advances to Iron Age without the Eldergrove fact"):
+		return false
+
+	# 9) A valid Eldergrove milestone unlocks Iron Age through the intended path:
+	#    the future Eldergrove session records the durable fact, then requests the
+	#    era advance; both the era manager and the data-driven evaluator agree.
+	if not _check(prog.record_fact(ELDERGROVE_FACT), "Eldergrove milestone fact recorded (future integration contract)"):
+		return false
+	var era_changes: Array = []
+	era.era_changed.connect(func(eid: String, ename: String) -> void: era_changes.append(eid))
+	if not _check(era.notify_eldergrove_milestone(prog), "notify_eldergrove_milestone advances the era with the fact present"):
+		return false
+	if not _check(era.get_era_id() == "iron_age" and era_changes == ["iron_age"], "Era reaches Iron Age exactly once via the Eldergrove gate"):
+		return false
+	if not _check(ProgressionUnlockEvaluator.is_unlock_satisfied(catalog.get_definition("iron_age_era"), prog), "iron_age_era unlock is satisfied by the Eldergrove fact"):
+		return false
+	if not _check(not era.notify_eldergrove_milestone(prog), "Repeated Eldergrove notification is idempotent (era unchanged)"):
+		return false
+	if not _check(era.get_era_id() == "iron_age", "Era stays Iron Age after the repeated notification"):
+		return false
+
+	# End-to-end on a real session: wall + shipwreck path, then the Eldergrove
+	# gate; the resulting iron_age payload must validate and round-trip.
+	var sess: ForgottenShoreSession = _fresh_session()
+	if not _check(_fund(sess, 60, 60, 60), "Suite3 setup: session economy funded"):
+		return false
+	if not _check(_reach_stone_age(sess), "Session reaches Stone Age"):
+		return false
+	if not _check(_repair_ship_stage(sess) and _repair_ship_stage(sess) and _repair_ship_stage(sess), "Session completes Shipwreck Stage 3"):
+		return false
+	if not _check(sess.era_mgr.get_era_id() == "stone_age" and sess.progression.fact_count() == 2, "Session stays Stone Age with stone + vessel facts before the Eldergrove gate"):
+		return false
+	if not _check(sess.progression.record_fact(ELDERGROVE_FACT) and sess.era_mgr.notify_eldergrove_milestone(sess.progression), "Session Eldergrove gate records the fact and advances the era"):
+		return false
+	if not _check(sess.era_mgr.get_era_id() == "iron_age", "Session era reaches Iron Age only through the Eldergrove gate"):
+		return false
+
+	var sm: SaveManager = SaveManager.new()
+	var payload: Dictionary = sess.build_save_payload()
+	var pf: Dictionary = payload["progression_flags"] as Dictionary
+	if not _check(String(pf.get("era_id", "")) == "iron_age" and pf.get("progression_facts", []) == [ELDERGROVE_FACT, FACT, VESSEL_FACT], "Iron Age payload carries era_id and all three sorted facts"):
+		return false
+	if not _check(sm.validate_payload(payload), "Iron Age payload passes strict validation"):
+		return false
+	if not _check(sess.save_game_state(SAVE_IRON_ROUNDTRIP_PATH), "Iron Age session saves successfully"):
+		return false
+	var loaded: Dictionary = sm.load_state(SAVE_IRON_ROUNDTRIP_PATH)
+	if not _check(bool(loaded.get("ok", false)), "Iron Age save loads back"):
+		return false
+	var sess2: ForgottenShoreSession = _fresh_session()
+	if not _check(sess2._apply_loaded_payload(loaded["data"]), "Iron Age payload applies transactionally to a fresh session"):
+		return false
+	if not _check(sess2.era_mgr.get_era_id() == "iron_age" and sess2.progression.fact_count() == 3 and sess2.progression.has_fact(ELDERGROVE_FACT), "Round trip preserves the Iron Age era and the Eldergrove evidence"):
+		return false
+
+	print("PASS: Phase 2 Iron Age Eldergrove Gate (Fail-Closed + Intended Path Round-Trip)")
+	return true
+
+
+# ---------------------------------------------------------------- Suite 4 ---
+func _legacy_payload(building_type: String, era_id: String, stage: int, facts: Variant, reign_state: String) -> Dictionary:
+	var sess: ForgottenShoreSession = _fresh_session()
+	var b_dict: Dictionary = {"id": "wall_east_01", "type": building_type, "state": "COMPLETED", "durability": 260, "max_durability": 260, "progress": 1.0}
+	if building_type == "wooden_wall":
+		b_dict["level"] = 1
+		b_dict["durability"] = 150
+	else:
+		b_dict["level"] = 2
+	var pf: Dictionary = {"first_night_survived": true, "hearth_level": 2, "shipwreck_stage": stage, "portal_relic_looted": false, "reign_state": reign_state, "era_id": era_id}
+	if facts != null:
+		pf["progression_facts"] = facts
+	return {
+		"schema_version": 2, "world_id": "aetherion", "island_id": "forgotten_shore",
+		"day_count": 3, "world_time": 12.0, "world_phase": "daylight",
+		"player": {"position_x": -1350.0, "facing_direction": -1},
+		"resources": {"gold": 5, "wood": 4, "stone": 2},
+		"buildings": [b_dict],
+		"npcs": [{"id": "npc_01", "recruited": true, "role": "builder", "state": "IDLE", "position_x": 0.0}],
+		"night_encounter": sess.night_mgr.to_save_dict(),
+		"progression_flags": pf,
+	}
+
+
+func _test_legacy_migration_policy() -> bool:
+	var sm: SaveManager = SaveManager.new()
+
+	# 10) Legacy Wood Age saves still load correctly and gain no facts.
+	var wood_mig: Dictionary = SaveManager.migrate_payload(_legacy_payload("wooden_wall", "wood_age", 0, null, "ACTIVE")) as Dictionary
+	var wood_pf: Dictionary = wood_mig["progression_flags"] as Dictionary
+	if not _check(String(wood_pf.get("era_id", "")) == "wood_age" and not wood_pf.has("progression_facts") and sm.validate_payload(wood_mig), "Legacy Wood Age save loads with unchanged era and no invented facts"):
+		return false
+
+	# 11) Legacy Stone Age saves still load correctly (Phase 1 backfill intact).
+	var stone_mig: Dictionary = SaveManager.migrate_payload(_legacy_payload("stone_wall", "stone_age", 0, null, "ACTIVE")) as Dictionary
+	var stone_pf: Dictionary = stone_mig["progression_flags"] as Dictionary
+	if not _check(String(stone_pf.get("era_id", "")) == "stone_age" and stone_pf.get("progression_facts", []) == [FACT] and sm.validate_payload(stone_mig), "Legacy Stone Age save keeps its era and gains exactly the stone fact"):
+		return false
+
+	# 12a) Legacy iron_age + stage 3 + real stone wall: conservative downgrade to
+	#      stone_age; vessel fact preserved from stage 3; stone fact backfilled;
+	#      no Eldergrove fact fabricated.
+	var iron_wall: Dictionary = _legacy_payload("stone_wall", "iron_age", 3, null, "ISLAND_CLEARED")
+	var iron_wall_mig: Dictionary = SaveManager.migrate_payload(iron_wall.duplicate(true)) as Dictionary
+	var iron_wall_pf: Dictionary = iron_wall_mig["progression_flags"] as Dictionary
+	if not _check(String(iron_wall_pf.get("era_id", "")) == "stone_age", "Legacy iron_age save with stone-wall evidence is downgraded to stone_age"):
+		return false
+	if not _check(iron_wall_pf.get("progression_facts", []) == [FACT, VESSEL_FACT], "Downgraded save keeps stone progress, gains vessel fact from shipwreck_stage 3, and fabricates no Eldergrove fact"):
+		return false
+	if not _check(int(iron_wall_pf.get("shipwreck_stage", 0)) == 3 and String(iron_wall_pf.get("reign_state", "")) == "ISLAND_CLEARED", "Shipwreck stage and reign state are preserved untouched by the migration"):
+		return false
+	if not _check(sm.validate_payload(iron_wall_mig), "Downgraded iron_age payload passes strict validation"):
+		return false
+
+	# Full pipeline: raw legacy file -> load_state (migrate + validate) -> apply.
+	var fw: FileAccess = FileAccess.open(SAVE_LEGACY_IRON_WALL, FileAccess.WRITE)
+	fw.store_string(JSON.stringify(iron_wall))
+	fw.close()
+	var loaded: Dictionary = sm.load_state(SAVE_LEGACY_IRON_WALL)
+	if not _check(bool(loaded.get("ok", false)), "Raw legacy iron_age save loads through the real SaveManager pipeline"):
+		return false
+	var restored: ForgottenShoreSession = _fresh_session()
+	if not _check(restored._apply_loaded_payload(loaded["data"]), "Migrated legacy payload applies transactionally to a fresh session"):
+		return false
+	if not _check(restored.era_mgr.get_era_id() == "stone_age" and restored.progression.fact_count() == 2 and restored.progression.has_fact(FACT) and restored.progression.has_fact(VESSEL_FACT) and not restored.progression.has_fact(ELDERGROVE_FACT), "Restored session is Stone Age with stone + vessel facts and no Eldergrove claim"):
+		return false
+
+	# 12b) Legacy iron_age + stage 3 + NO stone wall: downgrade to wood_age,
+	#      vessel fact preserved from stage 3, no stone fact invented.
+	var iron_nostone_mig: Dictionary = SaveManager.migrate_payload(_legacy_payload("wooden_wall", "iron_age", 3, null, "ISLAND_CLEARED")) as Dictionary
+	var iron_nostone_pf: Dictionary = iron_nostone_mig["progression_flags"] as Dictionary
+	if not _check(String(iron_nostone_pf.get("era_id", "")) == "wood_age" and iron_nostone_pf.get("progression_facts", []) == [VESSEL_FACT], "Legacy iron_age save without stone-wall evidence downgrades to wood_age keeping only vessel readiness"):
+		return false
+	if not _check(sm.validate_payload(iron_nostone_mig), "Wood-downgraded iron_age payload passes strict validation"):
+		return false
+
+	# 12c) Legacy iron_age + stage 0: no vessel evidence, nothing is invented.
+	var iron_idle_mig: Dictionary = SaveManager.migrate_payload(_legacy_payload("wooden_wall", "iron_age", 0, null, "ACTIVE")) as Dictionary
+	var iron_idle_pf: Dictionary = iron_idle_mig["progression_flags"] as Dictionary
+	if not _check(String(iron_idle_pf.get("era_id", "")) == "wood_age" and not iron_idle_pf.has("progression_facts"), "Legacy iron_age save without shipwreck evidence downgrades to wood_age with no fabricated facts"):
+		return false
+
+	# 12d) New-format iron_age save WITH the Eldergrove fact: evidence is real,
+	#      Iron Age is preserved as-is (deterministic and non-destructive).
+	var new_iron: Dictionary = _legacy_payload("stone_wall", "iron_age", 3, [ELDERGROVE_FACT, FACT, VESSEL_FACT], "ISLAND_CLEARED")
+	var new_iron_mig: Dictionary = SaveManager.migrate_payload(new_iron.duplicate(true)) as Dictionary
+	var new_iron_pf: Dictionary = new_iron_mig["progression_flags"] as Dictionary
+	if not _check(String(new_iron_pf.get("era_id", "")) == "iron_age" and new_iron_pf.get("progression_facts", []) == [ELDERGROVE_FACT, FACT, VESSEL_FACT], "Save carrying the Eldergrove fact keeps Iron Age and all facts unchanged"):
+		return false
+	if not _check(sm.validate_payload(new_iron_mig), "New-format Iron Age payload passes strict validation"):
+		return false
+
+	# 13) Migration is deterministic and idempotent for every policy branch.
+	for fixture: Dictionary in [iron_wall, new_iron, _legacy_payload("wooden_wall", "iron_age", 0, null, "ACTIVE"), _legacy_payload("stone_wall", "stone_age", 0, null, "ACTIVE")]:
+		var once: Dictionary = SaveManager.migrate_payload(fixture.duplicate(true)) as Dictionary
+		var twice: Dictionary = SaveManager.migrate_payload(once.duplicate(true)) as Dictionary
+		var again: Dictionary = SaveManager.migrate_payload(fixture.duplicate(true)) as Dictionary
+		if not _check(once.hash() == twice.hash() and once.hash() == again.hash(), "Migration is deterministic and idempotent (double pass changes nothing)"):
+			return false
+
+	# 14) Invalid or malformed progression facts are handled safely: never
+	#     repaired, never partially applied.
+	var bad_id: Dictionary = _legacy_payload("stone_wall", "iron_age", 3, ["BAD ID"], "ISLAND_CLEARED")
+	var bad_id_mig: Dictionary = SaveManager.migrate_payload(bad_id) as Dictionary
+	if not _check(not sm.validate_payload(bad_id_mig), "Malformed fact array is rejected, not repaired"):
+		return false
+	var fbad: FileAccess = FileAccess.open(SAVE_MALFORMED_IRON, FileAccess.WRITE)
+	fbad.store_string(JSON.stringify(bad_id))
+	fbad.close()
+	if not _check(not bool(sm.load_state(SAVE_MALFORMED_IRON).get("ok", false)), "Save file with malformed facts fails to load safely"):
+		return false
+
+	var unknown_id: Dictionary = _legacy_payload("stone_wall", "iron_age", 3, ["scientist_recruited"], "ACTIVE")
+	if not _check(not sm.validate_payload(SaveManager.migrate_payload(unknown_id)), "Well-formed but unknown fact id is rejected from save data"):
+		return false
+
+	var non_array: Dictionary = _legacy_payload("stone_wall", "iron_age", 3, "not_an_array", "ACTIVE")
+	if not _check(not sm.validate_payload(SaveManager.migrate_payload(non_array)), "Non-array progression_facts value is rejected"):
+		return false
+
+	# Eldergrove claim inside an otherwise invalid array: the evidence check
+	# requires the WHOLE array to be valid, so the era is still downgraded and
+	# the payload is rejected wholesale (no partial grant is possible).
+	var mixed: Dictionary = _legacy_payload("stone_wall", "iron_age", 3, [ELDERGROVE_FACT, "BAD ID"], "ACTIVE")
+	var mixed_mig: Dictionary = SaveManager.migrate_payload(mixed) as Dictionary
+	var mixed_pf: Dictionary = mixed_mig["progression_flags"] as Dictionary
+	if not _check(String(mixed_pf.get("era_id", "")) == "stone_age" and not sm.validate_payload(mixed_mig), "Invalid fact array never counts as Eldergrove evidence; payload is rejected wholesale"):
+		return false
+
+	print("PASS: Phase 2 Conservative Legacy iron_age Migration (Deterministic, Idempotent, Fail-Safe)")
+	return true
+
+
+# ---------------------------------------------------------------- Suite 5 ---
+func _test_save_roundtrip_preserves_facts_and_era() -> bool:
+	var sm: SaveManager = SaveManager.new()
+	var sess: ForgottenShoreSession = _fresh_session()
+	if not _check(_fund(sess, 60, 60, 60), "Suite5 setup: economy funded"):
+		return false
+	if not _check(_reach_stone_age(sess), "Suite5 setup: Stone Age milestone reached"):
+		return false
+	if not _check(_repair_ship_stage(sess) and _repair_ship_stage(sess) and _repair_ship_stage(sess), "Suite5 setup: Shipwreck Stage 3 completed"):
+		return false
+
+	# 15) Save/load round trip preserves all valid facts and era_id behavior.
+	if not _check(sess.progression.fact_count() == 2 and sess.era_mgr.get_era_id() == "stone_age", "Session holds exactly stone + vessel facts in Stone Age"):
+		return false
+	if not _check(sess.save_game_state(SAVE_ROUNDTRIP_PATH), "save_game_state writes a valid save"):
+		return false
+	var loaded: Dictionary = sm.load_state(SAVE_ROUNDTRIP_PATH)
+	if not _check(bool(loaded.get("ok", false)), "load_state reads the save back"):
+		return false
+	var data_pf: Dictionary = (loaded["data"] as Dictionary)["progression_flags"] as Dictionary
+	if not _check(data_pf.get("progression_facts", []) == [FACT, VESSEL_FACT] and String(data_pf.get("era_id", "")) == "stone_age" and int(data_pf.get("shipwreck_stage", 0)) == 3, "Loaded payload preserves facts, era_id and shipwreck stage"):
+		return false
+	var sess2: ForgottenShoreSession = _fresh_session()
+	if not _check(sess2._apply_loaded_payload(loaded["data"]), "Round-trip payload applies transactionally"):
+		return false
+	if not _check(sess2.progression.fact_count() == 2 and sess2.era_mgr.get_era_id() == "stone_age" and sess2.shipwreck_stage == 3, "Round trip preserves all valid progression facts and the era"):
+		return false
+	var catalog: ProgressionUnlockCatalog = ProgressionUnlockCatalog.new()
+	if not _check(ProgressionUnlockEvaluator.is_unlock_satisfied(catalog.get_definition("stone_age_era"), sess2.progression) and ProgressionUnlockEvaluator.is_unlock_satisfied(catalog.get_definition("forgotten_shore_voyage_ready"), sess2.progression) and not ProgressionUnlockEvaluator.is_unlock_satisfied(catalog.get_definition("iron_age_era"), sess2.progression), "Restored facts evaluate to Stone Age + voyage ready, Iron Age still locked"):
+		return false
+
+	print("PASS: Phase 2 Save/Load Round-Trip Preservation (facts + era_id)")
+	return true
+
+
+# ---------------------------------------------------------------- Suite 6 ---
+func _test_gameplay_regression_guards() -> bool:
+	# Shipwreck costs and the Set Sail win-condition behavior are untouched.
+	var total: Dictionary = {"gold": 0, "wood": 0, "stone": 0}
+	for cost: Dictionary in ForgottenShoreSession.SHIPWRECK_COSTS:
+		for key: String in total.keys():
+			total[key] += int(cost.get(key, 0))
+	if not _check(total["gold"] == 6 and total["wood"] == 8 and total["stone"] == 4, "Shipwreck total cost unchanged (6G 8W 4S)"):
+		return false
+
+	# Stone Age era definition data contract is unchanged (still the stone fact).
+	var catalog: ProgressionUnlockCatalog = ProgressionUnlockCatalog.new()
+	if not _check(not catalog.is_empty(), "Suite6 setup: unlock catalog loads"):
+		return false
+	var stone_def: Dictionary = catalog.get_definition("stone_age_era")
+	if not _check((stone_def.get("requires", {}) as Dictionary).get("all_of", []) == [FACT], "stone_age_era definition still requires exactly the stone-wall fact"):
+		return false
+	var iron_def: Dictionary = catalog.get_definition("iron_age_era")
+	if not _check((iron_def.get("requires", {}) as Dictionary).get("all_of", []) == [ELDERGROVE_FACT], "iron_age_era definition requires exactly the Eldergrove fact"):
+		return false
+	var voyage_def: Dictionary = catalog.get_definition("forgotten_shore_voyage_ready")
+	if not _check((voyage_def.get("requires", {}) as Dictionary).get("all_of", []) == [VESSEL_FACT], "voyage definition requires exactly the vessel fact"):
+		return false
+
+	# Era manager data contract is unchanged for non-Iron eras.
+	var era: EraProgressionManager = EraProgressionManager.new()
+	if not _check(era.get_era_id() == "wood_age" and era.notify_stone_wall_built() and era.get_era_id() == "stone_age", "Wood -> Stone era advancement via wall milestone unchanged"):
+		return false
+	if not _check(era.apply_save_era("iron_age") and era.to_save_id() == "iron_age", "apply_save_era still restores a valid iron_age era id (save-format behavior)"):
+		return false
+
+	print("PASS: Phase 2 Gameplay & Data Contract Regression Guards")
+	return true
+
+
+func _init() -> void:
+	var suite_names: Array[String] = [
+		"Fresh Start & Stone Age Path", "Shipwreck Vessel Readiness & Era Lock",
+		"Iron Age Eldergrove Gate", "Legacy Migration Policy",
+		"Save/Load Round-Trip", "Regression Guards",
+	]
+	var suites: Array[Callable] = [
+		_test_fresh_start_and_stone_age_path, _test_shipwreck_vessel_readiness_and_era_lock,
+		_test_iron_age_requires_eldergrove_milestone, _test_legacy_migration_policy,
+		_test_save_roundtrip_preserves_facts_and_era, _test_gameplay_regression_guards,
+	]
+	var failed_suites: Array[String] = []
+	for i: int in range(suites.size()):
+		var checks_before: int = _checks
+		var ok: bool = false
+		ok = suites[i].call()
+		if not ok:
+			failed_suites.append("%s (after %d checks)" % [suite_names[i], _checks - checks_before])
+	if _failures > 0 or not failed_suites.is_empty():
+		printerr("RECAP: %d/%d suites FAILED -> %s" % [failed_suites.size(), suites.size(), ", ".join(failed_suites)])
+		quit(1)
+		return
+	print("PASS: All %d Phase 2 Era Correction Checks completed with 0 failures across %d suites." % [_checks, suites.size()])
+	quit(0)

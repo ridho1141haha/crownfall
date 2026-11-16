@@ -37,9 +37,17 @@ func _test_v143_era_progression() -> bool:
 	if not _check(not era.notify_stone_wall_built(), "v1.4.3 Stone Age notification is idempotent"):
 		return false
 
-	# 3. Iron Age terbuka saat vessel ready (Shipwreck Stage 3)
+	# 3. Koreksi era Fase 2: Shipwreck Stage 3 TIDAK lagi membuka Iron Age.
+	#    notify_vessel_ready() diganti notify_eldergrove_milestone() yang
+	#    fail-closed: era hanya maju ke Iron Age bila fakta eldergrove_reached
+	#    sudah tercatat di ProgressionState yang diberikan.
 	var era2: EraProgressionManager = EraProgressionManager.new()
-	if not _check(era2.notify_vessel_ready() and era2.get_era_id() == "iron_age", "v1.4.3 Vessel ready unlocks Iron Age"):
+	var prog2: ProgressionState = ProgressionState.new()
+	if not _check(not era2.notify_eldergrove_milestone(prog2) and era2.get_era_id() == "wood_age", "Phase 2 notify_eldergrove_milestone without the Eldergrove fact is fail-closed (era unchanged)"):
+		return false
+	if not _check(not era2.notify_eldergrove_milestone(null), "Phase 2 notify_eldergrove_milestone with null progression is fail-closed"):
+		return false
+	if not _check(prog2.record_fact(ProgressionState.FACT_ELDERGROVE_REACHED) and era2.notify_eldergrove_milestone(prog2) and era2.get_era_id() == "iron_age", "Phase 2 recorded Eldergrove milestone fact unlocks Iron Age"):
 		return false
 
 	# 4. Simpan/muat era
@@ -101,7 +109,7 @@ func _test_v143_era_progression() -> bool:
 	if not _check(sess_era.era_mgr.get_era_id() == "stone_age", "v1.4.3 era restored after transactional payload apply"):
 		return false
 
-	print("PASS: v1.4.3 Era Progression (Wood -> Stone -> Iron) & Save Migration")
+	print("PASS: v1.4.3 Era Progression + Phase 2 Eldergrove Iron Gate & Save Migration")
 	return true
 
 

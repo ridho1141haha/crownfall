@@ -24,6 +24,7 @@ run_godot "P0 unit" "--script res://tests/test_unit_m2_m7.gd" "PASS: All .* P0 U
 run_godot "P0 scene integration" "--script res://tests/test_integration_m8_slice.gd" "PASS: All .* M8 Multi-Frame Scene Transition"
 run_godot "P1 experimental" "--script res://tests/test_experimental_p1_m9_m10.gd" "PASS: All .* Experimental P1 Skeleton Checks"
 run_godot "Progression foundation" "--script res://tests/test_progression_foundation.gd" "PASS: All .* Progression Foundation"
+run_godot "Phase 2 era correction" "--script res://tests/test_progression_phase2_era_correction.gd" "PASS: All .* Phase 2 Era Correction"
 if [ "${failed}" -ne 0 ]; then
   echo "SOME SUITES FAILED (logs in ${LOG_DIR})"
   exit 1
