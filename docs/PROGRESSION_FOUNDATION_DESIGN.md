@@ -1,6 +1,6 @@
 # Crownfall — Progression Foundation Design
 
-**Status:** Phase 1 foundation implemented (fact service, unlock definition loader, deterministic evaluator, Stone Age milestone integration, save compatibility; merged via PR #3). Phase 2 era progression correction implemented and merged via PR #4 (Shipwreck Stage 3 = voyage readiness only; Iron Age gated behind the Eldergrove milestone; conservative legacy `iron_age` save migration; see section 12). Phase 3 specialist domain foundation and Phase 4 research system foundation are implemented on `feat/specialist-research-phase-3-4` (see sections 13-14). Sections 4-10 remain the standing design reference; sections 11-14 record what actually shipped and what stays deferred. Later phases (resource access via shrines, islands, mounts) are still design-only.
+**Status:** Phase 1 foundation implemented (fact service, unlock definition loader, deterministic evaluator, Stone Age milestone integration, save compatibility; merged via PR #3). Phase 2 era progression correction implemented and merged via PR #4 (Shipwreck Stage 3 = voyage readiness only; Iron Age gated behind the Eldergrove milestone; conservative legacy `iron_age` save migration; see section 12). Phase 3 specialist domain foundation and Phase 4 research system foundation are implemented on `feat/specialist-research-phase-3-4` (see sections 13-14). Phase 5 shrine/statue/temple, resource-access, and buff foundation is implemented on `feat/shrine-resource-buff-phase-5` (see section 15). Sections 4-10 remain the standing design reference; sections 11-15 record what actually shipped and what stays deferred. Later phases (multi-island progression, mounts) are still design-only.
 **Scope:** Foundational progression architecture for the existing single-player Forgotten Shore build.
 **Authority:** This document supplements `REVISED_PROJECT_BASELINE.md`; it does not silently replace approved vertical-slice requirements.
 
@@ -452,3 +452,116 @@ research; modern saves still restore exactly; explicit null rejected; session
 rollback preserves the previous research state), session effect integration
 through the real command paths, and era-safety regression (no Iron Age, no
 fabricated Eldergrove fact, fail-closed era gate).
+## 15. Phase 5 implementation notes (structures, resource access, buffs, shipped behavior)
+
+Phase 5 implements the smallest reliable Shrine / Statue / Temple domain, the
+explicit resource-access foundation, and a deliberately scoped buff system on
+the Forgotten Shore vertical slice, on `feat/shrine-resource-buff-phase-5`:
+
+- **Structure definitions (`scripts/structures/StructureCatalog.gd`,
+  `data/structures.json`).** Validated data-driven definitions for the three
+  distinguishable categories (`shrine`/`statue`/`temple`): stable unique IDs,
+  island whitelist shared with the specialist catalog, activation facts pinned
+  to the registered `<id>_activated` pattern, positive EconomyLedger costs,
+  optional world position (bounded by `WorldConstants`) and optional
+  requirement groups evaluated with the shared all_of/any_of validator. Empty
+  requirement groups are rejected (a structure with no requirements would
+  unlock unconditionally). All-or-nothing loading: any error leaves the
+  catalog empty, so malformed data can never grant a partial or ghost
+  structure. Three structures ship: the playable `shrine_of_growth`
+  (Forgotten Shore, `x=820`), plus `statue_of_the_first_sailor` and
+  `temple_of_the_dawn` which deliberately omit `world_x` and therefore fail
+  closed until a future phase places them in a world (same rationale as the
+  future-island specialist roster).
+- **Runtime (`scripts/structures/StructureDomain.gd`).** The lifecycle states
+  `locked -> available -> activated` are DERIVED queries over the definitions
+  plus durable ProgressionState facts, never stored. `try_activate` runs
+  validate -> duplicate guard (before any spend) -> island and world presence
+  -> proximity -> requirement facts -> atomic `EconomyLedger` spend -> record
+  the activation fact -> signal. A failure at any step leaves balances, facts
+  and lifecycle untouched; a repeated activation is rejected before the spend,
+  so it can never deduct resources twice; the defensive refund after a failed
+  fact recording keeps even the unreachable failure path free of partial
+  activations. The domain keeps no save fields of its own.
+- **Resource access (`scripts/resources/ResourceCatalog.gd`,
+  `scripts/resources/ResourceAccessState.gd`, `data/resources.json`).** The
+  mandatory distinction between resource ACCESS and resource QUANTITY:
+  definitions carry exactly one access source — explicit `base_accessible:
+  true` (shipped for gold/wood/stone so the entire existing Forgotten Shore
+  loop is preserved) or `unlock_requires` fact groups (multiple unlock
+  sources expressible with `any_of`; future sources such as shrine
+  activation, milestones, island events, or research are all expressible as
+  registered facts, so the foundation supports them without new machinery).
+  Access evaluation is deterministic and fail-closed (unknown resource IDs are
+  never accessible) and NEVER consults the ledger: a zero-balance resource can
+  be accessible and a nonzero balance can never unlock anything. Enforcement
+  lives at player-initiated acquisition (the session `collect` path, before
+  any ledger mutation) and is a behavioral no-op for the base resources.
+  No save fields: access is re-derived from the restored fact set after every
+  load, so old saves never fabricate access.
+- **Buffs (`scripts/buffs/BuffCatalog.gd`, `scripts/buffs/BuffDomain.gd`,
+  `data/buffs.json`).** Validated buff definitions with stable IDs, an effect
+  type registry that only contains types with real gameplay consumers
+  (unimplemented effect types are rejected — no placeholder effects), positive
+  exact magnitudes, an additive stacking whitelist (unique and multiplicative
+  modes have no Phase 5 consumer and are rejected fail-closed), permanent-only
+  durations (timed definitions are rejected until an authoritative timed
+  consumer exists), and a validated `source_structure` reference into the
+  structure catalog (single directional link, so catalog validation never
+  needs a cycle). The authoritative calculation path is
+  `BuffDomain.get_effect_total(effect_type, activated_structure_ids)`:
+  additive totals are DERIVED per query from activation evidence, with
+  duplicate structure IDs collapsed, so re-activation or repeated loads can
+  never duplicate or accumulate an effect. Nothing is stored, pushed, or
+  re-applied.
+- **Facts.** Three activation facts are registered in
+  `ProgressionState.KNOWN_FACT_IDS` (`shrine_of_growth_activated`,
+  `statue_of_the_first_sailor_activated`, `temple_of_the_dawn_activated`).
+  Only the Shrine has a gameplay recording path; registering an ID never
+  records the fact.
+- **First playable structure.** The Shrine of Growth exists in the world
+  (`x=820`, generated 2-frame dormant/awakened landmark sprite), is
+  discovered/interacted with through the existing interaction resolver (kind
+  `structure`, command `activate_structure`), requires the Stone Wall Tier 2
+  milestone plus 4G 2W 3S, and its `grove_timber_blessing` grants +1 Wood to
+  every island wood acquisition (player node collection, tree felling, and
+  idle-villager auto-chop deliveries). When the ledger rejects the blessing
+  top-up (resource cap), the feedback falls back to the base amounts, so UI
+  never claims wood the economy did not grant. The HUD gains a passive
+  structures/blessings line (`ClockHUD.set_structures_text`) fed from
+  `StructureDomain.get_hud_text` (presentation only).
+- **Save compatibility.** Schema stays version 2 with ZERO new save keys:
+  activation persists through the strictly validated
+  `progression_flags.progression_facts` array. Legacy schema-v2 saves without
+  the activation fact load with the structure locked and no effects (nothing
+  fabricated); loading any save REPLACES the fact set, so stale runtime
+  activations/effects disappear and derived blessings are recalculated from
+  the restored facts; unknown or duplicate fact IDs are rejected wholesale
+  exactly as before; a failed restore rolls the whole session back through
+  the existing snapshot mechanism (fact restore participates in the
+  transactional apply path); no activation cost is ever deducted during
+  restoration (costs are not stored). Loading a legacy save into a session
+  that already has non-empty Phase 5 state is explicitly tested (replace, not
+  merge).
+
+Acceptance evidence: `tests/test_structure_buff_phase5.gd` (193 checks across
+7 suites) covers definition validation and fail-safe loading for all three
+catalogs, the derived lifecycle, activation transactions (success, unknown
+IDs, out-of-range, insufficient funds, future-island and unplaced structures
+failing closed, duplicate activation without double spending), buff
+aggregation (additive totals, collapsed duplicates, unknown effect types,
+idempotent facts never accumulating), resource access (zero balance while
+unlocked, nonzero balance while locked, unknown IDs, multiple `any_of` unlock
+sources, legacy saves), the real session command/resolver/blessing paths
+(exact balance math for activation, node collection, tree felling, villager
+auto-chop, and the cap-exceeded fallback), save round-trips, legacy saves
+loaded into Phase-5-active sessions, transactional rollback with a failing
+later subsystem, malformed-fact rejection, and regression guards for
+specialists, research, shrine offerings, wall construction, economy and era
+safety. The full headless suite (`tests/run_all.sh`) passes.
+
+Deliberately deferred (documented, not silently missing): timed buff runtime
+(no Phase 5 consumer; definitions fail closed), resource-unlock-by-structure
+gameplay (the access foundation supports it via fact-based definitions; no
+live locked resource ships yet to avoid breaking the vertical slice),
+Statue/Temple world placement, and future-island structures.

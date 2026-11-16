@@ -9,6 +9,39 @@ This changelog records repository changes that actually occurred. Planned featur
 
 ---
 
+## [2026-11-16] Shrine, Statue, Temple, Resource Access & Buff Foundation (Phase 5)
+
+**Type:** New Gameplay Systems (structure domain + explicit resource access + buff foundation; save schema stays version 2 with zero new save keys)
+**Engine Verified:** `Godot 4.7.2.stable` (local headless run of `tests/run_all.sh`, exit 0 after the code changes and re-run after documentation changes: static verifier `204` checks, world clock `5` checks, P0 unit `144` checks across `17` suites, M8 integration `38` checks, P1 experimental `14` checks, Phase 1 progression `139` checks across `6` suites, Phase 2 suite `162` checks across `8` suites, specialist suite `108` checks across `5` suites, research suite `188` checks across `7` suites, Phase 5 suite `193` checks across `7` suites — all green)
+
+### Summary
+Phase 5 adds the Shrine/Statue/Temple foundation, the explicit resource-access foundation, and a deliberately scoped buff system. Structures are validated data-driven definitions (`data/structures.json` + `StructureCatalog.gd`) with distinguishable categories, pinned `<id>_activated` activation facts, atomic EconomyLedger costs, and optional world placement; the lifecycle `locked -> available -> activated` is derived from durable progression facts (no save fields of its own). Resource access is separated from resource quantity (`data/resources.json` + `ResourceCatalog.gd` + `ResourceAccessState.gd`): gold/wood/stone ship as explicit `base_accessible` definitions so no existing gameplay path is broken, unlock-by-fact requirements support multiple `any_of` sources, evaluation never consults ledger balances, and unknown IDs fail closed. Buffs are validated definitions (`data/buffs.json` + `BuffCatalog.gd`) with a consumer-backed effect registry, additive stacking whitelist, permanent-only durations (timed definitions rejected fail-closed until a real consumer exists), and an authoritative derived aggregation (`BuffDomain.get_effect_total`) that makes duplicate application structurally impossible. The first playable structure is the Shrine of Growth on Forgotten Shore (`x=820`): requires the Stone Wall Tier 2 milestone and 4G 2W 3S, grants the `grove_timber_blessing` (+1 Wood to every island wood acquisition — player node collection, tree felling, villager auto-chop). The Statue and Temple definitions are registered and validated but intentionally unplaced (fail closed). Schema v2 keeps zero new save keys: activations ride the strictly validated `progression_facts` array, legacy saves never fabricate activations or access, loading replaces state (verified into non-empty Phase 5 sessions), and failed restores roll the whole session back.
+
+### Key Changes
+- **`scripts/structures/StructureCatalog.gd` + `data/structures.json` (new):** all-or-nothing validated loading (strict field sets, stable unique IDs, category/island whitelists, pinned registry-approved activation facts, positive EconomyLedger costs, bounded world positions, shared requirement-group validator, empty requirement groups rejected).
+- **`scripts/structures/StructureDomain.gd` (new):** derived lifecycle queries and the authoritative activation transaction (validate -> duplicate guard before spend -> island/world presence -> proximity -> requirements -> atomic spend -> record fact -> signal; duplicate activation never spends twice; defensive refund on the unreachable fact-recording failure).
+- **`scripts/resources/ResourceCatalog.gd` + `data/resources.json` (new):** resource definitions with exactly one access source each (explicit base access or fact-gated unlock; ambiguous or source-less definitions rejected).
+- **`scripts/resources/ResourceAccessState.gd` (new):** deterministic fail-closed access queries derived from registered unlock conditions plus durable facts, never from balances; enforcement point added at player-initiated acquisition before any ledger mutation (no-op for base resources).
+- **`scripts/buffs/BuffCatalog.gd` + `data/buffs.json` (new):** validated buff definitions (effect type registry with real consumers only, positive magnitudes, additive stacking whitelist, permanent-only durations, validated source-structure reference).
+- **`scripts/buffs/BuffDomain.gd` (new):** authoritative additive aggregation derived per query from activation evidence (duplicate structure IDs collapsed; unknown effect types 0; nothing stored or re-applied on load).
+- **`scripts/progression/ProgressionState.gd`:** three activation facts registered (`shrine_of_growth_activated`, `statue_of_the_first_sailor_activated`, `temple_of_the_dawn_activated`); only the Shrine has a gameplay recording path.
+- **`scripts/world/ForgottenShoreSession.gd`:** structure domain + resource access members, `activate_structure` command with nearest-activatable fallback, programmatic dormant/awakened landmark visuals, resolver kind `structure`, proximity prompts, wood-blessing application to collection/felling/villager auto-chop (ledger-outcome-checked so feedback never claims ungranted wood), resource-access gate on acquisition, HUD blessings line.
+- **`scripts/player/InteractionResolver.gd`:** structure targets for AVAILABLE structures (locked and already-activated structures offer no interaction).
+- **`scripts/ui/ClockHUD.gd`:** passive structures/blessings status line (presentation only).
+- **`scripts/tools/generate_pixel_assets.py` + `assets/environment/landmarks/env_shrine_structure.png` (new):** generated 2-frame dormant/awakened shrine landmark following the greed-portal precedent.
+- **`tests/test_structure_buff_phase5.gd` (new, registered in `tests/run_all.sh` and CI):** 193 checks across 7 suites — catalog validation (all three catalogs), derived lifecycle, activation transactions (success/unknown/out-of-range/insufficient-funds/future-island/duplicate without double spending), buff aggregation, resource access (zero-balance-unlocked, nonzero-balance-locked, unknown IDs, multiple unlock sources, legacy saves), real session command/resolver/blessing paths with exact balance math (including cap-exceeded fallback and villager auto-chop), save round-trips, legacy saves into Phase-5-active sessions, transactional rollback, malformed-fact rejection, and specialist/research/offering/building/economy/era regression guards.
+- **Self-review fixes shipped with regression tests:** ledger-cap blessing fallback (UI agrees with authoritative state), villager auto-chop blessing coverage, activation refund on the unreachable fact-recording failure, catalog duplicate-ID message convention alignment.
+
+### Deliberately Deferred
+- Timed buff runtime (no Phase 5 consumer; timed definitions are rejected fail-closed at load).
+- Resource-unlock-by-structure gameplay (the access foundation supports fact-gated resources; no live locked resource ships to avoid breaking the Forgotten Shore slice).
+- Statue and Temple world placement (definitions exist and fail closed until a future phase places them).
+- Future-island structures and Eldergrove content.
+
+---
+
+---
+
 ## [2026-11-16] Research Phase 4.1 — Reset Research State When Loading Legacy Saves
 
 **Type:** Save-Load Correctness (narrow fix on top of Phase 4; no new systems, no schema change, no migration change)
