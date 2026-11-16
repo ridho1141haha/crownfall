@@ -25,10 +25,6 @@ var building_mgr: BuildingManager = BuildingManager.new()
 var resource_mgr: ResourceNodeManager = ResourceNodeManager.new()
 var tree_mgr: ForestTreeManager = ForestTreeManager.new()
 var pause_menu: PauseMenu = null
-var _tree_sprites: Dictionary = {}
-var _tree_labels: Dictionary = {}
-var _structure_sprites: Dictionary = {}
-var _structure_labels: Dictionary = {}
 var hearth_sys: HearthSystem = HearthSystem.new()
 var pop_mgr: NPCPopulationManager = NPCPopulationManager.new()
 var builder_npc: NPCBuilderAgent = null
@@ -59,17 +55,12 @@ var shrine_offering_used_today: bool = false
 var flare_active_timer: float = 0.0
 var flare_cooldown_timer: float = 0.0
 var _actor_positions: Dictionary = {"player_1": 0.0}
-var _follower_sprites: Dictionary = {}
 var _farm_timers: Dictionary = {}
-var _sfx_cache: Dictionary = {}
-var _prev_wall_hp: int = 0
-var _prev_enemy_hp: int = 0
+var fx: ShoreFX = null
+var view: ShoreView = null
 var _stagger_cooldown: float = 0.0
 var _last_rejection_reason: String = ""
 var _signals_wired: bool = false
-var _anim_clock: float = 0.0
-var _prev_builder_x: float = NPCBuilderAgent.CAMP_POSITION_X
-var _active_target: Dictionary = {}
 var _last_saved_signature: int = 0
 
 @onready var time_manager: TimeManager = $TimeManager as TimeManager
@@ -91,6 +82,9 @@ func _init() -> void:
 
 
 func _ready() -> void:
+	var cam: Camera2D = (player.get_node_or_null("Camera2D") as Camera2D) if player != null else null
+	fx = ShoreFX.new(self, sfx_player, cam)
+	view = ShoreView.new(self)
 	building_mgr.register_forgotten_shore_expansion_plots()
 	_sync_resource_prompts_from_data()
 	_setup_forest_visuals()
@@ -119,10 +113,8 @@ func _exit_tree() -> void:
 
 
 func _sync_resource_prompts_from_data() -> void:
-	for n: Dictionary in resource_mgr.nodes:
-		var lbl: Label = get_node_or_null("WorldObjects/ResourceNodes/%s/Label" % String(n["id"])) as Label
-		if lbl != null and n.has("prompt"):
-			lbl.text = String(n["prompt"])
+	if view != null:
+		view.sync_resource_prompts_from_data()
 
 
 func set_actor_position(actor_id: String, pos_x: float) -> void:
@@ -136,7 +128,6 @@ func get_actor_position(actor_id: String) -> float:
 
 
 func _process(delta: float) -> void:
-	_anim_clock += delta
 	if player != null:
 		_actor_positions["player_1"] = player.global_position.x
 	var sim_delta: float = delta * (time_manager.time_scale if time_manager != null else 1.0)
@@ -153,7 +144,8 @@ func _process(delta: float) -> void:
 		_sync_hearth_visuals()
 	night_mgr.tick(sim_delta, is_night, building_mgr, hearth_sys.get_effective_radius_px(), hearth_sys.get_effective_burn_dps(), flare_active_timer > 0.0)
 	_tick_monarch_light_risk(sim_delta, is_night)
-	_sync_dynamic_actors()
+	if view != null:
+		view.advance_and_sync(delta)
 
 
 func _wire_signals() -> void:
@@ -228,95 +220,28 @@ func _on_load_recovered_from_backup(backup_path: String) -> void:
 
 
 func _play_sfx(sfx_name: String) -> void:
-	if sfx_player == null:
-		return
-	if not _sfx_cache.has(sfx_name):
-		var path: String = "res://assets/audio/%s.wav" % sfx_name
-		_sfx_cache[sfx_name] = load(path) if ResourceLoader.exists(path) else null
-	var stream: AudioStream = _sfx_cache.get(sfx_name, null) as AudioStream
-	if stream != null:
-		sfx_player.pitch_scale = randf_range(0.92, 1.08)
-		sfx_player.stream = stream
-		sfx_player.play()
+	if fx != null:
+		fx.play_sfx(sfx_name)
 
 
 func _spawn_floating_text(world_x: float, text: String, col: Color = Color(1.0, 0.92, 0.45, 1.0)) -> void:
-	if not is_inside_tree():
-		return
-	var lbl: Label = Label.new()
-	lbl.text = text
-	lbl.modulate = col
-	lbl.position = Vector2(world_x - 32.0, -48.0)
-	add_child(lbl)
-	var tw: Tween = create_tween()
-	tw.set_parallel(true)
-	tw.tween_property(lbl, "position:y", -78.0, 0.85)
-	tw.tween_property(lbl, "modulate:a", 0.0, 0.85)
-	tw.chain().tween_callback(lbl.queue_free)
-
-
-const PAYMENT_FLY_COLORS: Dictionary = {
-	"gold": Color(1.0, 0.84, 0.28, 1.0),
-	"wood": Color(0.62, 0.42, 0.22, 1.0),
-	"stone": Color(0.62, 0.66, 0.7, 1.0),
-}
+	if fx != null:
+		fx.spawn_floating_text(world_x, text, col)
 
 
 func _spawn_payment_fly(cost: Dictionary, from_x: float, to_x: float) -> void:
-	# Animasi pembayaran: partikel kecil per jenis resource terbang dari aktor
-	# menuju target yang dibayar (plot bangunan, hearth, kapal, atau altar).
-	if not is_inside_tree():
-		return
-	var total: int = int(cost.get("gold", 0)) + int(cost.get("wood", 0)) + int(cost.get("stone", 0))
-	if total <= 0:
-		return
-	var lane_delay: float = 0.0
-	for res_id: String in ["gold", "wood", "stone"]:
-		var amount: int = int(cost.get(res_id, 0))
-		if amount <= 0:
-			continue
-		var col: Color = PAYMENT_FLY_COLORS.get(res_id, Color(1.0, 1.0, 1.0, 1.0))
-		var dots: int = mini(amount, 4)
-		for i: int in range(dots):
-			var dot: ColorRect = ColorRect.new()
-			dot.color = col
-			dot.size = Vector2(7.0, 7.0)
-			dot.position = Vector2(from_x - 4.0 + randf_range(-9.0, 9.0), -38.0 + randf_range(-7.0, 7.0))
-			dot.z_index = 40
-			add_child(dot)
-			var delay: float = lane_delay + float(i) * 0.05
-			var tw_fly: Tween = create_tween()
-			tw_fly.set_parallel(true)
-			tw_fly.tween_property(dot, "position:x", to_x - 4.0, 0.55).set_delay(delay).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN)
-			tw_fly.tween_property(dot, "position:y", -44.0, 0.55).set_delay(delay).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
-			tw_fly.chain().tween_property(dot, "modulate:a", 0.0, 0.12)
-			tw_fly.chain().tween_callback(dot.queue_free)
-		lane_delay += 0.08
+	if fx != null:
+		fx.spawn_payment_fly(cost, from_x, to_x)
 
 
 func _trigger_camera_shake(intensity: float = 4.0, duration: float = 0.14) -> void:
-	if player == null or not is_inside_tree():
-		return
-	var cam: Camera2D = player.get_node_or_null("Camera2D") as Camera2D
-	if cam == null:
-		return
-	var tw: Tween = create_tween()
-	tw.tween_property(cam, "offset", Vector2(randf_range(-intensity, intensity), randf_range(-intensity, intensity)), duration * 0.5)
-	tw.tween_property(cam, "offset", Vector2.ZERO, duration * 0.5)
+	if fx != null:
+		fx.trigger_camera_shake(intensity, duration)
 
 
 func _flash_sprite(spr: CanvasItem, flash_col: Color = Color(2.0, 1.2, 1.2, 1.0), restore_col: Color = Color(1.0, 1.0, 1.0, 1.0)) -> void:
-	if spr == null or not is_inside_tree():
-		return
-	if spr.material is ShaderMaterial:
-		var smat: ShaderMaterial = spr.material as ShaderMaterial
-		smat.set_shader_parameter("flash_amount", 1.0)
-		var tw_s: Tween = create_tween()
-		tw_s.tween_method(func(v: float) -> void: smat.set_shader_parameter("flash_amount", v), 1.0, 0.0, 0.14)
-		return
-	spr.modulate = flash_col
-	var tw: Tween = create_tween()
-	tw.tween_property(spr, "modulate", restore_col, 0.12)
+	if fx != null:
+		fx.flash_sprite(spr, flash_col, restore_col)
 
 
 func _record_rejection(reason: String) -> void:
@@ -835,17 +760,9 @@ func _on_research_completed(tech_id: String) -> void:
 	feedback_message.emit("Research completed: %s! The kingdom benefits immediately." % research_mgr.get_technology_display_name(tech_id))
 
 
-## The active-island specialist's housing plot id (deterministic sorted order)
-## or "" when no active specialist defines housing. Presentation helper only.
+## Presentation helper delegated to ShoreView.
 func _get_active_specialist_housing_plot_id() -> String:
-	for sp_id: String in specialists.get_specialist_ids():
-		var sp_def: Dictionary = specialists.get_specialist_definition(sp_id)
-		if String(sp_def.get("island_id", "")) != SpecialistDomain.ACTIVE_ISLAND_ID:
-			continue
-		var housing: String = String(sp_def.get("housing_plot_id", ""))
-		if not housing.is_empty():
-			return housing
-	return ""
+	return view.get_active_specialist_housing_plot_id() if view != null else ""
 
 
 func _find_nearby_specialist_id(actor_x: float) -> String:
@@ -878,98 +795,22 @@ func _on_specialist_recruited(specialist_id: String) -> void:
 	feedback_message.emit("%s joined the kingdom!" % name_txt)
 
 
-## Programmatic specialist-camp visuals (same pattern as the forest visuals):
-## one marker sprite + one interaction label per active-island specialist with
-## a defined world position, plus one label for their housing plot.
+## Programmatic specialist-camp visuals delegated to ShoreView.
 func _setup_specialist_visuals() -> void:
-	var world_objs: Node = get_node_or_null("WorldObjects")
-	if world_objs == null or world_objs.get_node_or_null("SpecialistCamp") != null:
-		return
-	var camp: Node2D = Node2D.new()
-	camp.name = "SpecialistCamp"
-	world_objs.add_child(camp)
-	var tex_path: String = "res://assets/characters/npc/npc_builder_sheet.png"
-	var npc_tex: Texture2D = load(tex_path) as Texture2D if ResourceLoader.exists(tex_path) else null
-	for sp_id: String in specialists.get_specialist_ids():
-		var sp_def: Dictionary = specialists.get_specialist_definition(sp_id)
-		if String(sp_def.get("island_id", "")) != SpecialistDomain.ACTIVE_ISLAND_ID or not sp_def.has("world_x"):
-			continue
-		var wx: float = float(sp_def["world_x"])
-		var spr: Sprite2D = Sprite2D.new()
-		spr.name = "SpSprite_%s" % sp_id
-		spr.position = Vector2(wx, 0.0)
-		spr.centered = false
-		spr.offset = Vector2(-16, -32)
-		spr.hframes = 8
-		spr.frame = 0
-		spr.modulate = Color(0.62, 0.9, 0.82, 1.0)
-		if npc_tex != null:
-			spr.texture = npc_tex
-		camp.add_child(spr)
-		var lbl: Label = Label.new()
-		lbl.name = "SpLabel_%s" % sp_id
-		lbl.visible = false
-		lbl.position = Vector2(wx - 56.0, -86.0)
-		lbl.size = Vector2(112, 24)
-		lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		camp.add_child(lbl)
-	var housing_plot: String = _get_active_specialist_housing_plot_id()
-	if not housing_plot.is_empty() and building_mgr.has_plot(housing_plot):
-		var hut_lbl: Label = Label.new()
-		hut_lbl.name = "HutLabel"
-		hut_lbl.visible = false
-		hut_lbl.position = Vector2(float(building_mgr.get_plot(housing_plot).get("position_x", 0.0)) - 70.0, -86.0)
-		hut_lbl.size = Vector2(140, 24)
-		hut_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		camp.add_child(hut_lbl)
+	if view != null:
+		view.setup_specialist_visuals()
 
 
-## Programmatic structure-landmark visuals (same pattern as the forest and
-## specialist visuals): one dormant/activated 2-frame marker sprite plus one
-## interaction label per active-island structure with a defined world position.
+## Programmatic structure-landmark visuals delegated to ShoreView.
 func _setup_structure_visuals() -> void:
-	var world_objs: Node = get_node_or_null("WorldObjects")
-	if world_objs == null or world_objs.get_node_or_null("StructureLandmarks") != null:
-		return
-	var landmarks: Node2D = Node2D.new()
-	landmarks.name = "StructureLandmarks"
-	world_objs.add_child(landmarks)
-	var tex_path: String = "res://assets/environment/landmarks/env_shrine_structure.png"
-	var structure_tex: Texture2D = load(tex_path) as Texture2D if ResourceLoader.exists(tex_path) else null
-	for st_id: String in structures.get_structure_ids():
-		var st_def: Dictionary = structures.get_structure_definition(st_id)
-		if String(st_def.get("island_id", "")) != SpecialistDomain.ACTIVE_ISLAND_ID or not st_def.has("world_x"):
-			continue
-		var spr: Sprite2D = Sprite2D.new()
-		spr.name = "StSprite_%s" % st_id
-		spr.position = Vector2(float(st_def["world_x"]), 0.0)
-		spr.centered = false
-		spr.offset = Vector2(-24, -48)
-		spr.hframes = 2
-		spr.frame = 0
-		spr.z_index = 1
-		if structure_tex != null:
-			spr.texture = structure_tex
-		landmarks.add_child(spr)
-		_structure_sprites[st_id] = spr
-		var lbl: Label = Label.new()
-		lbl.name = "StLabel_%s" % st_id
-		lbl.visible = false
-		lbl.position = Vector2(float(st_def["world_x"]) - 64.0, -70.0)
-		lbl.size = Vector2(128, 24)
-		lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		landmarks.add_child(lbl)
-		_structure_labels[st_id] = lbl
-	_update_structure_visuals()
+	if view != null:
+		view.setup_structure_visuals()
 
 
-## Presentation only: the marker frame reflects the durable activation fact
-## (dormant frame 0 / awakened glowing frame 1). Never mutates gameplay state.
+## Presentation-only structure marker refresh delegated to ShoreView.
 func _update_structure_visuals() -> void:
-	for st_id: String in structures.get_structure_ids():
-		var spr: Sprite2D = _structure_sprites.get(st_id, null) as Sprite2D
-		if spr != null:
-			spr.frame = 1 if structures.is_activated(st_id, progression) else 0
+	if view != null:
+		view.update_structure_visuals()
 
 
 func _on_manual_save() -> bool:
@@ -1134,37 +975,11 @@ func _on_night_resolved(survived: bool, wall_held: bool) -> void:
 		feedback_message.emit("Raiders breached Town Center! Half your Gold was lost; rebuild before next dusk.")
 
 
-func _build_population_summary() -> String:
-	var role_counts: Dictionary = {}
-	var idle: int = 0
-	var recruited: int = 0
-	for a: NPCBuilderAgent in pop_mgr.agents:
-		if not a.recruited:
-			continue
-		recruited += 1
-		role_counts[a.role] = int(role_counts.get(a.role, 0)) + 1
-		if a.state == NPCBuilderAgent.State.IDLE:
-			idle += 1
-	var parts: Array[String] = []
-	for role_name: String in ["builder", "farmer", "archer", "villager"]:
-		if role_counts.has(role_name):
-			parts.append("%d %s" % [int(role_counts[role_name]), role_name.capitalize()])
-	var detail: String = ", ".join(parts) if not parts.is_empty() else "none"
-	return "NPCs: %d (%s) | Idle: %d | Vagrants: %d" % [recruited, detail, idle, pop_mgr.camp_vagrants_available]
 
 
 func _sync_hearth_visuals() -> void:
-	var light: PointLight2D = get_node_or_null("WorldObjects/TownCenterAnchor/CampfireLight") as PointLight2D
-	if light != null:
-		light.texture_scale = hearth_sys.get_effective_texture_scale()
-	var t_lbl: Label = get_node_or_null("WorldObjects/TownCenterAnchor/TownLabel") as Label
-	if t_lbl != null:
-		if hearth_sys.hearth_level == 1:
-			t_lbl.text = "Town Center (Hearth Lv.1)\n[E] Stoke (1W) | [Q] Beacon Lv2: 4G 4W 2S"
-		elif hearth_sys.hearth_level == 2:
-			t_lbl.text = "Town Center (Hearth Lv.2)\n[E] Stoke (1W) | [Q] Solar Lv3: 6G 5W 4S"
-		else:
-			t_lbl.text = "Town Center (Solar Brazier Lv.3)\n[E] Stoke (1W)"
+	if view != null:
+		view.sync_hearth_visuals()
 
 
 func _sync_landmark_visuals() -> void:
@@ -1210,420 +1025,54 @@ func _tick_monarch_light_risk(sim_delta: float, is_night: bool) -> void:
 
 
 func _get_plot_nodes(plot_id: String) -> Dictionary:
-	var node_refs: Dictionary = {}
-	match plot_id:
-		BuildingManager.WALL_ID:
-			node_refs = {"sprite": wall_visual, "label": wall_label}
-		BuildingManager.WEST_WALL_ID:
-			node_refs = {"sprite": get_node_or_null("WorldObjects/WestWallPlot/WallVisual") as Sprite2D, "label": get_node_or_null("WorldObjects/WestWallPlot/WallLabel") as Label}
-		BuildingManager.WATCHTOWER_ID:
-			node_refs = {
-				"sprite": get_node_or_null("WorldObjects/WatchtowerPlot/WatchtowerVisual") as Sprite2D,
-				"label": get_node_or_null("WorldObjects/WatchtowerPlot/WatchtowerLabel") as Label,
-			}
-		BuildingManager.FARM_WEST_ID:
-			node_refs = {
-				"sprite": get_node_or_null("WorldObjects/FarmWestPlot/FarmVisual") as Sprite2D,
-				"label": get_node_or_null("WorldObjects/FarmWestPlot/FarmLabel") as Label,
-			}
-		BuildingManager.FARM_EAST_ID:
-			node_refs = {
-				"sprite": get_node_or_null("WorldObjects/FarmEastPlot/FarmVisual") as Sprite2D,
-				"label": get_node_or_null("WorldObjects/FarmEastPlot/FarmLabel") as Label,
-			}
-		_:
-			return {}
-	# Title & cost selalu mengikuti data plot (data/buildings.json), bukan hardcode.
-	node_refs["title"] = building_mgr.get_plot_title(plot_id)
-	node_refs["cost"] = building_mgr.get_plot_cost_label(plot_id)
-	return node_refs
+	return view.get_plot_nodes(plot_id) if view != null else {}
 
 
 func _sync_plot_label_data() -> void:
-	# Selaraskan label statis .tscn dengan data bangunan saat ini (idempotent).
-	for plot_id: String in building_mgr.get_all_plot_ids():
-		var nodes: Dictionary = _get_plot_nodes(plot_id)
-		if nodes.is_empty():
-			continue
-		var lbl: Label = nodes["label"] as Label
-		if lbl == null:
-			continue
-		var plot: Dictionary = building_mgr.get_plot(plot_id)
-		if int(plot.get("state", 0)) == BuildingManager.WallState.PLACEHOLDER:
-			lbl.text = "%s [E/B]\n%s" % [String(nodes["title"]), String(nodes["cost"])]
+	if view != null:
+		view.sync_plot_label_data()
 
 
 func _on_wall_state_changed(wall_id: String, new_state: String, progress: float, durability: int, max_dur: int) -> void:
-	var nodes: Dictionary = _get_plot_nodes(wall_id)
-	if nodes.is_empty():
-		return
-	var spr: Sprite2D = nodes["sprite"] as Sprite2D
-	var lbl: Label = nodes["label"] as Label
-	if spr == null or lbl == null:
-		return
-	var plot: Dictionary = building_mgr.get_plot(wall_id)
-	var lvl: int = int(plot.get("level", 1))
-	var title: String = String(nodes["title"])
-	var cost_txt: String = String(nodes["cost"])
-	match new_state:
-		"PLACEHOLDER":
-			spr.frame = 0
-			spr.modulate = Color(1.0, 1.0, 1.0, 0.75)
-			lbl.text = "%s [E/B]\n%s" % [title, cost_txt]
-		"UNDER_CONSTRUCTION":
-			spr.frame = 1
-			spr.modulate = Color(1.0, 1.0, 1.0, 1.0)
-			lbl.text = "Building %s...\n%d%%" % [title, int(roundf(progress * 100.0))]
-		"COMPLETED":
-			spr.frame = 2
-			if wall_id == BuildingManager.WALL_ID and lvl >= 2:
-				spr.modulate = Color(0.78, 0.86, 1.0, 1.0)
-				lbl.text = "Stone Wall Lv.2\nHP %d/%d" % [durability, max_dur]
-			elif wall_id == BuildingManager.WALL_ID:
-				spr.modulate = Color(1.0, 1.0, 1.0, 1.0)
-				lbl.text = "Wooden Wall [Q: Stone Lv2]\nHP %d/%d (%s)" % [durability, max_dur, building_mgr.get_plot_upgrade_cost_label(wall_id)]
-			else:
-				spr.modulate = Color(1.0, 1.0, 1.0, 1.0)
-				lbl.text = "%s\nHP %d/%d" % [title, durability, max_dur]
-		"DAMAGED":
-			spr.frame = 3
-			spr.modulate = Color(1.0, 0.85, 0.85, 1.0)
-			lbl.text = "Damaged %s [E/F]\nHP %d/%d" % [title, durability, max_dur]
-		"DESTROYED":
-			spr.frame = 0
-			spr.modulate = Color(0.75, 0.4, 0.4, 0.65)
-			lbl.text = "Destroyed %s [E/B]\nRebuild: %s" % [title, cost_txt]
+	if view != null:
+		view.on_wall_state_changed(wall_id, new_state, progress, durability, max_dur)
 
 
 func _on_npc_state_changed(_npc_id: String, _role: String, state_name: String, pos_x: float) -> void:
-	if npc_visual != null:
-		npc_visual.position.x = pos_x
-	if npc_label != null:
-		if not builder_npc.recruited:
-			npc_label.text = "Vagrant [E/R: 2G]"
-		else:
-			match state_name:
-				"WORKING":
-					npc_label.text = "Builder: Working"
-				"RETURNING_TO_SAFETY":
-					npc_label.text = "Retreating!"
-				_:
-					npc_label.text = ""
-			npc_label.visible = not npc_label.text.is_empty()
+	if view != null:
+		view.on_npc_state_changed(_npc_id, _role, state_name, pos_x)
 
 
 func _sync_follower_nodes() -> void:
-	var container: Node = get_node_or_null("WorldObjects/NPCFollowers")
-	if container == null:
-		return
-	for i: int in range(1, pop_mgr.agents.size()):
-		var agent: NPCBuilderAgent = pop_mgr.agents[i]
-		if not _follower_sprites.has(agent.npc_id):
-			var spr: Sprite2D = Sprite2D.new()
-			spr.centered = false
-			spr.offset = Vector2(-16, -32)
-			spr.hframes = 8
-			container.add_child(spr)
-			_follower_sprites[agent.npc_id] = spr
-		var s: Sprite2D = _follower_sprites[agent.npc_id] as Sprite2D
-		var tex_path: String = "res://assets/characters/npc/npc_builder_sheet.png"
-		if agent.role == "farmer":
-			tex_path = "res://assets/characters/npc/npc_farmer_sheet.png"
-		elif agent.role == "archer":
-			tex_path = "res://assets/characters/npc/npc_archer_sheet.png"
-		if ResourceLoader.exists(tex_path):
-			s.texture = load(tex_path)
-		var dx: float = agent.position_x - s.position.x
-		if absf(dx) > 0.05:
-			s.flip_h = dx < 0.0
-		s.position.x = agent.position_x
-		if agent.state == NPCBuilderAgent.State.WORKING:
-			s.frame = 4 + (int(floorf(_anim_clock * 8.0)) % 4)
-		elif agent.state == NPCBuilderAgent.State.MOVING_TO_TASK or agent.state == NPCBuilderAgent.State.RETURNING_TO_SAFETY:
-			s.frame = int(floorf(_anim_clock * 8.0)) % 4
-		else:
-			s.frame = 0
+	if view != null:
+		view.sync_follower_nodes()
 
 
 func _update_proximity_prompts() -> void:
-	if player == null:
-		return
-	var px: float = player.global_position.x
-	_active_target = _resolve_target_for_actor(px)
-	var active_kind: String = String(_active_target.get("kind", ""))
-	var active_id: String = String(_active_target.get("target_id", ""))
-	var highlight_col: Color = Color(1.0, 0.95, 0.55, 1.0)
-	var normal_col: Color = Color(1.0, 1.0, 1.0, 1.0)
-
-	# Show ONLY the single active resolved prompt (plus live build/damage status)
-	for n: Dictionary in resource_mgr.nodes:
-		var nid: String = String(n["id"])
-		var lbl: Label = get_node_or_null("WorldObjects/ResourceNodes/%s/Label" % nid) as Label
-		if lbl != null:
-			var is_active: bool = (active_kind == "resource" and active_id == nid)
-			lbl.visible = is_active and not resource_mgr.is_collected(nid)
-			lbl.modulate = highlight_col if is_active else normal_col
-
-	if npc_label != null and not builder_npc.recruited:
-		var camp_active: bool = (active_kind == "camp")
-		npc_label.visible = camp_active
-		npc_label.modulate = highlight_col if camp_active else normal_col
-
-	for plot_id: String in [BuildingManager.WALL_ID, BuildingManager.WEST_WALL_ID, BuildingManager.WATCHTOWER_ID, BuildingManager.FARM_WEST_ID, BuildingManager.FARM_EAST_ID]:
-		var nodes: Dictionary = _get_plot_nodes(plot_id)
-		if nodes.is_empty():
-			continue
-		var lbl: Label = nodes["label"] as Label
-		if lbl == null or not building_mgr.has_plot(plot_id):
-			continue
-		var plot: Dictionary = building_mgr.get_plot(plot_id)
-		var st: int = int(plot["state"])
-		var is_active_plot: bool = (active_kind == "building" and active_id == plot_id)
-		lbl.visible = is_active_plot or st == BuildingManager.WallState.UNDER_CONSTRUCTION or st == BuildingManager.WallState.DAMAGED
-		lbl.modulate = highlight_col if is_active_plot else normal_col
-
-	var ship_lbl: Label = get_node_or_null("WorldObjects/ShipwreckAnchor/ShipLabel") as Label
-	if ship_lbl != null:
-		ship_lbl.visible = (active_kind == "shipwreck")
-		ship_lbl.modulate = highlight_col if ship_lbl.visible else normal_col
-
-	var portal_lbl: Label = get_node_or_null("WorldObjects/GreedPortalAnchor/PortalLabel") as Label
-	if portal_lbl != null:
-		portal_lbl.visible = (active_kind == "portal")
-		portal_lbl.modulate = highlight_col if portal_lbl.visible else normal_col
-
-	for tr: Dictionary in tree_mgr.trees:
-		var tid: String = String(tr["id"])
-		var t_lbl: Label = _tree_labels.get(tid, null) as Label
-		if t_lbl != null:
-			var is_tree_active: bool = (active_kind == "tree" and active_id == tid)
-			t_lbl.visible = is_tree_active and not tree_mgr.is_felled(tid)
-			t_lbl.text = "[E] Chop (%d/%d)" % [tree_mgr.get_hp(tid), int(tr["max_hp"])]
-			t_lbl.modulate = highlight_col if is_tree_active else normal_col
-
-	var has_archer: bool = false
-	for a: NPCBuilderAgent in pop_mgr.agents:
-		if a.recruited and a.role == "archer":
-			has_archer = true
-			break
-	for sid: String in NPCPopulationManager.TOOL_STANDS.keys():
-		var lbl: Label = get_node_or_null("WorldObjects/ToolStands/%s/Label" % sid) as Label
-		if lbl != null:
-			if sid == "bow_stand":
-				lbl.text = "[E] Archer (1G 1W)" if has_archer else "[E] Archer (Free 1st)"
-			var is_stand: bool = (active_kind == "tool_stand" and active_id == sid)
-			lbl.visible = is_stand
-			lbl.modulate = highlight_col if is_stand else normal_col
-
-	# Phase 3 specialist prompts: the resolved specialist prompt plus the
-	# scientist housing plot status label (presentation only).
-	var sp_camp: Node = get_node_or_null("WorldObjects/SpecialistCamp")
-	if sp_camp != null:
-		for sp_id2: String in specialists.get_specialist_ids():
-			var sp_lbl: Label = sp_camp.get_node_or_null("SpLabel_%s" % sp_id2) as Label
-			if sp_lbl != null:
-				var is_sp: bool = (active_kind == "specialist" and active_id == sp_id2)
-				sp_lbl.visible = is_sp
-				sp_lbl.modulate = highlight_col if is_sp else normal_col
-				sp_lbl.text = String(_active_target.get("prompt_text", "")) if is_sp else ""
-		if active_kind == "research":
-			var provider: String = String(_active_target.get("provider_id", ""))
-			var prov_lbl: Label = sp_camp.get_node_or_null("SpLabel_%s" % provider) as Label
-			if prov_lbl != null:
-				prov_lbl.visible = true
-				prov_lbl.modulate = highlight_col
-				prov_lbl.text = String(_active_target.get("prompt_text", ""))
-		var hut_id: String = _get_active_specialist_housing_plot_id()
-		var hut_lbl2: Label = sp_camp.get_node_or_null("HutLabel") as Label
-		if hut_lbl2 != null and building_mgr.has_plot(hut_id):
-			var plot: Dictionary = building_mgr.get_plot(hut_id)
-			var st: int = int(plot["state"])
-			var is_hut_active: bool = (active_kind == "building" and active_id == hut_id)
-			hut_lbl2.visible = is_hut_active or st == BuildingManager.WallState.UNDER_CONSTRUCTION
-			hut_lbl2.modulate = highlight_col if is_hut_active else normal_col
-			var hut_title: String = building_mgr.get_plot_title(hut_id)
-			if st == BuildingManager.WallState.PLACEHOLDER or st == BuildingManager.WallState.DESTROYED:
-				hut_lbl2.text = "%s [E/B]\n%s" % [hut_title, building_mgr.get_plot_cost_label(hut_id)]
-			elif st == BuildingManager.WallState.UNDER_CONSTRUCTION:
-				hut_lbl2.text = "Building %s...\n%d%%" % [hut_title, int(roundf(float(plot["progress"]) * 100.0))]
-			elif st == BuildingManager.WallState.DAMAGED:
-				hut_lbl2.text = "Damaged %s [E/F]\nHP %d/%d" % [hut_title, int(plot["durability"]), int(plot["max_durability"])]
-			else:
-				hut_lbl2.text = hut_title
+	if view != null:
+		view.update_proximity_prompts()
 
 
-	# Phase 5 structure prompts: show only the resolved structure's prompt.
-	for st_id2: String in structures.get_structure_ids():
-		var st_lbl: Label = _structure_labels.get(st_id2, null) as Label
-		if st_lbl != null:
-			var is_st: bool = (active_kind == "structure" and active_id == st_id2)
-			st_lbl.visible = is_st
-			st_lbl.modulate = highlight_col if is_st else normal_col
-			st_lbl.text = String(_active_target.get("prompt_text", "")) if is_st else ""
-
-
-func _sync_dynamic_actors() -> void:
-	if town_center_sprite != null:
-		town_center_sprite.frame = int(floorf(_anim_clock * 6.0)) % 4
-
-	if npc_visual != null:
-		npc_visual.position.x = builder_npc.position_x
-		if builder_sprite != null:
-			var dx: float = builder_npc.position_x - _prev_builder_x
-			if absf(dx) > 0.05:
-				builder_sprite.flip_h = dx < 0.0
-			_prev_builder_x = builder_npc.position_x
-			if builder_npc.state == NPCBuilderAgent.State.WORKING:
-				builder_sprite.frame = 4 + (int(floorf(_anim_clock * 8.0)) % 4)
-			elif builder_npc.state == NPCBuilderAgent.State.MOVING_TO_TASK or builder_npc.state == NPCBuilderAgent.State.RETURNING_TO_SAFETY:
-				builder_sprite.frame = int(floorf(_anim_clock * 8.0)) % 4
-			else:
-				builder_sprite.frame = 0
-
-	if enemy_visual != null:
-		enemy_visual.visible = night_mgr.enemy_active
-		enemy_visual.position.x = night_mgr.enemy_x
-		if enemy_sprite != null and night_mgr.enemy_active:
-			enemy_sprite.frame = int(floorf(_anim_clock * 8.0)) % 4
-			if night_mgr.enemy_archetype == "brute":
-				enemy_sprite.scale = Vector2(1.45, 1.45)
-				enemy_sprite.modulate = Color(0.85, 0.65, 1.0, 1.0)
-			elif night_mgr.enemy_archetype == "crawler":
-				enemy_sprite.scale = Vector2(0.9, 0.85)
-				enemy_sprite.modulate = Color(1.0, 0.75, 0.75, 1.0)
-			else:
-				enemy_sprite.scale = Vector2(1.0, 1.0)
-				enemy_sprite.modulate = Color(1.0, 1.0, 1.0, 1.0)
-
-	if slice_hud != null and slice_hud.has_method("set_forecast_text"):
-		var day_n: int = time_manager.current_day if time_manager != null else 1
-		if night_mgr.enemy_active or night_mgr.west_enemy_active:
-			var alert: String = "ALERT: %s (%d/%d HP) at x=%.0f" % [night_mgr.get_enemy_display_name(), night_mgr.enemy_hp, night_mgr.enemy_max_hp, night_mgr.enemy_x] if night_mgr.enemy_active else "ALERT: Greedling raiders inbound!"
-			if night_mgr.west_enemy_active:
-				alert += " | West Scout (%d/%d HP) at x=%.0f" % [night_mgr.west_enemy_hp, night_mgr.west_enemy_max_hp, night_mgr.west_enemy_x]
-			slice_hud.call("set_forecast_text", alert)
-		else:
-			slice_hud.call("set_forecast_text", NightEncounterManager.get_night_forecast(day_n))
-
-	if slice_hud != null and slice_hud.has_method("set_population_text"):
-		slice_hud.call("set_population_text", _build_population_summary())
-
-	if slice_hud != null and slice_hud.has_method("set_research_text"):
-		slice_hud.call("set_research_text", research_mgr.get_hud_text(progression))
-
-	if slice_hud != null and slice_hud.has_method("set_structures_text"):
-		slice_hud.call("set_structures_text", structures.get_hud_text(progression))
-
-	if building_mgr.durability < _prev_wall_hp and _prev_wall_hp > 0:
-		_play_sfx("sfx_hit")
-		var restore_wall: Color = Color(1.0, 0.85, 0.85, 1.0) if building_mgr.state == BuildingManager.WallState.DAMAGED else Color(1.0, 1.0, 1.0, 1.0)
-		_flash_sprite(wall_visual, Color(2.0, 1.2, 1.2, 1.0), restore_wall)
-		_trigger_camera_shake(4.0, 0.14)
-	_prev_wall_hp = building_mgr.durability
-
-	if night_mgr.enemy_active and night_mgr.enemy_hp < _prev_enemy_hp and _prev_enemy_hp > 0:
-		_flash_sprite(enemy_sprite)
-	_prev_enemy_hp = night_mgr.enemy_hp if night_mgr.enemy_active else 0
-
-
-	var west_actor: Node2D = get_node_or_null("WorldObjects/WestEnemyActor") as Node2D
-	if west_actor != null:
-		west_actor.visible = night_mgr.west_enemy_active
-		west_actor.position.x = night_mgr.west_enemy_x
-
-	_sync_follower_nodes()
-	_update_proximity_prompts()
 
 
 func _setup_forest_visuals() -> void:
-	var world_objs: Node = get_node_or_null("WorldObjects")
-	if world_objs == null or world_objs.get_node_or_null("ForestTrees") != null:
-		return
-	var root_forest: Node2D = Node2D.new()
-	root_forest.name = "ForestTrees"
-	root_forest.z_index = -1
-	world_objs.add_child(root_forest)
-	var tex_path: String = "res://assets/environment/vegetation/env_pine_tree_states.png"
-	var tree_tex: Texture2D = load(tex_path) as Texture2D if ResourceLoader.exists(tex_path) else null
-	for dx: float in [-1220.0, -1150.0, -860.0, -720.0, -540.0, 460.0, 610.0, 770.0, 880.0, 1120.0]:
-		var bg_spr: Sprite2D = Sprite2D.new()
-		bg_spr.position = Vector2(dx, 0.0)
-		bg_spr.centered = false
-		bg_spr.offset = Vector2(-24, -64)
-		bg_spr.hframes = 2
-		bg_spr.frame = 0
-		bg_spr.scale = Vector2(0.85, 0.85)
-		bg_spr.modulate = Color(0.68, 0.78, 0.74, 0.72)
-		if tree_tex != null:
-			bg_spr.texture = tree_tex
-		root_forest.add_child(bg_spr)
-	for tr: Dictionary in tree_mgr.trees:
-		var tid: String = String(tr["id"])
-		var spr: Sprite2D = Sprite2D.new()
-		spr.name = tid
-		spr.position = Vector2(float(tr["x"]), 0.0)
-		spr.centered = false
-		spr.offset = Vector2(-24, -64)
-		spr.hframes = 2
-		spr.z_index = 1
-		if tree_tex != null:
-			spr.texture = tree_tex
-		root_forest.add_child(spr)
-		_tree_sprites[tid] = spr
-		var lbl: Label = Label.new()
-		lbl.visible = false
-		lbl.position = Vector2(-56, -86)
-		lbl.size = Vector2(112, 24)
-		lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		lbl.text = "[E] Chop (3/3)"
-		spr.add_child(lbl)
-		_tree_labels[tid] = lbl
-	_update_forest_visuals()
+	if view != null:
+		view.setup_forest_visuals()
 
 
 func _update_forest_visuals() -> void:
-	for tr: Dictionary in tree_mgr.trees:
-		var tid: String = String(tr["id"])
-		var spr: Sprite2D = _tree_sprites.get(tid, null) as Sprite2D
-		if spr != null:
-			spr.frame = 1 if tree_mgr.is_felled(tid) else 0
+	if view != null:
+		view.update_forest_visuals()
 
 
 func _update_resource_node_visuals() -> void:
-	var nodes_root: Node = get_node_or_null("WorldObjects/ResourceNodes")
-	if nodes_root == null:
-		return
-	for n: Dictionary in resource_mgr.nodes:
-		var node_id: String = String(n["id"])
-		var marker: CanvasItem = nodes_root.get_node_or_null(node_id) as CanvasItem
-		if marker != null:
-			marker.modulate.a = 0.25 if resource_mgr.is_collected(node_id) else 1.0
+	if view != null:
+		view.update_resource_node_visuals()
 
 
 func _sync_all_presentations() -> void:
-	for plot_id: String in building_mgr.get_all_plot_ids():
-		var p: Dictionary = building_mgr.get_plot(plot_id)
-		_on_wall_state_changed(
-			plot_id,
-			building_mgr.get_state_name(plot_id),
-			float(p["progress"]),
-			int(p["durability"]),
-			int(p["max_durability"])
-		)
-	_on_npc_state_changed(
-		NPCBuilderAgent.NPC_ID,
-		builder_npc.role,
-		builder_npc.get_state_name(),
-		builder_npc.position_x
-	)
-	_sync_hearth_visuals()
-	_sync_landmark_visuals()
-	_update_resource_node_visuals()
-	_update_forest_visuals()
-	_update_structure_visuals()
-	_sync_dynamic_actors()
-	if slice_hud != null and slice_hud.has_method("_refresh_clock"):
-		slice_hud.call("_refresh_clock")
+	if view != null:
+		view.sync_all_presentations()
 
 
 func _reign_state_to_string(rs: ReignState) -> String:

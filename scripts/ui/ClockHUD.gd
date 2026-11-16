@@ -100,9 +100,11 @@ func bind_session(session: ForgottenShoreSession) -> void:
 	_session = session
 	if _session == null:
 		return
-	_session.economy.balance_changed.connect(_on_balance_changed)
-	_session.feedback_message.connect(_on_feedback_message)
-	if _session.era_mgr != null:
+	if not _session.economy.balance_changed.is_connected(_on_balance_changed):
+		_session.economy.balance_changed.connect(_on_balance_changed)
+	if not _session.feedback_message.is_connected(_on_feedback_message):
+		_session.feedback_message.connect(_on_feedback_message)
+	if _session.era_mgr != null and not _session.era_mgr.era_changed.is_connected(_on_era_changed):
 		_session.era_mgr.era_changed.connect(_on_era_changed)
 	_refresh_resources()
 	_refresh_clock()

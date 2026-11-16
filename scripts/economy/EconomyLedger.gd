@@ -162,7 +162,10 @@ func try_spend(costs: Dictionary) -> bool:
 		_balances[res_id] = int(_balances[res_id]) - amount
 		balance_changed.emit(res_id, int(_balances[res_id]))
 
-	transaction_committed.emit("spend", costs.duplicate())
+	var payload: Dictionary = {}
+	for res_id: StringName in normalized_costs.keys():
+		payload[String(res_id)] = int(normalized_costs[res_id])
+	transaction_committed.emit("spend", payload)
 	return true
 
 
@@ -182,9 +185,5 @@ func set_balances_from_dict(data: Dictionary) -> bool:
 
 	for res_id: StringName in VALID_RESOURCES:
 		_balances[res_id] = int(next_balances[res_id])
-		balance_changed.emit(resource_id_or_self(res_id), int(_balances[res_id]))
+		balance_changed.emit(res_id, int(_balances[res_id]))
 	return true
-
-
-func resource_id_or_self(res_id: StringName) -> StringName:
-	return res_id
