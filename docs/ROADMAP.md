@@ -21,6 +21,17 @@ These documents are planning references for everything that is still unimplement
 
 ---
 
+## Narrative planning
+
+The planned Prologue and its staged implementation are documented in:
+
+- [`narrative/PROLOGUE_STORY_DESIGN.md`](narrative/PROLOGUE_STORY_DESIGN.md) — story beats for **The Crown's Call**, character direction, candidate dialogue, visual/audio intent, and unresolved lore boundaries.
+- [`NARRATIVE_IMPLEMENTATION_ROADMAP.md`](NARRATIVE_IMPLEMENTATION_ROADMAP.md) — current code baseline, New Game/Continue and save-compatibility policy proposal, technical phases, ownership boundaries, and test gates.
+
+These are planning documents only. The current game still starts directly on Forgotten Shore; the Prologue, dialogue runtime, narrative state, and cutscene/sequence runtime are **not implemented**. The roadmap requires a design/entry-flow review and a small technical proposal before any narrative code is changed. Existing Chapter I vertical-slice gameplay remains the target to preserve.
+
+---
+
 ## 1. Units & Defense
 
 - **Permanent Archer garrison:** Archers stationed on the Watchtower become a
