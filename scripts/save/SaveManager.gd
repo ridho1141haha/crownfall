@@ -204,6 +204,20 @@ static func migrate_payload(data: Variant) -> Variant:
 						inferred_era = "stone_age"
 						break
 			pf_mig["era_id"] = inferred_era
+		# Backfill fakta fondasi progresi Fase 1: era_id "stone_age" hanya bisa
+		# dicapai lewat milestone Stone Wall Tier 2 pertama, jadi era tersebut
+		# membuktikan milestone-nya sudah terjadi. Deterministik dan idempotent.
+		# era iron_age TIDAK pernah menginferensi fakta ini: jalur vessel-ready
+		# bisa mencapai Iron Age tanpa stone wall, jadi tidak ada bukti faktual.
+		if String(pf_mig.get("era_id", "")) == "stone_age":
+			var facts_val: Variant = pf_mig.get("progression_facts", null)
+			if facts_val == null:
+				pf_mig["progression_facts"] = [ProgressionState.FACT_FORGOTTEN_SHORE_FIRST_STONE_WALL_TIER_2]
+			elif typeof(facts_val) == TYPE_ARRAY and ProgressionState.is_valid_fact_array(facts_val):
+				# Array valid tanpa fakta stone: tambahkan sekali. Array invalid
+				# sengaja dibiarkan apa adanya agar validate_payload menolaknya.
+				if not (facts_val as Array).has(ProgressionState.FACT_FORGOTTEN_SHORE_FIRST_STONE_WALL_TIER_2):
+					(facts_val as Array).append(ProgressionState.FACT_FORGOTTEN_SHORE_FIRST_STONE_WALL_TIER_2)
 	return d
 
 
@@ -349,6 +363,11 @@ func validate_payload(data: Variant) -> bool:
 			return false
 		var hbr: float = float(pf_chk["hearth_boost_remaining"])
 		if is_nan(hbr) or is_inf(hbr) or hbr < 0.0 or hbr > HearthSystem.BOOST_DURATION_SEC:
+			return false
+	if pf_chk.has("progression_facts"):
+		# Fase 1 fondasi progresi: array fakta wajib ID valid yang dikenal
+		# registry; ID asing tidak pernah diterima dari data simpanan.
+		if not ProgressionState.is_valid_fact_array(pf_chk["progression_facts"]):
 			return false
 
 	if dict.has("camp_vagrants_available"):

@@ -7,6 +7,25 @@ This changelog records repository changes that actually occurred. Planned featur
 
 ---
 
+---
+
+## [2026-11-16] Progression Foundation Phase 1 — Facts, Unlock Definitions & Save Compatibility
+
+**Type:** Architecture & Infrastructure (no gameplay balance changes)  
+**Engine Verified:** `Godot 4.7.2.stable` (local headless run: static verifier `182` checks, world clock `5` checks, P0 unit `142` checks across `17` suites, M8 integration `38` checks, P1 experimental `14` checks, new progression suite `137` checks across `6` suites — all green)
+
+### Summary
+Implemented the Phase 1 progression foundation from `docs/PROGRESSION_FOUNDATION_DESIGN.md` / `docs/PROGRESSION_IMPLEMENTATION_ROADMAP.md` without changing any gameplay balance, era trigger, or player-facing behavior: a durable progression-fact service with stable snake_case IDs and a known-fact registry (`scripts/progression/ProgressionState.gd`), a strict all-or-nothing data-driven unlock definition loader/validator over the new `data/unlocks.json` (`scripts/progression/ProgressionUnlockCatalog.gd`), a deterministic fail-closed `all_of`/`any_of` evaluator that never mutates progression state (`scripts/progression/ProgressionUnlockEvaluator.gd`), and the Stone Age milestone now recorded as the durable fact `forgotten_shore_first_stone_wall_tier_2` after a successful Stone Wall Tier 2 upgrade transaction (idempotent, era ownership unchanged in `EraProgressionManager`).
+
+### Key Changes
+- **Progression facts (`scripts/progression/ProgressionState.gd`):** idempotent `record_fact`, registry-validated IDs (malformed or unknown IDs rejected), `fact_recorded` signal emitted only on the absent -> present transition, defensive `get_fact_ids`, sorted deterministic serialization, transactional `apply_save_state` (null clears, valid array replaces atomically, invalid array rejected with zero mutation).
+- **Unlock definitions (`scripts/progression/ProgressionUnlockCatalog.gd`, `data/unlocks.json`):** `stone_age_era` definition requires the stone-wall fact via `all_of`; loader rejects missing/malformed files, duplicate definition IDs, unknown requirement fact IDs, and empty requirement groups with reported reasons; any validation error leaves the catalog empty so malformed data can never grant unlocks. No script expressions or eval.
+- **Unlock evaluation (`scripts/progression/ProgressionUnlockEvaluator.gd`):** `all_of` / `any_of` / combined semantics; empty, missing, or unknown requirement groups never unlock even for definitions that bypass the catalog; evaluation is a pure read.
+- **Stone Age integration (`ForgottenShoreSession.gd`):** `progression` service member; the milestone fact is recorded only after `request_upgrade_wall` succeeds (east or west wall), repeating the milestone never duplicates progression, era messages/HUD behavior unchanged.
+- **Save compatibility (`SaveManager.gd`):** new optional `progression_flags.progression_facts` array (schema stays v2, matching how `tree_states`/`hearth_boost_remaining` were introduced); strict validation rejects unknown/malformed fact IDs from saves; `migrate_payload` deterministically and idempotently backfills the stone-wall fact when `era_id == "stone_age"` (era is only reachable via that milestone) and never infers it for `iron_age` saves (the vessel-ready path can skip stone walls); malformed fact arrays are rejected, not repaired.
+- **Tests & CI:** new `tests/test_progression_foundation.gd` (137 checks, 6 suites) covering the 16 required Phase 1 scenarios; registered in `tests/run_all.sh` and `.github/workflows/godot-ci.yml` (new "Run Progression Foundation Tests (Phase 1)" step).
+- **Docs:** `PROGRESSION_FOUNDATION_DESIGN.md` status updated to implemented-for-Phase-1 with a new section 11 recording the shipped boundary (code-level fact registry instead of a second data file, no gameplay wiring of the catalog until an availability consumer exists, locked/available only); `PROGRESSION_IMPLEMENTATION_ROADMAP.md` Phase 1 marked implemented, Phases 2+ still planning only.
+
 ## [2026-11-15] Baseline v1.4.3 — Data-Driven Building Config, Transactional Load, Era Progression & Payment Feedback
 
 **Type:** Configuration Correctness, Save Robustness, UX Safety & New Progression Feature  

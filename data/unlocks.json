@@ -1,0 +1,12 @@
+{
+  "unlocks": [
+    {
+      "id": "stone_age_era",
+      "requires": {
+        "all_of": [
+          "forgotten_shore_first_stone_wall_tier_2"
+        ]
+      }
+    }
+  ]
+}

@@ -32,6 +32,7 @@ var pop_mgr: NPCPopulationManager = NPCPopulationManager.new()
 var builder_npc: NPCBuilderAgent = null
 var night_mgr: NightEncounterManager = NightEncounterManager.new()
 var era_mgr: EraProgressionManager = EraProgressionManager.new()
+var progression: ProgressionState = ProgressionState.new()
 var save_mgr: SaveManager = SaveManager.new()
 
 # Backward-compatible mirror for tests inspecting collected_node_ids directly
@@ -416,6 +417,11 @@ func execute_world_command(actor_id: String, command: StringName, target_id: Str
 				var era_note: String = ""
 				if era_mgr.notify_stone_wall_built():
 					era_note = " The Stone Age has begun!"
+				# Fondasi progresi Fase 1: milestone Stone Wall Tier 2 pertama
+				# dicatat sebagai fakta durables HANYA setelah transaksi upgrade
+				# berhasil (di atas). record_fact idempotent, jadi notifikasi
+				# milestone yang berulang tidak pernah menduplikasi progresi.
+				progression.record_fact(ProgressionState.FACT_FORGOTTEN_SHORE_FIRST_STONE_WALL_TIER_2)
 				feedback_message.emit("Upgraded to %s (%d HP, %d thorn dmg)!%s" % [
 					building_mgr.get_plot_title(resolved_target),
 					int(upg_plot.get("max_durability", BuildingManager.STONE_WALL_MAX_DURABILITY)),
@@ -1307,6 +1313,7 @@ func build_save_payload() -> Dictionary:
 			"portal_relic_looted": portal_relic_looted,
 			"shrine_offering_used_today": shrine_offering_used_today,
 			"era_id": era_mgr.to_save_id(),
+			"progression_facts": progression.to_save_array(),
 		},
 	}
 
@@ -1372,6 +1379,11 @@ func _apply_loaded_payload(data: Dictionary) -> bool:
 	portal_relic_looted = bool(flags.get("portal_relic_looted", false))
 	shrine_offering_used_today = bool(flags.get("shrine_offering_used_today", false))
 	era_mgr.apply_save_era(String(flags.get("era_id", "")))
+	# Fakta progresi dipulihkan secara transaksional: payload invalid gagal
+	# di sini tanpa mutasi parsial, sehingga rollback snapshot di pemanggil
+	# tetap menjamin sesi tidak pernah berada di kondisi setengah-terpakai.
+	if not progression.apply_save_state(flags.get("progression_facts", null)):
+		return false
 	resource_mgr.apply_save_state(flags.get("node_states", null), flags.get("collected_nodes", []))
 	tree_mgr.apply_save_state(flags.get("tree_states", null))
 
