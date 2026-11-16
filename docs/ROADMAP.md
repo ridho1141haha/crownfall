@@ -10,6 +10,17 @@ design observations for future islands and long-session play.
 
 ---
 
+## Progression foundation planning
+
+The staged progression architecture and implementation sequence are documented in:
+
+- [`PROGRESSION_FOUNDATION_DESIGN.md`](PROGRESSION_FOUNDATION_DESIGN.md) — progression facts, unlock evaluation, ownership boundaries, and save compatibility.
+- [`PROGRESSION_IMPLEMENTATION_ROADMAP.md`](PROGRESSION_IMPLEMENTATION_ROADMAP.md) — phased implementation, tests, acceptance criteria, and risk controls.
+
+These are planning documents only. They do not indicate that specialist recruitment, research, multiple islands, shrine/statue buffs, or mounts are implemented. The intended era correction (Shipwreck Stage 3 unlocks the voyage; Iron Age unlocks on Eldergrove) must be implemented and tested separately.
+
+---
+
 ## 1. Units & Defense
 
 - **Permanent Archer garrison:** Archers stationed on the Watchtower become a
