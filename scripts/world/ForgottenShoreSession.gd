@@ -27,6 +27,8 @@ var tree_mgr: ForestTreeManager = ForestTreeManager.new()
 var pause_menu: PauseMenu = null
 var _tree_sprites: Dictionary = {}
 var _tree_labels: Dictionary = {}
+var _structure_sprites: Dictionary = {}
+var _structure_labels: Dictionary = {}
 var hearth_sys: HearthSystem = HearthSystem.new()
 var pop_mgr: NPCPopulationManager = NPCPopulationManager.new()
 var builder_npc: NPCBuilderAgent = null
@@ -35,6 +37,8 @@ var era_mgr: EraProgressionManager = EraProgressionManager.new()
 var progression: ProgressionState = ProgressionState.new()
 var specialists: SpecialistDomain = SpecialistDomain.new()
 var research_mgr: ResearchManager = ResearchManager.new()
+var structures: StructureDomain = StructureDomain.new()
+var resource_access: ResourceAccessState = ResourceAccessState.new()
 var save_mgr: SaveManager = SaveManager.new()
 
 # Backward-compatible mirror for tests inspecting collected_node_ids directly
@@ -91,6 +95,7 @@ func _ready() -> void:
 	_sync_resource_prompts_from_data()
 	_setup_forest_visuals()
 	_setup_specialist_visuals()
+	_setup_structure_visuals()
 	_setup_pause_menu()
 	_wire_signals()
 	_consume_pending_load_if_requested()
@@ -193,6 +198,8 @@ func _wire_signals() -> void:
 	research_mgr.research_started.connect(_on_research_started)
 	research_mgr.research_completed.connect(_on_research_completed)
 	research_mgr.research_rejected.connect(_record_rejection)
+	structures.structure_activated.connect(_on_structure_activated)
+	structures.structure_action_rejected.connect(_record_rejection)
 	building_mgr.building_action_rejected.connect(_record_rejection)
 	building_mgr.wall_state_changed.connect(_on_wall_state_changed)
 	night_mgr.building_attacked.connect(_on_building_attacked)
@@ -336,7 +343,8 @@ func _resolve_target_for_actor(actor_x: float) -> Dictionary:
 		tree_mgr,
 		specialists,
 		progression,
-		research_mgr
+		research_mgr,
+		structures
 	)
 
 
@@ -351,16 +359,42 @@ func execute_world_command(actor_id: String, command: StringName, target_id: Str
 			if resolved_target.is_empty():
 				var n: Dictionary = resource_mgr.find_nearest_available(actor_x)
 				resolved_target = String(n.get("id", ""))
-			var res: Dictionary = resource_mgr.try_collect(resolved_target, actor_x, economy)
-			ok = bool(res.get("ok", false))
-			if ok:
-				var nd: Dictionary = res["node"] as Dictionary
-				_update_resource_node_visuals()
-				_play_sfx("sfx_coin")
-				_spawn_floating_text(float(nd["x"]), "+%d %s" % [int(nd["amount"]), String(nd["resource"]).capitalize()])
-				feedback_message.emit("Collected: %s" % String(nd["label"]))
+			# Phase 5 resource access: acquisition requires explicit access
+			# (derived from registered unlock conditions + durable facts, never
+			# from the ledger balance). Base resources are always accessible,
+			# so existing Forgotten Shore gameplay is unchanged; a future
+			# locked resource fails closed here BEFORE any ledger mutation.
+			var col_node: Dictionary = resource_mgr.get_node_def(resolved_target)
+			var col_resource: String = String(col_node.get("resource", ""))
+			if not col_node.is_empty() and not resource_access.is_accessible(col_resource, progression):
+				_record_rejection("%s is not accessible yet" % col_resource.capitalize())
+			elif not col_node.is_empty():
+				var res: Dictionary = resource_mgr.try_collect(resolved_target, actor_x, economy)
+				ok = bool(res.get("ok", false))
+				if ok:
+					var nd: Dictionary = res["node"] as Dictionary
+					_update_resource_node_visuals()
+					_play_sfx("sfx_coin")
+					# Phase 5 structure blessing: additive wood-gathering bonus
+					# derived on the fly from activation facts (no stored value
+					# can double-apply; loading a save re-derives it).
+					var gather_bonus: int = 0
+					if String(nd["resource"]) == &"wood":
+						gather_bonus = structures.get_effect_total(BuffCatalog.EFFECT_WOOD_GATHERING_BONUS, progression)
+					if gather_bonus > 0:
+						economy.try_add(&"wood", gather_bonus)
+						_spawn_floating_text(float(nd["x"]), "+%d Wood" % (int(nd["amount"]) + gather_bonus))
+						feedback_message.emit("Collected: %s (+%d blessing Wood)" % [String(nd["label"]), gather_bonus])
+					else:
+						_spawn_floating_text(float(nd["x"]), "+%d %s" % [int(nd["amount"]), String(nd["resource"]).capitalize()])
+						feedback_message.emit("Collected: %s" % String(nd["label"]))
+				else:
+					_record_rejection(String(res.get("reason", "Collection failed")))
 			else:
-				_record_rejection(String(res.get("reason", "Collection failed")))
+				var res_unknown: Dictionary = resource_mgr.try_collect(resolved_target, actor_x, economy)
+				ok = bool(res_unknown.get("ok", false))
+				if not ok:
+					_record_rejection(String(res_unknown.get("reason", "Collection failed")))
 
 		&"assign_tool":
 			if resolved_target.is_empty():
@@ -515,19 +549,29 @@ func execute_world_command(actor_id: String, command: StringName, target_id: Str
 			if resolved_target.is_empty():
 				var tr: Dictionary = tree_mgr.find_nearest_standing(actor_x)
 				resolved_target = String(tr.get("id", ""))
-			var cres: Dictionary = tree_mgr.try_chop(resolved_target, actor_x, economy)
-			ok = bool(cres.get("ok", false))
-			if ok:
-				var td: Dictionary = cres["tree"] as Dictionary
-				_update_forest_visuals()
-				_play_sfx("sfx_build")
-				if bool(cres.get("felled", false)):
-					_spawn_floating_text(float(td["x"]), "+%d Wood" % int(cres["wood_gained"]))
-					feedback_message.emit("Tree felled! +%d Wood" % int(cres["wood_gained"]))
-				else:
-					_spawn_floating_text(float(td["x"]), "Chop (%d/%d)" % [int(cres["hp_left"]), int(td["max_hp"])])
+			# Phase 5 resource access gate for the felling reward (see collect).
+			if not resource_access.is_accessible("wood", progression):
+				_record_rejection("Wood is not accessible yet")
 			else:
-				_record_rejection(String(cres.get("reason", "Cannot chop tree")))
+				var cres: Dictionary = tree_mgr.try_chop(resolved_target, actor_x, economy)
+				ok = bool(cres.get("ok", false))
+				if ok:
+					var td: Dictionary = cres["tree"] as Dictionary
+					_update_forest_visuals()
+					_play_sfx("sfx_build")
+					if bool(cres.get("felled", false)):
+						var fell_bonus: int = structures.get_effect_total(BuffCatalog.EFFECT_WOOD_GATHERING_BONUS, progression)
+						if fell_bonus > 0:
+							economy.try_add(&"wood", fell_bonus)
+							_spawn_floating_text(float(td["x"]), "+%d Wood" % (int(cres["wood_gained"]) + fell_bonus))
+							feedback_message.emit("Tree felled! +%d Wood (+%d blessing Wood)" % [int(cres["wood_gained"]), fell_bonus])
+						else:
+							_spawn_floating_text(float(td["x"]), "+%d Wood" % int(cres["wood_gained"]))
+							feedback_message.emit("Tree felled! +%d Wood" % int(cres["wood_gained"]))
+					else:
+						_spawn_floating_text(float(td["x"]), "Chop (%d/%d)" % [int(cres["hp_left"]), int(td["max_hp"])])
+				else:
+					_record_rejection(String(cres.get("reason", "Cannot chop tree")))
 
 		&"discover_specialist":
 			ok = _on_discover_specialist(actor_x, resolved_target)
@@ -537,6 +581,9 @@ func execute_world_command(actor_id: String, command: StringName, target_id: Str
 
 		&"start_research":
 			ok = _on_start_research(actor_x, resolved_target)
+
+		&"activate_structure":
+			ok = _on_activate_structure(actor_x, resolved_target)
 
 		&"save_game":
 			ok = _on_manual_save()
@@ -693,6 +740,47 @@ func _on_player_loot_portal_relic() -> bool:
 	return false
 
 
+## Phase 5 structure activation command. An empty target resolves the nearest
+## activatable (AVAILABLE lifecycle) active-island structure in range
+## (deterministic sorted-ID order); the authoritative transaction lives in
+## StructureDomain: validate -> atomic EconomyLedger spend -> record the
+## durable activation fact -> signal. A repeated activation is rejected
+## BEFORE any spend, so it can never deduct resources twice.
+func _on_activate_structure(actor_x: float, structure_id: String) -> bool:
+	var st_id: String = structure_id
+	if st_id.is_empty():
+		var best_id: String = ""
+		var best_d: float = StructureDomain.INTERACT_RANGE + 0.001
+		for cand: String in structures.get_structure_ids():
+			var cdef: Dictionary = structures.get_structure_definition(cand)
+			if String(cdef.get("island_id", "")) != SpecialistDomain.ACTIVE_ISLAND_ID or not cdef.has("world_x"):
+				continue
+			var cd: float = absf(actor_x - float(cdef["world_x"]))
+			if cd <= StructureDomain.INTERACT_RANGE and cd < best_d and structures.get_lifecycle_state(cand, progression) == StructureDomain.STATE_AVAILABLE:
+				best_id = cand
+				best_d = cd
+		st_id = best_id
+	if st_id.is_empty():
+		_record_rejection("No shrine or structure to activate nearby")
+		return false
+	if not structures.try_activate(actor_x, st_id, progression, economy):
+		return false
+	var def: Dictionary = structures.get_structure_definition(st_id)
+	_play_sfx("sfx_build")
+	_spawn_payment_fly(structures.get_activation_cost(st_id), actor_x, float(def["world_x"]))
+	_spawn_floating_text(float(def["world_x"]), "AWAKENED!", Color(0.55, 0.92, 0.85, 1.0))
+	var blessings: Array[String] = structures.get_structure_buff_summaries(st_id)
+	var blessing_txt: String = ""
+	if not blessings.is_empty():
+		blessing_txt = " Blessing: %s." % ", ".join(blessings)
+	feedback_message.emit("%s activated!%s" % [structures.get_structure_display_name(st_id), blessing_txt])
+	return true
+
+
+func _on_structure_activated(structure_id: String) -> void:
+	_update_structure_visuals()
+
+
 ## Phase 3 specialist discovery command. An empty target resolves the nearest
 ## active-island specialist in range (deterministic sorted-ID order); the
 ## authoritative transaction lives in SpecialistDomain.
@@ -832,6 +920,54 @@ func _setup_specialist_visuals() -> void:
 		hut_lbl.size = Vector2(140, 24)
 		hut_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		camp.add_child(hut_lbl)
+
+
+## Programmatic structure-landmark visuals (same pattern as the forest and
+## specialist visuals): one dormant/activated 2-frame marker sprite plus one
+## interaction label per active-island structure with a defined world position.
+func _setup_structure_visuals() -> void:
+	var world_objs: Node = get_node_or_null("WorldObjects")
+	if world_objs == null or world_objs.get_node_or_null("StructureLandmarks") != null:
+		return
+	var landmarks: Node2D = Node2D.new()
+	landmarks.name = "StructureLandmarks"
+	world_objs.add_child(landmarks)
+	var tex_path: String = "res://assets/environment/landmarks/env_shrine_structure.png"
+	var structure_tex: Texture2D = load(tex_path) as Texture2D if ResourceLoader.exists(tex_path) else null
+	for st_id: String in structures.get_structure_ids():
+		var st_def: Dictionary = structures.get_structure_definition(st_id)
+		if String(st_def.get("island_id", "")) != SpecialistDomain.ACTIVE_ISLAND_ID or not st_def.has("world_x"):
+			continue
+		var spr: Sprite2D = Sprite2D.new()
+		spr.name = "StSprite_%s" % st_id
+		spr.position = Vector2(float(st_def["world_x"]), 0.0)
+		spr.centered = false
+		spr.offset = Vector2(-24, -48)
+		spr.hframes = 2
+		spr.frame = 0
+		spr.z_index = 1
+		if structure_tex != null:
+			spr.texture = structure_tex
+		landmarks.add_child(spr)
+		_structure_sprites[st_id] = spr
+		var lbl: Label = Label.new()
+		lbl.name = "StLabel_%s" % st_id
+		lbl.visible = false
+		lbl.position = Vector2(float(st_def["world_x"]) - 64.0, -70.0)
+		lbl.size = Vector2(128, 24)
+		lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		landmarks.add_child(lbl)
+		_structure_labels[st_id] = lbl
+	_update_structure_visuals()
+
+
+## Presentation only: the marker frame reflects the durable activation fact
+## (dormant frame 0 / awakened glowing frame 1). Never mutates gameplay state.
+func _update_structure_visuals() -> void:
+	for st_id: String in structures.get_structure_ids():
+		var spr: Sprite2D = _structure_sprites.get(st_id, null) as Sprite2D
+		if spr != null:
+			spr.frame = 1 if structures.is_activated(st_id, progression) else 0
 
 
 func _on_manual_save() -> bool:
@@ -1307,6 +1443,16 @@ func _update_proximity_prompts() -> void:
 				hut_lbl2.text = hut_title
 
 
+	# Phase 5 structure prompts: show only the resolved structure's prompt.
+	for st_id2: String in structures.get_structure_ids():
+		var st_lbl: Label = _structure_labels.get(st_id2, null) as Label
+		if st_lbl != null:
+			var is_st: bool = (active_kind == "structure" and active_id == st_id2)
+			st_lbl.visible = is_st
+			st_lbl.modulate = highlight_col if is_st else normal_col
+			st_lbl.text = String(_active_target.get("prompt_text", "")) if is_st else ""
+
+
 func _sync_dynamic_actors() -> void:
 	if town_center_sprite != null:
 		town_center_sprite.frame = int(floorf(_anim_clock * 6.0)) % 4
@@ -1355,6 +1501,9 @@ func _sync_dynamic_actors() -> void:
 
 	if slice_hud != null and slice_hud.has_method("set_research_text"):
 		slice_hud.call("set_research_text", research_mgr.get_hud_text(progression))
+
+	if slice_hud != null and slice_hud.has_method("set_structures_text"):
+		slice_hud.call("set_structures_text", structures.get_hud_text(progression))
 
 	if building_mgr.durability < _prev_wall_hp and _prev_wall_hp > 0:
 		_play_sfx("sfx_hit")
@@ -1462,6 +1611,7 @@ func _sync_all_presentations() -> void:
 	_sync_landmark_visuals()
 	_update_resource_node_visuals()
 	_update_forest_visuals()
+	_update_structure_visuals()
 	_sync_dynamic_actors()
 	if slice_hud != null and slice_hud.has_method("_refresh_clock"):
 		slice_hud.call("_refresh_clock")

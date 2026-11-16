@@ -76,5 +76,6 @@ func get_active_buff_summaries(activated_structure_ids: Array[String]) -> Array[
 		var def: Dictionary = catalog.get_buff(bid)
 		if not activated.has(String(def.get("source_structure", ""))):
 			continue
-		summaries.append("%s (+%d)" % [bid, int(def.get("magnitude", 0))])
+		var label: String = String(def.get("display_name", bid))
+		summaries.append("%s (+%d)" % [label, int(def.get("magnitude", 0))])
 	return summaries

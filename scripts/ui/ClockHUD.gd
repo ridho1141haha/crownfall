@@ -4,6 +4,7 @@ extends CanvasLayer
 
 var _session: ForgottenShoreSession
 var research_label: Label = null
+var structures_label: Label = null
 
 @onready var status_label: Label = $MarginContainer/VBoxContainer/StatusLabel as Label
 @onready var resources_label: Label = $MarginContainer/VBoxContainer/ResourcesLabel as Label
@@ -36,6 +37,25 @@ func set_research_text(txt: String) -> void:
 	_ensure_research_label()
 	if research_label != null:
 		research_label.text = txt
+
+
+## Phase 5: passive blessings line (presentation only — the authoritative
+## state lives in StructureDomain / ProgressionState facts).
+func _ensure_structures_label() -> void:
+	if structures_label != null:
+		return
+	var vbox: Node = get_node_or_null("MarginContainer/VBoxContainer")
+	if vbox == null:
+		return
+	structures_label = Label.new()
+	structures_label.modulate = Color(0.62, 0.92, 0.85, 1.0)
+	vbox.add_child(structures_label)
+
+
+func set_structures_text(txt: String) -> void:
+	_ensure_structures_label()
+	if structures_label != null:
+		structures_label.text = txt
 
 
 func show_victory_banner(title: String, subtitle: String) -> void:

@@ -16,7 +16,8 @@ static func resolve_nearest(
 	tree_mgr: ForestTreeManager = null,
 	specialist_domain: SpecialistDomain = null,
 	progression: ProgressionState = null,
-	research_mgr: ResearchManager = null
+	research_mgr: ResearchManager = null,
+	structure_domain: StructureDomain = null
 ) -> Dictionary:
 	var best: Dictionary = {
 		"has_target": false,
@@ -195,6 +196,30 @@ static func resolve_nearest(
 						"distance": d_sp,
 						"provider_id": sp_id,
 					}
+
+	# 5a-bis. Structures (Phase 5): activate an available Shrine / Statue / Temple
+	# through the authoritative StructureDomain. Locked and already-activated
+	# structures offer no interaction target (fail closed, idempotent activation).
+	if structure_domain != null and progression != null:
+		for st_id: String in structure_domain.get_structure_ids():
+			var st_def: Dictionary = structure_domain.get_structure_definition(st_id)
+			if String(st_def.get("island_id", "")) != SpecialistDomain.ACTIVE_ISLAND_ID:
+				continue
+			if not st_def.has("world_x"):
+				continue
+			var d_st: float = absf(actor_x - float(st_def["world_x"]))
+			if d_st > StructureDomain.INTERACT_RANGE or d_st >= float(best["distance"]):
+				continue
+			if structure_domain.get_lifecycle_state(st_id, progression) == StructureDomain.STATE_AVAILABLE:
+				best = {
+					"has_target": true,
+					"kind": "structure",
+					"target_id": st_id,
+					"primary_command": &"activate_structure",
+					"upgrade_command": &"",
+					"prompt_text": "[E] Activate %s (%s)" % [structure_domain.get_structure_display_name(st_id), BuildingManager.format_cost_text(structure_domain.get_activation_cost(st_id))],
+					"distance": d_st,
+				}
 
 	# 5b. Forest Trees ([E] Chop)
 	if tree_mgr != null:

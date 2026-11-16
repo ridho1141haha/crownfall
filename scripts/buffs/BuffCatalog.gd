@@ -43,6 +43,7 @@ const VALID_BUFF_KEYS: Array[String] = [
 	"stacking",
 	"duration_sec",
 	"source_structure",
+	"display_name",
 ]
 const REQUIRED_BUFF_KEYS: Array[String] = [
 	"id",
@@ -52,6 +53,7 @@ const REQUIRED_BUFF_KEYS: Array[String] = [
 	"duration_sec",
 	"source_structure",
 ]
+const OPTIONAL_BUFF_KEYS: Array[String] = ["display_name"]
 
 ## Effect type registry. Every registered type MUST have a real gameplay
 ## consumer implemented in this build (same rule as TechnologyCatalog's
@@ -170,6 +172,22 @@ static func validate_buffs_payload(data: Variant, known_structure_ids: Array[Str
 			errors.append("'%s' uses duration_sec %s, but timed buffs are not implemented yet; only permanent buffs (duration_sec 0) are supported" % [bid, str(dur_val)])
 			return {}
 
+		var normalized: Dictionary = {
+			"id": bid,
+			"effect_type": effect_type,
+			"magnitude": int(roundf(float(mag_val))),
+			"stacking": stacking,
+			"duration_sec": duration,
+			"source_structure": "",
+		}
+
+		if def.has("display_name"):
+			var dn_val: Variant = def["display_name"]
+			if typeof(dn_val) != TYPE_STRING or String(dn_val).strip_edges().is_empty():
+				errors.append("'%s' display_name must be a non-empty string" % bid)
+				return {}
+			normalized["display_name"] = String(dn_val)
+
 		var source_val: Variant = def["source_structure"]
 		if not ProgressionState.is_valid_stable_id(source_val):
 			errors.append("'%s' has invalid or malformed source_structure: %s" % [bid, str(source_val)])
@@ -179,14 +197,8 @@ static func validate_buffs_payload(data: Variant, known_structure_ids: Array[Str
 			errors.append("'%s' references unknown source_structure '%s'" % [bid, source_id])
 			return {}
 
-		validated[bid] = {
-			"id": bid,
-			"effect_type": effect_type,
-			"magnitude": int(roundf(float(mag_val))),
-			"stacking": stacking,
-			"duration_sec": duration,
-			"source_structure": source_id,
-		}
+		normalized["source_structure"] = source_id
+		validated[bid] = normalized
 	return validated
 
 

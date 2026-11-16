@@ -107,6 +107,12 @@ func get_effect_total(effect_type: String, progression: ProgressionState) -> int
 	return buff_domain.get_effect_total(effect_type, get_activated_structure_ids(progression))
 
 
+## Display-ready blessing summaries granted by one structure (deep-derived
+## from the BuffCatalog; presentation only).
+func get_structure_buff_summaries(structure_id: String) -> Array[String]:
+	return buff_domain.get_active_buff_summaries([structure_id])
+
+
 ## Display summary of active structure blessings for the HUD (presentation
 ## only — the HUD never owns or mutates this state). Empty when nothing is
 ## activated.
