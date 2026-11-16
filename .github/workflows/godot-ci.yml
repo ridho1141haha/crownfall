@@ -106,3 +106,10 @@ jobs:
           godot --headless --script res://tests/test_structure_buff_phase5.gd 2>&1 | tee /tmp/godot_phase5.log
           ! grep -E "(SCRIPT ERROR:|Parser Error:|TEST FAILURE:)" /tmp/godot_phase5.log
           grep -q "PASS: All .* Phase 5 Structure & Buff Foundation" /tmp/godot_phase5.log
+
+      - name: Run Automated Gameplay Scenarios (Headless, 10 scenarios)
+        run: |
+          set -o pipefail
+          godot --headless --script res://tests/gameplay_scenarios.gd 2>&1 | tee /tmp/godot_gameplay.log
+          ! grep -E "(SCRIPT ERROR:|Parser Error:|TEST FAILURE:)" /tmp/godot_gameplay.log
+          grep -q "PASS: All 10 gameplay scenarios passed" /tmp/godot_gameplay.log

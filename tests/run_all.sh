@@ -28,6 +28,7 @@ run_godot "Phase 2 era correction" "--script res://tests/test_progression_phase2
 run_godot "Specialist domain" "--script res://tests/test_specialist_domain.gd" "PASS: All .* Specialist Domain Foundation"
 run_godot "Research foundation" "--script res://tests/test_research_foundation.gd" "PASS: All .* Research System Foundation"
 run_godot "Phase 5 structures & buffs" "--script res://tests/test_structure_buff_phase5.gd" "PASS: All .* Phase 5 Structure & Buff Foundation"
+run_godot "Gameplay scenarios (headless)" "--script res://tests/gameplay_scenarios.gd" "PASS: All 10 gameplay scenarios"
 if [ "${failed}" -ne 0 ]; then
   echo "SOME SUITES FAILED (logs in ${LOG_DIR})"
   exit 1
