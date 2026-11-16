@@ -285,23 +285,41 @@ behavior on `feat/progression-phase-2-era-correction`:
   4. Backfilled fact arrays are canonicalized (sorted) to match the
      `to_save_array()` contract; invalid arrays are never repaired or sorted —
      they are rejected by `validate_payload`, never partially applied.
-  Malformed progression data (unknown IDs, non-arrays, duplicates) keeps the
-  Phase 1 behavior: the whole payload is rejected safely. An explicitly present
-  `progression_facts: null` is malformed, not missing: it is never backfilled or
-  repaired — only a genuinely absent field (a legacy save without the key)
-  triggers the deterministic backfill, which the backfill helper distinguishes
-  via an explicit `Dictionary.has()` presence check (a plain `get()` cannot tell
-  an absent field from a stored null) — and the payload is rejected wholesale.
-  An invalid fact array containing `eldergrove_reached` does NOT count as
-  evidence; the era is still downgraded and the payload is rejected wholesale.
+  Phase 2.2 hardening: `migrate_payload` gates the whole progression migration
+  section (era inference, Iron Age correction, vessel/Stone Age backfills,
+  canonicalization) on an explicit `Dictionary.has("progression_facts")`
+  presence check — a plain `get()` cannot tell an absent field from a stored
+  null — so exactly three cases exist:
+  1. Missing `progression_facts` (a legacy save without the key): the valid
+     legacy migration path — era inference, conservative Iron Age correction,
+     and the deterministic backfills run exactly as before.
+  2. Present and a valid fact array: normal migration — Eldergrove evidence
+     retains Iron Age, backfills are idempotent, and the array is
+     canonically sorted.
+  3. Present but malformed (`null`, string, number, dictionary, unknown IDs,
+     duplicates): the whole progression migration is skipped. `era_id` is
+     neither inferred nor corrected, no vessel or Stone Age fact is backfilled,
+     and the malformed value is left untouched (never canonicalized, replaced,
+     or deleted); `validate_payload` rejects the payload wholesale. Migration
+     never partially mutates progression-related fields before rejection, the
+     caller's input dictionary is never modified, and no live gameplay state
+     changes.
+  An invalid fact array containing `eldergrove_reached` therefore does NOT
+  count as evidence and, since Phase 2.2, no longer triggers the era downgrade
+  either: the payload is simply rejected untouched (Phase 2 rejected it after
+  the downgrade mutation; Phase 2.2 rejects it without any mutation).
 
-Acceptance evidence: `tests/test_progression_phase2_era_correction.gd` (133
-checks across 7 suites) covers fresh-start era, the wall/shipwreck command paths
+Acceptance evidence: `tests/test_progression_phase2_era_correction.gd` (162
+checks across 8 suites) covers fresh-start era, the wall/shipwreck command paths
 with exact balance regression, the fail-closed Iron Age gate, the intended
 Eldergrove unlock path end-to-end (including an `iron_age` save round-trip),
 all legacy migration branches with determinism/idempotency proof, malformed-data
 rejection (including the absent-field vs explicitly-present-null distinction),
-and data-contract regression guards. Phase 1's
-`test_progression_foundation.gd` (139 checks) stays green with its legacy
-iron-age migration assertions updated to the Phase 2 policy, and the full
-headless suite (`tests/run_all.sh`) passes.
+and data-contract regression guards. The Phase 2.2 suite additionally proves
+the three-case gate: explicit null, malformed strings/dictionaries, and unknown
+or duplicate fact IDs skip the whole progression migration (era and facts
+untouched, no backfills) and are rejected wholesale with the caller's input
+dictionary unchanged, while absent-field legacy migration and valid-array
+migration with deterministic sorting keep their existing idempotent behavior.
+Phase 1's `test_progression_foundation.gd` (139 checks) stays green, and the
+full headless suite (`tests/run_all.sh`) passes.

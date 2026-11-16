@@ -9,6 +9,21 @@ This changelog records repository changes that actually occurred. Planned featur
 
 ---
 
+## [2026-11-16] Progression Phase 2.2 — Reject Malformed Progression Data Before Migration
+
+**Type:** Save Migration Correctness (narrow ordering fix on top of Phase 2.1; no gameplay, balance, or schema changes)
+**Engine Verified:** `Godot 4.7.2.stable` (local headless run of `tests/run_all.sh`, exit 0 after the code changes and again after the documentation changes: static verifier `185` checks, world clock `5` checks, P0 unit `144` checks across `17` suites, M8 integration `38` checks, P1 experimental `14` checks, Phase 1 progression `139` checks across `6` suites, Phase 2 suite `162` checks across `8` suites — all green)
+
+### Summary
+Phase 2.1 made the fact-backfill helper itself strict, but the Phase 2 migration section could still partially mutate progression-related fields before `validate_payload` rejected an explicitly malformed `progression_facts` value: with `era_id = "iron_age"` plus an explicit `"progression_facts": null` (or any other malformed value such as a string, number, dictionary, or invalid array), the conservative legacy Iron Age correction still ran — its evidence check saw no valid Eldergrove array and rewrote `era_id` — so the migrated copy was already altered when the payload was rejected. `migrate_payload` now gates the whole progression migration section (era inference, Iron Age correction, vessel/Stone Age backfills, canonicalization) on an explicit `Dictionary.has("progression_facts")` presence check: a genuinely absent field keeps the valid legacy migration path; a present valid array keeps normal migration and canonicalization; a present-but-malformed value leaves the payload's progression data completely untouched (`era_id` unchanged, no backfills, no sorting, value never replaced or deleted) and is rejected wholesale by strict validation. The deep-copy behavior is preserved, the caller's input dictionary is never modified, and no live gameplay state changes on the rejection path. Save schema stays version 2.
+
+### Key Changes
+- **`scripts/save/SaveManager.gd`:** `migrate_payload` skips the entire progression migration section when `progression_facts` is explicitly present but not a valid fact array (`Dictionary.has()` guard plus `ProgressionState.is_valid_fact_array()`), leaving `era_id` and the malformed value untouched for `validate_payload` to reject. No other migration, gameplay, or schema behavior changed.
+- **`tests/test_progression_phase2_era_correction.gd`:** new suite "Phase 2.2 Malformed Facts Migration Isolation" (29 checks) proving the required cases A-G: explicit null on a legacy `iron_age` + Stage 3 save keeps `era_id` and the explicit null untouched, is rejected, leaves the input dictionary unchanged, and fails the real file-load pipeline; malformed string and dictionary values with Iron Age + Stage 3 evidence are rejected untouched; unknown and duplicate fact IDs receive no era correction, backfill, deduplication, or sorting and are rejected; the absent-field legacy path (era correction + vessel + stone backfills) and the valid-array path (Eldergrove evidence retains Iron Age, deterministic sorting) keep their existing behavior; migration stays deterministic and idempotent for all three paths; rejected malformed values never partially mutate live progression state. Every case checks both the migrated copy and the original input dictionary. The existing mixed-case assertion (invalid array containing `eldergrove_reached`) was updated from "era is still downgraded" to the new contract "era stays untouched" — the payload is still rejected wholesale. Verified the new checks fail against the pre-fix implementation. Suite count 7 -> 8, checks 133 -> 162.
+- **Docs:** `PROGRESSION_FOUNDATION_DESIGN.md` section 12 now documents the three-case distinction (missing field = valid legacy migration; present valid array = normal migration and canonicalization; present malformed value = progression migration skipped, strict validation rejects) and the updated suite counts.
+
+---
+
 ## [2026-11-16] Progression Phase 2.1 — Strict Save Migration Validation Fix
 
 **Type:** Save Migration Correctness (small review fix on top of Phase 2; no gameplay, balance, or schema changes)

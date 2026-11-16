@@ -8,6 +8,10 @@ extends SceneTree
 ## round-trips, unlock-definition data contracts, and regression coverage for
 ## wall upgrade / shipwreck / economy behavior, plus strict malformed
 ## progression_facts field rejection (absent field vs explicitly present null).
+## Phase 2.2 additionally proves that a present-but-malformed value skips the
+## whole progression migration section (no era inference/correction, no
+## backfills, no canonicalization) and is rejected wholesale, while the
+## genuinely-absent field and valid-array paths keep their existing behavior.
 
 const FACT: String = "forgotten_shore_first_stone_wall_tier_2"
 const VESSEL_FACT: String = "forgotten_shore_vessel_ready"
@@ -16,6 +20,7 @@ const ELDERGROVE_FACT: String = "eldergrove_reached"
 const SAVE_LEGACY_IRON_WALL: String = "user://test_phase2_legacy_iron_wall.json"
 const SAVE_MALFORMED_IRON: String = "user://test_phase2_malformed_iron.json"
 const SAVE_MALFORMED_NULL_FACTS: String = "user://test_phase2_malformed_null_facts.json"
+const SAVE_MALFORMED_NULL_IRON: String = "user://test_phase2_malformed_null_iron.json"
 const SAVE_ROUNDTRIP_PATH: String = "user://test_phase2_roundtrip.json"
 const SAVE_IRON_ROUNDTRIP_PATH: String = "user://test_phase2_iron_roundtrip.json"
 
@@ -400,13 +405,15 @@ func _test_legacy_migration_policy() -> bool:
 	if not _check(not sm.validate_payload(SaveManager.migrate_payload(non_array)), "Non-array progression_facts value is rejected"):
 		return false
 
-	# Eldergrove claim inside an otherwise invalid array: the evidence check
-	# requires the WHOLE array to be valid, so the era is still downgraded and
-	# the payload is rejected wholesale (no partial grant is possible).
+	# Eldergrove claim inside an otherwise invalid array: since Phase 2.2 the
+	# whole progression migration is skipped for a present-but-invalid fact
+	# array, so era_id is NOT corrected, the malformed array is left untouched
+	# (no vessel backfill despite Stage 3), and the payload is still rejected
+	# wholesale (no partial grant, no partial migration mutation).
 	var mixed: Dictionary = _legacy_payload("stone_wall", "iron_age", 3, [ELDERGROVE_FACT, "BAD ID"], "ACTIVE")
 	var mixed_mig: Dictionary = SaveManager.migrate_payload(mixed) as Dictionary
 	var mixed_pf: Dictionary = mixed_mig["progression_flags"] as Dictionary
-	if not _check(String(mixed_pf.get("era_id", "")) == "stone_age" and not sm.validate_payload(mixed_mig), "Invalid fact array never counts as Eldergrove evidence; payload is rejected wholesale"):
+	if not _check(String(mixed_pf.get("era_id", "")) == "iron_age" and mixed_pf.get("progression_facts", []) == [ELDERGROVE_FACT, "BAD ID"] and not sm.validate_payload(mixed_mig), "Invalid fact array never counts as Eldergrove evidence; era stays untouched and payload is rejected wholesale"):
 		return false
 
 	print("PASS: Phase 2 Conservative Legacy iron_age Migration (Deterministic, Idempotent, Fail-Safe)")
@@ -590,17 +597,150 @@ func _test_strict_malformed_facts_field_rejection() -> bool:
 	return true
 
 
+# ---------------------------------------------------------------- Suite 8 ---
+## Phase 2.2 regression: when progression_facts is EXPLICITLY present but
+## malformed, migrate_payload must skip the whole progression migration section
+## (no era inference or legacy Iron Age correction, no vessel/Stone Age
+## backfills, no canonicalization) and let validate_payload reject the payload
+## wholesale — while the genuinely-absent-field and valid-array paths keep
+## their existing deterministic migration behavior. Every case checks both the
+## migrated copy and the original input dictionary.
+func _test_malformed_facts_skip_progression_migration() -> bool:
+	var sm: SaveManager = SaveManager.new()
+
+	# Case A — explicit `progression_facts: null` on a legacy iron_age save with
+	# Stage 3 evidence: no era correction, no vessel backfill, value stays
+	# explicitly present and null; validation rejects; input dict untouched.
+	var null_iron: Dictionary = _legacy_payload_with_explicit_facts("stone_wall", "iron_age", 3, null, "ISLAND_CLEARED")
+	if not _check((null_iron["progression_flags"] as Dictionary).has("progression_facts") and (null_iron["progression_flags"] as Dictionary)["progression_facts"] == null, "Case A fixture sanity: fact field is explicitly present as null on a legacy iron_age save"):
+		return false
+	var null_iron_mig: Dictionary = SaveManager.migrate_payload(null_iron) as Dictionary
+	var null_iron_pf: Dictionary = null_iron_mig["progression_flags"] as Dictionary
+	if not _check(String(null_iron_pf.get("era_id", "")) == "iron_age", "Case A: migration does not change era_id (no legacy Iron Age correction for an explicit null)"):
+		return false
+	if not _check(null_iron_pf.has("progression_facts") and null_iron_pf["progression_facts"] == null, "Case A: progression_facts stays explicitly present and null (no vessel-ready or Stone Age backfill)"):
+		return false
+	if not _check(not sm.validate_payload(null_iron_mig), "Case A: migrated payload is rejected by strict validation"):
+		return false
+	var null_iron_orig_pf: Dictionary = null_iron["progression_flags"] as Dictionary
+	if not _check(String(null_iron_orig_pf.get("era_id", "")) == "iron_age" and null_iron_orig_pf.has("progression_facts") and null_iron_orig_pf["progression_facts"] == null and int(null_iron_orig_pf.get("shipwreck_stage", 0)) == 3, "Case A: original input dictionary remains unchanged (era_id, explicit null and Stage 3 intact)"):
+		return false
+	var nif: FileAccess = FileAccess.open(SAVE_MALFORMED_NULL_IRON, FileAccess.WRITE)
+	nif.store_string(JSON.stringify(null_iron))
+	nif.close()
+	if not _check(not bool(sm.load_state(SAVE_MALFORMED_NULL_IRON).get("ok", false)), "Case A: iron_age save file with explicit null facts fails to load safely through the real pipeline"):
+		return false
+
+	# Case B — explicit malformed string with legacy Iron Age + Stage 3 evidence:
+	# era untouched, value untouched, rejected, input dict untouched.
+	var str_iron: Dictionary = _legacy_payload_with_explicit_facts("stone_wall", "iron_age", 3, "corrupted", "ACTIVE")
+	var str_iron_mig: Dictionary = SaveManager.migrate_payload(str_iron) as Dictionary
+	var str_iron_pf: Dictionary = str_iron_mig["progression_flags"] as Dictionary
+	if not _check(String(str_iron_pf.get("era_id", "")) == "iron_age" and typeof(str_iron_pf["progression_facts"]) == TYPE_STRING and String(str_iron_pf["progression_facts"]) == "corrupted" and not sm.validate_payload(str_iron_mig), "Case B: malformed string facts skips era correction, stays untouched, payload rejected"):
+		return false
+	var str_iron_orig_pf: Dictionary = str_iron["progression_flags"] as Dictionary
+	if not _check(String(str_iron_orig_pf.get("era_id", "")) == "iron_age" and String(str_iron_orig_pf["progression_facts"]) == "corrupted", "Case B: original input dictionary remains unchanged"):
+		return false
+
+	# Case C — explicit malformed dictionary with legacy Iron Age + Stage 3
+	# evidence: era untouched, value untouched, rejected, input dict untouched.
+	var dict_iron: Dictionary = _legacy_payload_with_explicit_facts("stone_wall", "iron_age", 3, {"facts": "not_an_array"}, "ACTIVE")
+	var dict_iron_mig: Dictionary = SaveManager.migrate_payload(dict_iron) as Dictionary
+	var dict_iron_pf: Dictionary = dict_iron_mig["progression_flags"] as Dictionary
+	if not _check(String(dict_iron_pf.get("era_id", "")) == "iron_age" and typeof(dict_iron_pf["progression_facts"]) == TYPE_DICTIONARY and String((dict_iron_pf["progression_facts"] as Dictionary).get("facts", "")) == "not_an_array" and not sm.validate_payload(dict_iron_mig), "Case C: malformed dictionary facts skips era correction, stays untouched, payload rejected"):
+		return false
+	var dict_iron_orig_pf: Dictionary = dict_iron["progression_flags"] as Dictionary
+	if not _check(String(dict_iron_orig_pf.get("era_id", "")) == "iron_age" and String((dict_iron_orig_pf["progression_facts"] as Dictionary).get("facts", "")) == "not_an_array", "Case C: original input dictionary remains unchanged"):
+		return false
+
+	# Case D — invalid fact arrays (unknown ID / duplicate IDs) with legacy Iron
+	# Age + Stage 3 evidence: no correction, no backfill, no deduplication, no
+	# reordering; rejected wholesale, input dict untouched.
+	var unknown_iron: Dictionary = _legacy_payload_with_explicit_facts("stone_wall", "iron_age", 3, ["scientist_recruited"], "ACTIVE")
+	var unknown_iron_mig: Dictionary = SaveManager.migrate_payload(unknown_iron) as Dictionary
+	var unknown_iron_pf: Dictionary = unknown_iron_mig["progression_flags"] as Dictionary
+	if not _check(String(unknown_iron_pf.get("era_id", "")) == "iron_age" and unknown_iron_pf.get("progression_facts", []) == ["scientist_recruited"] and not sm.validate_payload(unknown_iron_mig), "Case D: unknown fact ID receives no era correction or vessel backfill; payload rejected"):
+		return false
+	if not _check(String((unknown_iron["progression_flags"] as Dictionary).get("era_id", "")) == "iron_age", "Case D: original input dictionary remains unchanged (unknown ID case)"):
+		return false
+	var dup_iron: Dictionary = _legacy_payload_with_explicit_facts("stone_wall", "iron_age", 3, [FACT, FACT], "ACTIVE")
+	var dup_iron_mig: Dictionary = SaveManager.migrate_payload(dup_iron) as Dictionary
+	var dup_iron_pf: Dictionary = dup_iron_mig["progression_flags"] as Dictionary
+	if not _check(String(dup_iron_pf.get("era_id", "")) == "iron_age" and dup_iron_pf.get("progression_facts", []) == [FACT, FACT] and not sm.validate_payload(dup_iron_mig), "Case D: duplicate fact IDs are not deduplicated, sorted, or corrected; payload rejected"):
+		return false
+	if not _check(String((dup_iron["progression_flags"] as Dictionary).get("era_id", "")) == "iron_age", "Case D: original input dictionary remains unchanged (duplicate ID case)"):
+		return false
+
+	# Case E — the fact field genuinely ABSENT on a valid legacy save: the
+	# existing deterministic migration keeps working unchanged (conservative era
+	# correction from real evidence, Stage-3 vessel backfill, stone-fact
+	# backfill when the corrected era is stone_age).
+	var legacy_iron_mig: Dictionary = SaveManager.migrate_payload(_legacy_payload("stone_wall", "iron_age", 3, null, "ISLAND_CLEARED").duplicate(true)) as Dictionary
+	var legacy_iron_pf: Dictionary = legacy_iron_mig["progression_flags"] as Dictionary
+	if not _check(String(legacy_iron_pf.get("era_id", "")) == "stone_age" and legacy_iron_pf.get("progression_facts", []) == [FACT, VESSEL_FACT] and sm.validate_payload(legacy_iron_mig), "Case E: absent fact field still migrates legacy iron_age to stone_age with stone + vessel facts backfilled"):
+		return false
+	var legacy_wood_mig: Dictionary = SaveManager.migrate_payload(_legacy_payload("wooden_wall", "iron_age", 3, null, "ISLAND_CLEARED").duplicate(true)) as Dictionary
+	var legacy_wood_pf: Dictionary = legacy_wood_mig["progression_flags"] as Dictionary
+	if not _check(String(legacy_wood_pf.get("era_id", "")) == "wood_age" and legacy_wood_pf.get("progression_facts", []) == [VESSEL_FACT] and sm.validate_payload(legacy_wood_mig), "Case E: absent fact field without stone evidence still downgrades to wood_age keeping only vessel readiness"):
+		return false
+
+	# Case F — a valid existing fact array: valid Eldergrove evidence retains
+	# Iron Age, the array stays intact apart from deterministic canonicalization
+	# (sorted, matching the to_save_array() contract), and the payload validates.
+	var valid_iron_mig: Dictionary = SaveManager.migrate_payload(_legacy_payload("stone_wall", "iron_age", 3, [VESSEL_FACT, ELDERGROVE_FACT], "ISLAND_CLEARED").duplicate(true)) as Dictionary
+	var valid_iron_pf: Dictionary = valid_iron_mig["progression_flags"] as Dictionary
+	if not _check(String(valid_iron_pf.get("era_id", "")) == "iron_age" and valid_iron_pf.get("progression_facts", []) == [ELDERGROVE_FACT, VESSEL_FACT] and sm.validate_payload(valid_iron_mig), "Case F: valid Eldergrove evidence keeps Iron Age and the valid array stays deterministically sorted"):
+		return false
+
+	# Case G — idempotency: migrating twice changes nothing for the absent-field
+	# path, the valid-array path, or the malformed-payload rejection path; facts
+	# never duplicate.
+	var e_once: Dictionary = SaveManager.migrate_payload(_legacy_payload("stone_wall", "iron_age", 3, null, "ISLAND_CLEARED").duplicate(true)) as Dictionary
+	var e_twice: Dictionary = SaveManager.migrate_payload(e_once.duplicate(true)) as Dictionary
+	if not _check(e_once.hash() == e_twice.hash() and (e_once["progression_flags"] as Dictionary).get("progression_facts", []) == [FACT, VESSEL_FACT], "Case G: absent-field legacy migration is idempotent (second pass identical, no duplicate facts)"):
+		return false
+	var f_once: Dictionary = SaveManager.migrate_payload(_legacy_payload("stone_wall", "iron_age", 3, [VESSEL_FACT, ELDERGROVE_FACT], "ISLAND_CLEARED").duplicate(true)) as Dictionary
+	var f_twice: Dictionary = SaveManager.migrate_payload(f_once.duplicate(true)) as Dictionary
+	if not _check(f_once.hash() == f_twice.hash(), "Case G: valid-array migration is idempotent (second pass identical)"):
+		return false
+	var a_once: Dictionary = SaveManager.migrate_payload(_legacy_payload_with_explicit_facts("stone_wall", "iron_age", 3, null, "ISLAND_CLEARED").duplicate(true)) as Dictionary
+	var a_twice: Dictionary = SaveManager.migrate_payload(a_once.duplicate(true)) as Dictionary
+	var a_again: Dictionary = SaveManager.migrate_payload(_legacy_payload_with_explicit_facts("stone_wall", "iron_age", 3, null, "ISLAND_CLEARED").duplicate(true)) as Dictionary
+	if not _check(a_once.hash() == a_twice.hash() and a_once.hash() == a_again.hash(), "Case G: malformed-payload migration stays deterministic and idempotent"):
+		return false
+
+	# Rejection never partially mutates live progression state: the migrated
+	# malformed payloads are rejected before any apply, and a direct
+	# apply_save_state of the malformed values mutates nothing. (Explicit null
+	# is rejected at the payload level in Case A; apply_save_state(null) keeps
+	# its separate, documented Phase 1 "field absent" clear contract.)
+	var live: ProgressionState = ProgressionState.new()
+	if not _check(live.record_fact(FACT) and live.fact_count() == 1, "Phase 2.2 live-state setup: one fact recorded"):
+		return false
+	var live_before: Array = live.get_fact_ids()
+	for bad_value: Variant in ["corrupted", {"facts": "not_an_array"}, ["scientist_recruited"], [FACT, FACT]]:
+		if not _check(not live.apply_save_state(bad_value), "Phase 2.2 live apply rejects malformed facts value: %s" % str(bad_value)):
+			return false
+		if not _check(live.get_fact_ids() == live_before and live.fact_count() == 1, "Phase 2.2 live state unchanged after rejected apply: %s" % str(bad_value)):
+			return false
+
+	print("PASS: Phase 2.2 Malformed progression_facts Skips Progression Migration (Absent vs Valid vs Malformed)")
+	return true
+
+
 func _init() -> void:
 	var suite_names: Array[String] = [
 		"Fresh Start & Stone Age Path", "Shipwreck Vessel Readiness & Era Lock",
 		"Iron Age Eldergrove Gate", "Legacy Migration Policy",
 		"Save/Load Round-Trip", "Regression Guards", "Strict Malformed Facts Rejection",
+		"Phase 2.2 Malformed Facts Migration Isolation",
 	]
 	var suites: Array[Callable] = [
 		_test_fresh_start_and_stone_age_path, _test_shipwreck_vessel_readiness_and_era_lock,
 		_test_iron_age_requires_eldergrove_milestone, _test_legacy_migration_policy,
 		_test_save_roundtrip_preserves_facts_and_era, _test_gameplay_regression_guards,
 		_test_strict_malformed_facts_field_rejection,
+		_test_malformed_facts_skip_progression_migration,
 	]
 	var failed_suites: Array[String] = []
 	for i: int in range(suites.size()):

@@ -217,6 +217,19 @@ static func migrate_payload(data: Variant) -> Variant:
 	# save lama (lihat kebijakan koreksi era Fase 2 di bawah).
 	if d.has("progression_flags") and typeof(d["progression_flags"]) == TYPE_DICTIONARY:
 		var pf_mig: Dictionary = d["progression_flags"] as Dictionary
+		# Fase 2.2: seluruh migrasi terkait progresi hanya berjalan bila field
+		# progression_facts benar-benar TIDAK ada (jalur migrasi legacy sah) atau
+		# ada sebagai array fakta valid. Bila field EKSPLISIT ada tapi nilainya
+		# rusak (null, string, angka, dict, array invalid), jangan sentuh data
+		# progresi sama sekali: era_id tidak diinferensi atau dikoreksi, tidak ada
+		# backfill vessel/Stone Age, nilai rusak dibiarkan utuh (tidak
+		# dikanonikasi/disort) — validate_payload yang menolak payload ini secara
+		# keseluruhan. Migrasi tidak boleh memutasi field terkait progresi secara
+		# parsial sebelum payload ditolak. (Blok migrasi progresi ini adalah
+		# langkah migrasi terakhir, jadi return di sini hanya melewati blok ini.)
+		var facts_gate: Variant = pf_mig.get("progression_facts", null)
+		if pf_mig.has("progression_facts") and not ProgressionState.is_valid_fact_array(facts_gate):
+			return d
 		if not pf_mig.has("era_id") or String(pf_mig["era_id"]).is_empty():
 			var inferred_era: String = "wood_age"
 			if d.has("buildings") and typeof(d["buildings"]) == TYPE_ARRAY:
