@@ -12,7 +12,6 @@ enum ReignState {
 
 const FARM_HARVEST_INTERVAL: float = 60.0
 const FARM_GOLD_YIELD: int = 2
-const ACTIVE_ISLAND_ID: String = "forgotten_shore"
 const SHIPWRECK_X: float = -1350.0
 const PORTAL_X: float = 1350.0
 const SHIPWRECK_COSTS: Array[Dictionary] = [
@@ -746,6 +745,19 @@ func _on_research_completed(tech_id: String) -> void:
 	feedback_message.emit("Research completed: %s! The kingdom benefits immediately." % research_mgr.get_technology_display_name(tech_id))
 
 
+## The active-island specialist's housing plot id (deterministic sorted order)
+## or "" when no active specialist defines housing. Presentation helper only.
+func _get_active_specialist_housing_plot_id() -> String:
+	for sp_id: String in specialists.get_specialist_ids():
+		var sp_def: Dictionary = specialists.get_specialist_definition(sp_id)
+		if String(sp_def.get("island_id", "")) != SpecialistDomain.ACTIVE_ISLAND_ID:
+			continue
+		var housing: String = String(sp_def.get("housing_plot_id", ""))
+		if not housing.is_empty():
+			return housing
+	return ""
+
+
 func _find_nearby_specialist_id(actor_x: float) -> String:
 	for sp_id: String in specialists.get_specialist_ids():
 		var sp_def: Dictionary = specialists.get_specialist_definition(sp_id)
@@ -811,7 +823,7 @@ func _setup_specialist_visuals() -> void:
 		lbl.size = Vector2(112, 24)
 		lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		camp.add_child(lbl)
-	var housing_plot: String = String(specialists.get_specialist_definition("scientist").get("housing_plot_id", ""))
+	var housing_plot: String = _get_active_specialist_housing_plot_id()
 	if not housing_plot.is_empty() and building_mgr.has_plot(housing_plot):
 		var hut_lbl: Label = Label.new()
 		hut_lbl.name = "HutLabel"
@@ -1276,7 +1288,7 @@ func _update_proximity_prompts() -> void:
 				prov_lbl.visible = true
 				prov_lbl.modulate = highlight_col
 				prov_lbl.text = String(_active_target.get("prompt_text", ""))
-		var hut_id: String = String(specialists.get_specialist_definition("scientist").get("housing_plot_id", ""))
+		var hut_id: String = _get_active_specialist_housing_plot_id()
 		var hut_lbl2: Label = sp_camp.get_node_or_null("HutLabel") as Label
 		if hut_lbl2 != null and building_mgr.has_plot(hut_id):
 			var plot: Dictionary = building_mgr.get_plot(hut_id)
@@ -1487,7 +1499,7 @@ func build_save_payload() -> Dictionary:
 	return {
 		"schema_version": SaveManager.SCHEMA_VERSION,
 		"world_id": "aetherion",
-		"island_id": "forgotten_shore",
+		"island_id": SpecialistDomain.ACTIVE_ISLAND_ID,
 		"day_count": int(clock_dict["day_count"]),
 		"world_time": float(clock_dict["world_time"]),
 		"world_phase": String(clock_dict["world_phase"]),

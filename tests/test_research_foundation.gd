@@ -386,6 +386,14 @@ func _test_save_load_and_compatibility() -> bool:
 	if not _check(legacy_sess.research_mgr.get_completed_tech_ids().is_empty() and not legacy_sess.research_mgr.has_active_research(), "Sessions without research data default to an empty research state"):
 		return false
 
+	# Explicit "research": null is malformed (not the same as an absent field):
+	# strict validation rejects it wholesale, exactly like the Phase 2.1/2.2
+	# progression_facts policy.
+	var null_research: Dictionary = dst.build_save_payload()
+	null_research["research"] = null
+	if not _check(not sm.validate_payload(null_research), "Explicit null research key is rejected as malformed (absent key stays valid)"):
+		return false
+
 	# Corrupt research data inside a save file is rejected wholesale.
 	var bad_payload: Dictionary = dst.build_save_payload()
 	bad_payload["research"] = {"completed_techs": ["unknown_tech_y"], "active_research": null}
