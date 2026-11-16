@@ -1,0 +1,16 @@
+{
+  "resources": [
+    {
+      "id": "gold",
+      "base_accessible": true
+    },
+    {
+      "id": "wood",
+      "base_accessible": true
+    },
+    {
+      "id": "stone",
+      "base_accessible": true
+    }
+  ]
+}
