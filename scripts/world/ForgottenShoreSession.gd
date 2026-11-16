@@ -33,6 +33,8 @@ var builder_npc: NPCBuilderAgent = null
 var night_mgr: NightEncounterManager = NightEncounterManager.new()
 var era_mgr: EraProgressionManager = EraProgressionManager.new()
 var progression: ProgressionState = ProgressionState.new()
+var specialists: SpecialistDomain = SpecialistDomain.new()
+var research_mgr: ResearchManager = ResearchManager.new()
 var save_mgr: SaveManager = SaveManager.new()
 
 # Backward-compatible mirror for tests inspecting collected_node_ids directly
@@ -88,6 +90,7 @@ func _ready() -> void:
 	building_mgr.register_forgotten_shore_expansion_plots()
 	_sync_resource_prompts_from_data()
 	_setup_forest_visuals()
+	_setup_specialist_visuals()
 	_setup_pause_menu()
 	_wire_signals()
 	_consume_pending_load_if_requested()
@@ -135,6 +138,7 @@ func _process(delta: float) -> void:
 	var is_night: bool = time_manager != null and time_manager.current_phase == TimeManager.Phase.NIGHT
 	var is_daylight: bool = time_manager == null or time_manager.current_phase == TimeManager.Phase.DAYLIGHT
 	pop_mgr.tick_all(sim_delta, building_mgr, night_mgr, resource_mgr, economy)
+	research_mgr.advance_research(sim_delta)
 	flare_active_timer = maxf(0.0, flare_active_timer - sim_delta)
 	flare_cooldown_timer = maxf(0.0, flare_cooldown_timer - sim_delta)
 	var was_boosted: bool = hearth_sys.is_boost_active()
@@ -183,6 +187,12 @@ func _wire_signals() -> void:
 		player.kindle_flare_requested.connect(func() -> void: execute_world_command("player_1", &"kindle_flare", ""))
 
 	economy.transaction_rejected.connect(_record_rejection)
+	specialists.specialist_discovered.connect(_on_specialist_discovered)
+	specialists.specialist_recruited.connect(_on_specialist_recruited)
+	specialists.specialist_action_rejected.connect(_record_rejection)
+	research_mgr.research_started.connect(_on_research_started)
+	research_mgr.research_completed.connect(_on_research_completed)
+	research_mgr.research_rejected.connect(_record_rejection)
 	building_mgr.building_action_rejected.connect(_record_rejection)
 	building_mgr.wall_state_changed.connect(_on_wall_state_changed)
 	night_mgr.building_attacked.connect(_on_building_attacked)
@@ -323,7 +333,10 @@ func _resolve_target_for_actor(actor_x: float) -> Dictionary:
 		PORTAL_X,
 		portal_relic_looted,
 		shrine_offering_used_today,
-		tree_mgr
+		tree_mgr,
+		specialists,
+		progression,
+		research_mgr
 	)
 
 
@@ -463,13 +476,14 @@ func execute_world_command(actor_id: String, command: StringName, target_id: Str
 				_record_rejection("Move closer to Greed Portal (x=1350)")
 
 		&"shrine_offering":
+			var offering_yield: int = 2 + research_mgr.get_effect_total(ResearchManager.EFFECT_SHRINE_OFFERING_GOLD_BONUS)
 			if absf(actor_x - (-780.0)) > ResourceNodeManager.INTERACT_RANGE:
 				_record_rejection("Move closer to Forgotten Shrine (x=-780)")
 			elif shrine_offering_used_today:
 				_record_rejection("Shrine Offering already used today")
 			elif not economy.try_spend({"wood": 4, "stone": 2}):
 				_record_rejection("Shrine Offering needs 4 Wood, 2 Stone")
-			elif not economy.try_add(&"gold", 2):
+			elif not economy.try_add(&"gold", offering_yield):
 				economy.try_add_bundle({"wood": 4, "stone": 2})
 				_record_rejection("Shrine Offering failed — ledger rejected the reward")
 			else:
@@ -477,8 +491,8 @@ func execute_world_command(actor_id: String, command: StringName, target_id: Str
 				ok = true
 				_play_sfx("sfx_coin")
 				_spawn_payment_fly({"wood": 4, "stone": 2}, actor_x, -780.0)
-				_spawn_floating_text(-780.0, "+2G Offering")
-				feedback_message.emit("Shrine Offering accepted: 4W + 2S -> +2 Gold!")
+				_spawn_floating_text(-780.0, "+%dG Offering" % offering_yield)
+				feedback_message.emit("Shrine Offering accepted: 4W + 2S -> +%d Gold!" % offering_yield)
 
 		&"kindle_flare":
 			if time_manager == null or time_manager.current_phase != TimeManager.Phase.NIGHT:
@@ -488,13 +502,14 @@ func execute_world_command(actor_id: String, command: StringName, target_id: Str
 			elif not economy.try_spend({"wood": 1}):
 				_record_rejection("Kindle Flare needs 1 Wood")
 			else:
-				flare_active_timer = 8.0
+				var flare_duration: float = 8.0 + float(research_mgr.get_effect_total(ResearchManager.EFFECT_FLARE_DURATION_BONUS_SEC))
+				flare_active_timer = flare_duration
 				flare_cooldown_timer = 25.0
 				ok = true
 				_play_sfx("sfx_sunset")
 				_spawn_payment_fly({"wood": 1}, actor_x, HearthSystem.HEARTH_POSITION_X)
 				_spawn_floating_text(actor_x, "KINDLE FLARE +50%!", Color(1.0, 0.82, 0.35, 1.0))
-				feedback_message.emit("Kindle Flare active! Hearth burn & Watchtower dmg +50% for 8s!")
+				feedback_message.emit("Kindle Flare active! Hearth burn & Watchtower dmg +50%% for %.0fs!" % flare_duration)
 
 		&"chop_tree":
 			if resolved_target.is_empty():
@@ -513,6 +528,15 @@ func execute_world_command(actor_id: String, command: StringName, target_id: Str
 					_spawn_floating_text(float(td["x"]), "Chop (%d/%d)" % [int(cres["hp_left"]), int(td["max_hp"])])
 			else:
 				_record_rejection(String(cres.get("reason", "Cannot chop tree")))
+
+		&"discover_specialist":
+			ok = _on_discover_specialist(actor_x, resolved_target)
+
+		&"recruit_specialist":
+			ok = _on_recruit_specialist(actor_x, resolved_target)
+
+		&"start_research":
+			ok = _on_start_research(actor_x, resolved_target)
 
 		&"save_game":
 			ok = _on_manual_save()
@@ -667,6 +691,147 @@ func _on_player_loot_portal_relic() -> bool:
 		feedback_message.emit("Scavenged Ancient Relic near Greed Portal (+3 Gold, +2 Stone)!")
 		return true
 	return false
+
+
+## Phase 3 specialist discovery command. An empty target resolves the nearest
+## active-island specialist in range (deterministic sorted-ID order); the
+## authoritative transaction lives in SpecialistDomain.
+func _on_discover_specialist(actor_x: float, specialist_id: String) -> bool:
+	var sp_id: String = specialist_id
+	if sp_id.is_empty():
+		sp_id = _find_nearby_specialist_id(actor_x)
+	if sp_id.is_empty():
+		_record_rejection("No specialist nearby to discover")
+		return false
+	return specialists.try_discover(actor_x, sp_id, progression)
+
+
+## Phase 3 specialist recruitment command. An empty target resolves the nearest
+## active-island specialist in range. Requirements, housing, costs and
+## duplicate-recruitment guards are enforced by SpecialistDomain.try_recruit.
+func _on_recruit_specialist(actor_x: float, specialist_id: String) -> bool:
+	var sp_id: String = specialist_id
+	if sp_id.is_empty():
+		sp_id = _find_nearby_specialist_id(actor_x)
+	if sp_id.is_empty():
+		_record_rejection("No specialist nearby to recruit")
+		return false
+	return specialists.try_recruit(actor_x, sp_id, progression, building_mgr, economy)
+
+
+## Phase 4 research start command. An empty target resolves the first
+## available technology in stable ID order; proximity to a recruited
+## specialist is the world-side gate and try_start enforces the rest.
+func _on_start_research(actor_x: float, tech_id: String) -> bool:
+	var resolved: String = tech_id
+	if resolved.is_empty():
+		resolved = research_mgr.get_first_available_technology_id(progression)
+	if resolved.is_empty():
+		_record_rejection("No research is available right now")
+		return false
+	if not specialists.is_any_recruited_specialist_near(actor_x, progression):
+		_record_rejection("Stand near a recruited specialist to conduct research")
+		return false
+	return research_mgr.try_start(resolved, progression, economy)
+
+
+func _on_research_started(tech_id: String) -> void:
+	_play_sfx("sfx_build")
+	feedback_message.emit("Research started: %s" % research_mgr.get_technology_display_name(tech_id))
+
+
+func _on_research_completed(tech_id: String) -> void:
+	_play_sfx("sfx_coin")
+	feedback_message.emit("Research completed: %s! The kingdom benefits immediately." % research_mgr.get_technology_display_name(tech_id))
+
+
+## The active-island specialist's housing plot id (deterministic sorted order)
+## or "" when no active specialist defines housing. Presentation helper only.
+func _get_active_specialist_housing_plot_id() -> String:
+	for sp_id: String in specialists.get_specialist_ids():
+		var sp_def: Dictionary = specialists.get_specialist_definition(sp_id)
+		if String(sp_def.get("island_id", "")) != SpecialistDomain.ACTIVE_ISLAND_ID:
+			continue
+		var housing: String = String(sp_def.get("housing_plot_id", ""))
+		if not housing.is_empty():
+			return housing
+	return ""
+
+
+func _find_nearby_specialist_id(actor_x: float) -> String:
+	for sp_id: String in specialists.get_specialist_ids():
+		var sp_def: Dictionary = specialists.get_specialist_definition(sp_id)
+		if String(sp_def.get("island_id", "")) != SpecialistDomain.ACTIVE_ISLAND_ID:
+			continue
+		if not sp_def.has("world_x"):
+			continue
+		if absf(actor_x - float(sp_def["world_x"])) <= SpecialistDomain.INTERACT_RANGE:
+			return sp_id
+	return ""
+
+
+func _on_specialist_discovered(specialist_id: String) -> void:
+	var name_txt: String = specialists.get_display_name(specialist_id)
+	if name_txt.is_empty():
+		name_txt = specialist_id
+	_play_sfx("sfx_coin")
+	_spawn_floating_text(specialists.get_world_x(specialist_id), "%s found!" % name_txt, Color(0.6, 0.95, 0.85, 1.0))
+	feedback_message.emit("You found %s! Build their hut here with [B] so they can join the kingdom." % name_txt)
+
+
+func _on_specialist_recruited(specialist_id: String) -> void:
+	var name_txt: String = specialists.get_display_name(specialist_id)
+	if name_txt.is_empty():
+		name_txt = specialist_id
+	_play_sfx("sfx_coin")
+	_spawn_floating_text(specialists.get_world_x(specialist_id), "%s joined!" % name_txt, Color(0.6, 0.95, 0.85, 1.0))
+	feedback_message.emit("%s joined the kingdom!" % name_txt)
+
+
+## Programmatic specialist-camp visuals (same pattern as the forest visuals):
+## one marker sprite + one interaction label per active-island specialist with
+## a defined world position, plus one label for their housing plot.
+func _setup_specialist_visuals() -> void:
+	var world_objs: Node = get_node_or_null("WorldObjects")
+	if world_objs == null or world_objs.get_node_or_null("SpecialistCamp") != null:
+		return
+	var camp: Node2D = Node2D.new()
+	camp.name = "SpecialistCamp"
+	world_objs.add_child(camp)
+	var tex_path: String = "res://assets/characters/npc/npc_builder_sheet.png"
+	var npc_tex: Texture2D = load(tex_path) as Texture2D if ResourceLoader.exists(tex_path) else null
+	for sp_id: String in specialists.get_specialist_ids():
+		var sp_def: Dictionary = specialists.get_specialist_definition(sp_id)
+		if String(sp_def.get("island_id", "")) != SpecialistDomain.ACTIVE_ISLAND_ID or not sp_def.has("world_x"):
+			continue
+		var wx: float = float(sp_def["world_x"])
+		var spr: Sprite2D = Sprite2D.new()
+		spr.name = "SpSprite_%s" % sp_id
+		spr.position = Vector2(wx, 0.0)
+		spr.centered = false
+		spr.offset = Vector2(-16, -32)
+		spr.hframes = 8
+		spr.frame = 0
+		spr.modulate = Color(0.62, 0.9, 0.82, 1.0)
+		if npc_tex != null:
+			spr.texture = npc_tex
+		camp.add_child(spr)
+		var lbl: Label = Label.new()
+		lbl.name = "SpLabel_%s" % sp_id
+		lbl.visible = false
+		lbl.position = Vector2(wx - 56.0, -86.0)
+		lbl.size = Vector2(112, 24)
+		lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		camp.add_child(lbl)
+	var housing_plot: String = _get_active_specialist_housing_plot_id()
+	if not housing_plot.is_empty() and building_mgr.has_plot(housing_plot):
+		var hut_lbl: Label = Label.new()
+		hut_lbl.name = "HutLabel"
+		hut_lbl.visible = false
+		hut_lbl.position = Vector2(float(building_mgr.get_plot(housing_plot).get("position_x", 0.0)) - 70.0, -86.0)
+		hut_lbl.size = Vector2(140, 24)
+		hut_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		camp.add_child(hut_lbl)
 
 
 func _on_manual_save() -> bool:
@@ -1105,6 +1270,42 @@ func _update_proximity_prompts() -> void:
 			lbl.visible = is_stand
 			lbl.modulate = highlight_col if is_stand else normal_col
 
+	# Phase 3 specialist prompts: the resolved specialist prompt plus the
+	# scientist housing plot status label (presentation only).
+	var sp_camp: Node = get_node_or_null("WorldObjects/SpecialistCamp")
+	if sp_camp != null:
+		for sp_id2: String in specialists.get_specialist_ids():
+			var sp_lbl: Label = sp_camp.get_node_or_null("SpLabel_%s" % sp_id2) as Label
+			if sp_lbl != null:
+				var is_sp: bool = (active_kind == "specialist" and active_id == sp_id2)
+				sp_lbl.visible = is_sp
+				sp_lbl.modulate = highlight_col if is_sp else normal_col
+				sp_lbl.text = String(_active_target.get("prompt_text", "")) if is_sp else ""
+		if active_kind == "research":
+			var provider: String = String(_active_target.get("provider_id", ""))
+			var prov_lbl: Label = sp_camp.get_node_or_null("SpLabel_%s" % provider) as Label
+			if prov_lbl != null:
+				prov_lbl.visible = true
+				prov_lbl.modulate = highlight_col
+				prov_lbl.text = String(_active_target.get("prompt_text", ""))
+		var hut_id: String = _get_active_specialist_housing_plot_id()
+		var hut_lbl2: Label = sp_camp.get_node_or_null("HutLabel") as Label
+		if hut_lbl2 != null and building_mgr.has_plot(hut_id):
+			var plot: Dictionary = building_mgr.get_plot(hut_id)
+			var st: int = int(plot["state"])
+			var is_hut_active: bool = (active_kind == "building" and active_id == hut_id)
+			hut_lbl2.visible = is_hut_active or st == BuildingManager.WallState.UNDER_CONSTRUCTION
+			hut_lbl2.modulate = highlight_col if is_hut_active else normal_col
+			var hut_title: String = building_mgr.get_plot_title(hut_id)
+			if st == BuildingManager.WallState.PLACEHOLDER or st == BuildingManager.WallState.DESTROYED:
+				hut_lbl2.text = "%s [E/B]\n%s" % [hut_title, building_mgr.get_plot_cost_label(hut_id)]
+			elif st == BuildingManager.WallState.UNDER_CONSTRUCTION:
+				hut_lbl2.text = "Building %s...\n%d%%" % [hut_title, int(roundf(float(plot["progress"]) * 100.0))]
+			elif st == BuildingManager.WallState.DAMAGED:
+				hut_lbl2.text = "Damaged %s [E/F]\nHP %d/%d" % [hut_title, int(plot["durability"]), int(plot["max_durability"])]
+			else:
+				hut_lbl2.text = hut_title
+
 
 func _sync_dynamic_actors() -> void:
 	if town_center_sprite != null:
@@ -1151,6 +1352,9 @@ func _sync_dynamic_actors() -> void:
 
 	if slice_hud != null and slice_hud.has_method("set_population_text"):
 		slice_hud.call("set_population_text", _build_population_summary())
+
+	if slice_hud != null and slice_hud.has_method("set_research_text"):
+		slice_hud.call("set_research_text", research_mgr.get_hud_text(progression))
 
 	if building_mgr.durability < _prev_wall_hp and _prev_wall_hp > 0:
 		_play_sfx("sfx_hit")
@@ -1295,7 +1499,7 @@ func build_save_payload() -> Dictionary:
 	return {
 		"schema_version": SaveManager.SCHEMA_VERSION,
 		"world_id": "aetherion",
-		"island_id": "forgotten_shore",
+		"island_id": SpecialistDomain.ACTIVE_ISLAND_ID,
 		"day_count": int(clock_dict["day_count"]),
 		"world_time": float(clock_dict["world_time"]),
 		"world_phase": String(clock_dict["world_phase"]),
@@ -1308,6 +1512,7 @@ func build_save_payload() -> Dictionary:
 		"npcs": pop_mgr.to_save_array(),
 		"camp_vagrants_available": pop_mgr.camp_vagrants_available,
 		"night_encounter": night_mgr.to_save_dict(),
+		"research": research_mgr.to_save_dict(),
 		"progression_flags": {
 			"first_night_survived": night_mgr.first_night_survived,
 			"collected_nodes": resource_mgr.get_collected_ids_array(),
@@ -1391,6 +1596,17 @@ func _apply_loaded_payload(data: Dictionary) -> bool:
 	# tetap menjamin sesi tidak pernah berada di kondisi setengah-terpakai.
 	if not progression.apply_save_state(flags.get("progression_facts", null)):
 		return false
+	if data.has("research"):
+		if not research_mgr.apply_save_dict(data["research"]):
+			return false
+	else:
+		# The optional "research" key is absent (legacy schema-v2 save): the
+		# payload is the authority, so research resets to the empty state
+		# instead of silently keeping the live session's research. An
+		# explicitly present "research": null still fails the has() branch
+		# above and is rejected by apply_save_dict.
+		if not research_mgr.reset_to_empty_state():
+			return false
 	resource_mgr.apply_save_state(flags.get("node_states", null), flags.get("collected_nodes", []))
 	tree_mgr.apply_save_state(flags.get("tree_states", null))
 

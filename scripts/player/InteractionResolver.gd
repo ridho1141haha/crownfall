@@ -13,7 +13,10 @@ static func resolve_nearest(
 	portal_x: float,
 	portal_looted: bool,
 	shrine_offering_used: bool = false,
-	tree_mgr: ForestTreeManager = null
+	tree_mgr: ForestTreeManager = null,
+	specialist_domain: SpecialistDomain = null,
+	progression: ProgressionState = null,
+	research_mgr: ResearchManager = null
 ) -> Dictionary:
 	var best: Dictionary = {
 		"has_target": false,
@@ -138,6 +141,60 @@ static func resolve_nearest(
 				"prompt_text": "Greed Portal [E]",
 				"distance": d_port,
 			}
+
+	# 5a. Specialists (Phase 3): discover / recruit the active-island roster.
+	# Recruited specialists do not offer a primary interaction here; the
+	# Scientist's research interaction belongs to the research phase and the
+	# hut build/repair prompt comes from the building block above.
+	if specialist_domain != null and progression != null and building_mgr != null:
+		for sp_id: String in specialist_domain.get_specialist_ids():
+			var sp_def: Dictionary = specialist_domain.get_specialist_definition(sp_id)
+			if String(sp_def.get("island_id", "")) != SpecialistDomain.ACTIVE_ISLAND_ID:
+				continue
+			if not sp_def.has("world_x"):
+				continue
+			var d_sp: float = absf(actor_x - float(sp_def["world_x"]))
+			if d_sp > SpecialistDomain.INTERACT_RANGE or d_sp >= float(best["distance"]):
+				continue
+			var sp_name: String = String(sp_def.get("display_name", sp_id))
+			var lifecycle: String = specialist_domain.get_lifecycle_state(sp_id, progression, building_mgr)
+			if lifecycle == SpecialistDomain.STATE_UNDISCOVERED:
+				best = {
+					"has_target": true,
+					"kind": "specialist",
+					"target_id": sp_id,
+					"primary_command": &"discover_specialist",
+					"upgrade_command": &"",
+					"prompt_text": "[E] Speak to the Shipwrecked Stranger",
+					"distance": d_sp,
+				}
+			elif lifecycle == SpecialistDomain.STATE_RECRUITABLE:
+				best = {
+					"has_target": true,
+					"kind": "specialist",
+					"target_id": sp_id,
+					"primary_command": &"recruit_specialist",
+					"upgrade_command": &"",
+					"prompt_text": "[E] Recruit %s (%s)" % [sp_name, BuildingManager.format_cost_text(specialist_domain.get_recruitment_cost(sp_id))],
+					"distance": d_sp,
+				}
+			elif lifecycle == SpecialistDomain.STATE_RECRUITED and research_mgr != null and research_mgr.has_active_research() == false:
+				# Phase 4: a recruited specialist provides research. Offer the
+				# first available technology in stable ID order; the tech ID is
+				# the interaction target and the specialist stays the provider.
+				var next_tech: String = research_mgr.get_first_available_technology_id(progression)
+				if not next_tech.is_empty():
+					var tech_def: Dictionary = research_mgr.get_technology_definition(next_tech)
+					best = {
+						"has_target": true,
+						"kind": "research",
+						"target_id": next_tech,
+						"primary_command": &"start_research",
+						"upgrade_command": &"",
+						"prompt_text": "[E] Research %s (%s)" % [String(tech_def.get("display_name", next_tech)), BuildingManager.format_cost_text(tech_def.get("cost", {}) as Dictionary)],
+						"distance": d_sp,
+						"provider_id": sp_id,
+					}
 
 	# 5b. Forest Trees ([E] Chop)
 	if tree_mgr != null:

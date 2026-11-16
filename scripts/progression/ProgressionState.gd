@@ -39,6 +39,26 @@ const FACT_FORGOTTEN_SHORE_VESSEL_READY: String = "forgotten_shore_vessel_ready"
 ## saves can carry it, and the migration policy can recognize genuine evidence.
 const FACT_ELDERGROVE_REACHED: String = "eldergrove_reached"
 
+## Specialist domain facts (Phase 3). Discovery and recruitment are separate,
+## durable accomplishments recorded by SpecialistDomain ONLY after the
+## corresponding gameplay transaction succeeds (discovery interaction /
+## successful recruitment transaction with housing and costs satisfied).
+## Every specialist ID follows the stable pattern `<specialist>_discovered` /
+## `<specialist>_recruited`. Only the Scientist has a Forgotten Shore gameplay
+## path in Phase 3; the other roster IDs are registered now (same rationale as
+## `eldergrove_reached` in Phase 2) so definitions stay consistent, future
+## saves can carry them, and no unregistered ID can be smuggled into a save.
+## Registering an ID never records the fact: no gameplay path records facts
+## for specialists whose islands do not exist yet.
+const FACT_SCIENTIST_DISCOVERED: String = "scientist_discovered"
+const FACT_SCIENTIST_RECRUITED: String = "scientist_recruited"
+const FACT_BLACKSMITH_DISCOVERED: String = "blacksmith_discovered"
+const FACT_BLACKSMITH_RECRUITED: String = "blacksmith_recruited"
+const FACT_ARCHITECT_DISCOVERED: String = "architect_discovered"
+const FACT_ARCHITECT_RECRUITED: String = "architect_recruited"
+const FACT_SCHOLAR_DISCOVERED: String = "scholar_discovered"
+const FACT_SCHOLAR_RECRUITED: String = "scholar_recruited"
+
 ## Registry of every fact this build can record or restore. Save data and
 ## unlock definitions referencing IDs outside this registry are rejected, so
 ## unknown IDs can never be silently granted or smuggled into a save.
@@ -46,6 +66,14 @@ const KNOWN_FACT_IDS: Array[String] = [
 	FACT_FORGOTTEN_SHORE_FIRST_STONE_WALL_TIER_2,
 	FACT_FORGOTTEN_SHORE_VESSEL_READY,
 	FACT_ELDERGROVE_REACHED,
+	FACT_SCIENTIST_DISCOVERED,
+	FACT_SCIENTIST_RECRUITED,
+	FACT_BLACKSMITH_DISCOVERED,
+	FACT_BLACKSMITH_RECRUITED,
+	FACT_ARCHITECT_DISCOVERED,
+	FACT_ARCHITECT_RECRUITED,
+	FACT_SCHOLAR_DISCOVERED,
+	FACT_SCHOLAR_RECRUITED,
 ]
 
 ## Stable IDs are compact; the cap only rejects absurd payloads, not future IDs.

@@ -397,7 +397,7 @@ func _test_legacy_migration_policy() -> bool:
 	if not _check(not bool(sm.load_state(SAVE_MALFORMED_IRON).get("ok", false)), "Save file with malformed facts fails to load safely"):
 		return false
 
-	var unknown_id: Dictionary = _legacy_payload("stone_wall", "iron_age", 3, ["scientist_recruited"], "ACTIVE")
+	var unknown_id: Dictionary = _legacy_payload("stone_wall", "iron_age", 3, ["mount_tamed"], "ACTIVE")
 	if not _check(not sm.validate_payload(SaveManager.migrate_payload(unknown_id)), "Well-formed but unknown fact id is rejected from save data"):
 		return false
 
@@ -656,10 +656,10 @@ func _test_malformed_facts_skip_progression_migration() -> bool:
 	# Case D — invalid fact arrays (unknown ID / duplicate IDs) with legacy Iron
 	# Age + Stage 3 evidence: no correction, no backfill, no deduplication, no
 	# reordering; rejected wholesale, input dict untouched.
-	var unknown_iron: Dictionary = _legacy_payload_with_explicit_facts("stone_wall", "iron_age", 3, ["scientist_recruited"], "ACTIVE")
+	var unknown_iron: Dictionary = _legacy_payload_with_explicit_facts("stone_wall", "iron_age", 3, ["mount_tamed"], "ACTIVE")
 	var unknown_iron_mig: Dictionary = SaveManager.migrate_payload(unknown_iron) as Dictionary
 	var unknown_iron_pf: Dictionary = unknown_iron_mig["progression_flags"] as Dictionary
-	if not _check(String(unknown_iron_pf.get("era_id", "")) == "iron_age" and unknown_iron_pf.get("progression_facts", []) == ["scientist_recruited"] and not sm.validate_payload(unknown_iron_mig), "Case D: unknown fact ID receives no era correction or vessel backfill; payload rejected"):
+	if not _check(String(unknown_iron_pf.get("era_id", "")) == "iron_age" and unknown_iron_pf.get("progression_facts", []) == ["mount_tamed"] and not sm.validate_payload(unknown_iron_mig), "Case D: unknown fact ID receives no era correction or vessel backfill; payload rejected"):
 		return false
 	if not _check(String((unknown_iron["progression_flags"] as Dictionary).get("era_id", "")) == "iron_age", "Case D: original input dictionary remains unchanged (unknown ID case)"):
 		return false
@@ -718,7 +718,7 @@ func _test_malformed_facts_skip_progression_migration() -> bool:
 	if not _check(live.record_fact(FACT) and live.fact_count() == 1, "Phase 2.2 live-state setup: one fact recorded"):
 		return false
 	var live_before: Array = live.get_fact_ids()
-	for bad_value: Variant in ["corrupted", {"facts": "not_an_array"}, ["scientist_recruited"], [FACT, FACT]]:
+	for bad_value: Variant in ["corrupted", {"facts": "not_an_array"}, ["mount_tamed"], [FACT, FACT]]:
 		if not _check(not live.apply_save_state(bad_value), "Phase 2.2 live apply rejects malformed facts value: %s" % str(bad_value)):
 			return false
 		if not _check(live.get_fact_ids() == live_before and live.fact_count() == 1, "Phase 2.2 live state unchanged after rejected apply: %s" % str(bad_value)):

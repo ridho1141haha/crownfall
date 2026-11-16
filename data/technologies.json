@@ -1,0 +1,46 @@
+{
+  "technologies": [
+    {
+      "id": "inscription_studies",
+      "display_name": "Inscription Studies",
+      "description": "The Scientist deciphers the Forgotten Shrine inscriptions, making the daily offering more bountiful.",
+      "requires": {
+        "all_of": [
+          "scientist_recruited"
+        ]
+      },
+      "prerequisites": [],
+      "cost": {
+        "gold": 3,
+        "wood": 2
+      },
+      "duration_sec": 90.0,
+      "effects": {
+        "shrine_offering_gold_bonus": 3
+      }
+    },
+    {
+      "id": "improved_flares",
+      "display_name": "Improved Flares",
+      "description": "Refined flare chemistry learned in the Stone Age keeps night flares burning longer.",
+      "requires": {
+        "all_of": [
+          "scientist_recruited",
+          "forgotten_shore_first_stone_wall_tier_2"
+        ]
+      },
+      "prerequisites": [
+        "inscription_studies"
+      ],
+      "cost": {
+        "gold": 2,
+        "wood": 3,
+        "stone": 1
+      },
+      "duration_sec": 120.0,
+      "effects": {
+        "flare_duration_bonus_sec": 4
+      }
+    }
+  ]
+}

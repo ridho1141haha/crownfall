@@ -330,6 +330,7 @@ func validate_payload(data: Variant) -> bool:
 		BuildingManager.WATCHTOWER_ID: ["watchtower"],
 		BuildingManager.FARM_WEST_ID: ["farm_plot"],
 		BuildingManager.FARM_EAST_ID: ["farm_plot"],
+		SpecialistDomain.SCIENTIST_HUT_PLOT_ID: ["specialist_hut"],
 	}
 	var seen_plot_ids: Dictionary = {}
 	for b_item: Variant in b_arr:
@@ -430,6 +431,13 @@ func validate_payload(data: Variant) -> bool:
 		# Fase 1 fondasi progresi: array fakta wajib ID valid yang dikenal
 		# registry; ID asing tidak pernah diterima dari data simpanan.
 		if not ProgressionState.is_valid_fact_array(pf_chk["progression_facts"]):
+			return false
+
+	if dict.has("research"):
+		# Fase 4 fondasi riset: struktur ketat, ID teknologi well-formed dan unik,
+		# proyek aktif tidak boleh bertabrakan dengan teknologi yang selesai.
+		# Kepemilikan ID (unknown technology) divalidasi di apply_save_dict.
+		if not ResearchManager.is_valid_saved_research_dict(dict["research"]):
 			return false
 
 	if dict.has("camp_vagrants_available"):

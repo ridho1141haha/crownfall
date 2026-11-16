@@ -25,6 +25,8 @@ run_godot "P0 scene integration" "--script res://tests/test_integration_m8_slice
 run_godot "P1 experimental" "--script res://tests/test_experimental_p1_m9_m10.gd" "PASS: All .* Experimental P1 Skeleton Checks"
 run_godot "Progression foundation" "--script res://tests/test_progression_foundation.gd" "PASS: All .* Progression Foundation"
 run_godot "Phase 2 era correction" "--script res://tests/test_progression_phase2_era_correction.gd" "PASS: All .* Phase 2 Era Correction"
+run_godot "Specialist domain" "--script res://tests/test_specialist_domain.gd" "PASS: All .* Specialist Domain Foundation"
+run_godot "Research foundation" "--script res://tests/test_research_foundation.gd" "PASS: All .* Research System Foundation"
 if [ "${failed}" -ne 0 ]; then
   echo "SOME SUITES FAILED (logs in ${LOG_DIR})"
   exit 1
