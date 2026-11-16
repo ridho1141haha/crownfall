@@ -1,7 +1,7 @@
 # CROWNFALL — NARRATIVE IMPLEMENTATION ROADMAP
 
 **Status:** Planning only — no narrative runtime or Prologue content is implemented by this roadmap.  
-**Baseline inspected:** `main` at `17196997faa9fac16d0c916b638cf5b763ca9fa5` (2026-11-16).  
+**Baseline inspected:** `main` at `b19d109dd48af5f174ef0f973cc9f4b8af664433` (2026-11-16).  
 **Story design:** [Prologue Story Design](narrative/PROLOGUE_STORY_DESIGN.md)
 
 > This roadmap defines implementation order and technical boundaries. The Prologue Story Design defines story beats. Neither document authorizes the coding agent to invent unresolved lore or change gameplay rules outside approved scope.
@@ -27,6 +27,8 @@ This is not a plan to implement all chapters, a branching RPG dialogue framework
 | [GDD](GDD.md) | High-level player experience, game pillars, world and chapter direction |
 | [Revised Project Baseline](REVISED_PROJECT_BASELINE.md) | Cross-project scope and architecture constraints |
 | [TDD](TDD.md) and [SYSTEMS](SYSTEMS.md) | Technical conventions and gameplay ownership |
+| [Narrative Implementation Audit](NARRATIVE_IMPLEMENTATION_AUDIT.md) | Source-audited implementation/readiness evidence (PR #10) |
+| [Chapter I Narrative Gap Analysis](CHAPTER_01_NARRATIVE_GAP_ANALYSIS.md) | Chapter I beats, implemented vs missing, Prologue/Chapter I boundary |
 
 If a story detail is marked OPEN, preserve that uncertainty. If a technical decision is not covered, inspect the current implementation and propose options before changing architecture.
 
@@ -238,6 +240,36 @@ This is a recommendation, not an approved implementation contract until the proj
 6. Do not edit code until the proposal and open product decisions are reviewed.
 
 The objective is a small, testable story foundation, not a speculative narrative framework.
+
+## 11. Audit-aligned technical findings (PR #10 synchronization)
+
+Source audit of `main` @ `b19d109` (see [`NARRATIVE_IMPLEMENTATION_AUDIT.md`](NARRATIVE_IMPLEMENTATION_AUDIT.md) and [`CHAPTER_01_NARRATIVE_GAP_ANALYSIS.md`](CHAPTER_01_NARRATIVE_GAP_ANALYSIS.md)). These findings feed Phase N1 and do not change the N0–N5 phase structure.
+
+### Confirmed absences (re-verified on latest main)
+- No dialogue runtime, no scripted-sequence/cutscene runner, no chapter progression runtime, no narrative save fields. `SaveManager` remains schema v2 (`scripts/save/SaveManager.gd:8-9`).
+- Save/load anchors: `build_save_payload` `scripts/world/ForgottenShoreSession.gd:1099`, `_apply_loaded_payload` `:1181`, `_consume_pending_load_if_requested` `:1252`.
+
+### TimeManager signal semantics (corrected)
+`daylight_started`, `sunset_started`, `night_started`, and `sunrise_reached` are **transition-time events, not per-frame ticks**: `_transition_to_next_phase` (`scripts/world/TimeManager.gd:137`) emits once per phase change, `_emit_initial_phase_if_needed` (`:130`) emits the initial daylight once, and `apply_save_dict` (`:99`) re-emits only on a non-silent restore (the session load path restores silently). Duplicate/trigger risk comes from connecting the same handler more than once and from triggers reacting during save-restore — use `is_connected` guards and idempotent, load-silent narrative events (N1).
+
+### Presentation ownership
+`ShoreView`/`ShoreFX` are merged (PR #8) and remain world presentation helpers, not narrative controllers (`ForgottenShoreSession.gd:86-87,148`). A dialogue/sequence presenter should follow the same separation.
+
+### UI and data constraints
+- `ClockHUD.FeedbackLabel` is a single overwritten line (`scripts/ui/ClockHUD.gd:11,125`); dialogue needs its own surface (N2).
+- Specialist/structure/technology/era `description` fields are validated but never displayed; do not treat them as live dialogue.
+
+### Lore identity items that stay unresolved
+- “Forgotten Shrine” (x=-780 cache/offering) vs “Shrine of Growth” (x=820 structure): keep separate until an explicit lore decision (N5).
+- “Ancient Relic” (Greed Portal loot) artifact-vs-cache: OPEN.
+- Greedlings / Greed Portal origins and purpose: out of scope until approved (§4).
+
+### Documentation drift to reconcile before authoring narrative text
+- Node count wording (`DECISIONS_M2_M8.md:17`, `PRD.md:335` vs 5 shipped nodes in `data/resource_nodes.json`).
+- East wall position (`x=360` in docs vs `380.0` in `data/buildings.json`/`BuildingManager`).
+- Watchtower position (`x=290` in `docs/GDD.md:134` vs `210.0` in data/code).
+- Save schema (`schema_version: 1` in `DECISIONS_M2_M8.md:25`/`PRD.md:342` vs v2 in `SaveManager.gd:9`).
+- GDD first-slice NPC/enemy scope table is stale vs shipped Farmer/Archer and Crawler/Brute/West Scouts.
 
 ---
 
