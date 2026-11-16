@@ -63,7 +63,7 @@ The Monarch's journey is tied to an ancient crown and the gradual restoration of
 | IV | The Hollow Crown | Uncover the crown's origin | Future |
 | V | The Last Light | Determine Aetherion's future | Future |
 
-**Scope clarification:** the first vertical slice is not required to contain a complete Chapter I narrative, dialogue system, quest chain, or cinematic story sequence. Its purpose is to prove the settlement and first-night loop.
+**Scope clarification:** the current vertical-slice build still starts directly on Forgotten Shore and does not yet contain a playable Prologue, dialogue runtime, quest chain, or cinematic story sequence. A separate Prologue, **The Crown's Call**, is now in narrative planning before Chapter I. Its story design is documented in [`docs/narrative/PROLOGUE_STORY_DESIGN.md`](narrative/PROLOGUE_STORY_DESIGN.md), and its staged technical plan is in [`docs/NARRATIVE_IMPLEMENTATION_ROADMAP.md`](NARRATIVE_IMPLEMENTATION_ROADMAP.md). Both are planned work, not shipped features. The first-slice settlement and first-night gameplay loop remains the behavior to preserve.
 
 ### 2.3 First Location — Forgotten Shore
 
@@ -109,7 +109,7 @@ The loop should make the relationship between daytime decisions and nighttime co
 | Buildings | Town Center, Wooden Wall, Stone Wall Tier 2, Watchtower, and Farm Plots | Full kingdom upgrade tree |
 | Enemies | One basic enemy archetype | Multiple enemy families and bosses |
 | Survival | One night encounter and sunrise | Blood Moon and advanced world events |
-| Narrative | Environmental atmosphere and world premise | Full dialogue, quests, branching story, chapter framework |
+| Narrative | Current build: environmental atmosphere and world premise; Prologue story design planned in `docs/narrative/PROLOGUE_STORY_DESIGN.md` | Prologue runtime, dialogue/sequence systems, quests, branching story, and complete Chapter I narrative |
 | Persistence | Local versioned save | Cloud saves and multiplayer session persistence |
 
 ### 3.3 Resources
