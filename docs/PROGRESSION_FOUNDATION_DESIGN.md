@@ -472,17 +472,29 @@ the Forgotten Shore vertical slice, on `feat/shrine-resource-buff-phase-5`:
   (Forgotten Shore, `x=820`), plus `statue_of_the_first_sailor` and
   `temple_of_the_dawn` which deliberately omit `world_x` and therefore fail
   closed until a future phase places them in a world (same rationale as the
-  future-island specialist roster).
+  future-island specialist roster); their derived lifecycle reports
+  `not_present`, never `available`.
 - **Runtime (`scripts/structures/StructureDomain.gd`).** The lifecycle states
-  `locked -> available -> activated` are DERIVED queries over the definitions
-  plus durable ProgressionState facts, never stored. `try_activate` runs
-  validate -> duplicate guard (before any spend) -> island and world presence
-  -> proximity -> requirement facts -> atomic `EconomyLedger` spend -> record
-  the activation fact -> signal. A failure at any step leaves balances, facts
-  and lifecycle untouched; a repeated activation is rejected before the spend,
-  so it can never deduct resources twice; the defensive refund after a failed
-  fact recording keeps even the unreachable failure path free of partial
-  activations. The domain keeps no save fields of its own.
+  `activated > not_present > available > locked` are DERIVED queries over the
+  definitions plus durable ProgressionState facts, never stored. `not_present`
+  covers structures that are not a placeable part of the active world (they
+  belong to another island or have no `world_x` yet): requirement eligibility
+  is irrelevant until a structure exists in this world, so the lifecycle never
+  describes an unplaced or inactive-island structure as ready for player
+  activation (it mirrors `try_activate`'s island/world-presence rejections;
+  both world resolvers pre-filter by island and world position, so resolver
+  behavior is unchanged). `try_activate` runs validate -> duplicate guard
+  (before any spend) -> island and world presence -> finite actor position ->
+  proximity -> requirement facts -> atomic `EconomyLedger` spend -> record the
+  activation fact -> signal. Non-finite actor coordinates (NaN/±inf) are
+  rejected before any proximity math — every comparison against NaN is false,
+  so without the guard they would bypass the range check entirely — and a
+  rejected non-finite position mutates no balance and records no fact. A
+  failure at any step leaves balances, facts and lifecycle untouched; a
+  repeated activation is rejected before the spend, so it can never deduct
+  resources twice; the defensive refund after a failed fact recording keeps
+  even the unreachable failure path free of partial activations. The domain
+  keeps no save fields of its own.
 - **Resource access (`scripts/resources/ResourceCatalog.gd`,
   `scripts/resources/ResourceAccessState.gd`, `data/resources.json`).** The
   mandatory distinction between resource ACCESS and resource QUANTITY:
@@ -544,11 +556,13 @@ the Forgotten Shore vertical slice, on `feat/shrine-resource-buff-phase-5`:
   that already has non-empty Phase 5 state is explicitly tested (replace, not
   merge).
 
-Acceptance evidence: `tests/test_structure_buff_phase5.gd` (193 checks across
-7 suites) covers definition validation and fail-safe loading for all three
-catalogs, the derived lifecycle, activation transactions (success, unknown
-IDs, out-of-range, insufficient funds, future-island and unplaced structures
-failing closed, duplicate activation without double spending), buff
+Acceptance evidence: `tests/test_structure_buff_phase5.gd` (209 checks across
+8 suites) covers definition validation and fail-safe loading for all three
+catalogs, the derived lifecycle (including `not_present` for unplaced and
+inactive-island structures), activation transactions (success, unknown IDs,
+non-finite actor positions, out-of-range, insufficient funds, future-island
+and unplaced structures failing closed, duplicate activation without double
+spending), buff
 aggregation (additive totals, collapsed duplicates, unknown effect types,
 idempotent facts never accumulating), resource access (zero balance while
 unlocked, nonzero balance while locked, unknown IDs, multiple `any_of` unlock

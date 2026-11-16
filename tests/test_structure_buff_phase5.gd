@@ -6,7 +6,8 @@ extends SceneTree
 ## injection. Covers structure definition validation (fail-safe catalog,
 ## pinned activation facts, cost/resource/requirement references), derived
 ## lifecycle and transactional activation through the atomic EconomyLedger
-## (duplicate activation never spends twice), buff definition validation and
+## (duplicate activation never spends twice; non-finite actor positions are
+## rejected before any proximity math or state mutation), buff definition validation and
 ## the authoritative derived aggregation (no duplicate application, additive
 ## stacking, unsupported modes rejected), explicit resource access separated
 ## from ledger quantity (zero balance while unlocked, nonzero balance while
@@ -152,7 +153,7 @@ func _test_structure_lifecycle_and_activation() -> bool:
 	# Derived lifecycle before any requirement fact.
 	if not _check(domain.get_lifecycle_state(SHRINE_ID, progression) == StructureDomain.STATE_LOCKED, "Shrine starts LOCKED (Stone Age requirement unmet)"):
 		return false
-	if not _check(domain.get_lifecycle_state(STATUE_ID, progression) == StructureDomain.STATE_AVAILABLE, "Statue without requirements starts AVAILABLE (activation still fails closed without a world position)"):
+	if not _check(domain.get_lifecycle_state(STATUE_ID, progression) == StructureDomain.STATE_NOT_PRESENT, "Statue without a world position reports NOT_PRESENT (never described as ready for activation)"):
 		return false
 	if not _check(domain.get_lifecycle_state("unknown_structure", progression) == "", "Unknown structure lifecycle is an empty string (fail closed)"):
 		return false
@@ -247,6 +248,8 @@ func _test_structure_lifecycle_and_activation() -> bool:
 		return false
 	if not _check(economy.get_amount(&"gold") == 6, "Future-island rejection spent nothing"):
 		return false
+	if not _check(future_domain.get_lifecycle_state(TEMPLE_ID, progression) == StructureDomain.STATE_NOT_PRESENT, "Future-island temple lifecycle is NOT_PRESENT (never AVAILABLE on an inactive island)"):
+		return false
 	return true
 
 
@@ -256,6 +259,42 @@ func _fund_wrapper(economy: EconomyLedger, gold: int, wood: int, stone: int) -> 
 
 func _grant_stone_age_wrapper(progression: ProgressionState) -> bool:
 	return progression.record_fact(STONE_AGE_FACT)
+
+
+# --------------------------------------------------------------- Suite 2b ---
+func _test_nonfinite_actor_position_guard() -> bool:
+	# Post-review regression: NaN/+-inf actor coordinates silently bypass the
+	# proximity comparison (every comparison against NaN is false), so the
+	# domain must reject them before any distance math or state mutation.
+	var domain: StructureDomain = StructureDomain.new()
+	var progression: ProgressionState = ProgressionState.new()
+	if not _check(_grant_stone_age_wrapper(progression), "Guard suite setup: Stone Age milestone fact recorded"):
+		return false
+	var economy: EconomyLedger = EconomyLedger.new()
+	if not _check(_fund_wrapper(economy, 10, 10, 10), "Guard suite setup: economy funded 10G 10W 10S"):
+		return false
+	var reject_capture: Dictionary = {}
+	domain.structure_action_rejected.connect(func(reason: String) -> void: reject_capture["reason"] = reason)
+
+	var nonfinite_positions: Array[float] = [NAN, INF, -INF]
+	for pos: float in nonfinite_positions:
+		if not _check(not domain.try_activate(pos, SHRINE_ID, progression, economy), "Non-finite actor position %s is rejected (no proximity bypass)" % str(pos)):
+			return false
+		if not _check(String(reject_capture.get("reason", "")).contains("invalid position"), "Non-finite rejection explains the invalid actor position (%s)" % str(pos)):
+			return false
+		if not _check(economy.get_amount(&"gold") == 10 and economy.get_amount(&"wood") == 10 and economy.get_amount(&"stone") == 10 and not progression.has_fact("shrine_of_growth_activated"), "Non-finite rejection mutates no balance and records no fact (%s)" % str(pos)):
+			return false
+
+	# Finite positions keep their exact existing semantics.
+	if not _check(not domain.try_activate(SHRINE_X + 200.0, SHRINE_ID, progression, economy), "Finite out-of-range activation is still rejected"):
+		return false
+	if not _check(economy.get_amount(&"gold") == 10, "Out-of-range rejection still spent nothing"):
+		return false
+	if not _check(domain.try_activate(SHRINE_X, SHRINE_ID, progression, economy), "Finite in-range activation still succeeds after the non-finite guards"):
+		return false
+	if not _check(economy.get_amount(&"gold") == 6 and economy.get_amount(&"wood") == 8 and economy.get_amount(&"stone") == 7 and progression.has_fact("shrine_of_growth_activated"), "Successful activation deducts exactly 4G 2W 3S and records the fact once"):
+		return false
+	return true
 
 
 # ---------------------------------------------------------------- Suite 3 ---
@@ -618,7 +657,7 @@ func _test_save_load_phase5_state() -> bool:
 		return false
 	if not _check(not bool(dst.execute_world_command("player_1", &"activate_structure", SHRINE_ID).get("ok", false)) and dst.economy.get_amount(&"gold") == 6, "Duplicate activation after restore is still rejected without spending"):
 		return false
-	if not _check(dst.structures.get_lifecycle_state(STATUE_ID, dst.progression) == StructureDomain.STATE_AVAILABLE and not dst.structures.is_activated(STATUE_ID, dst.progression), "Statue stays a non-activated definition after restore (nothing fabricated)"):
+	if not _check(dst.structures.get_lifecycle_state(STATUE_ID, dst.progression) == StructureDomain.STATE_NOT_PRESENT and not dst.structures.is_activated(STATUE_ID, dst.progression), "Statue stays a not-present, non-activated definition after restore (nothing fabricated)"):
 		return false
 
 	# Legacy save loaded into a session with NON-EMPTY Phase 5 state: the save
@@ -742,12 +781,14 @@ func _test_existing_systems_regression() -> bool:
 func _init() -> void:
 	var suite_names: Array[String] = [
 		"Structure Catalog Validation", "Structure Lifecycle & Activation",
+		"Non-finite Actor Position Guard",
 		"Buff Catalog & Aggregation", "Resource Access",
 		"Session Integration & Blessings", "Save/Load Phase 5 State",
 		"Existing Systems Regression",
 	]
 	var suites: Array[Callable] = [
 		_test_structure_catalog_validation, _test_structure_lifecycle_and_activation,
+		_test_nonfinite_actor_position_guard,
 		_test_buff_catalog_and_aggregation, _test_resource_access,
 		_test_session_integration_and_blessings, _test_save_load_phase5_state,
 		_test_existing_systems_regression,

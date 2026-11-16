@@ -11,7 +11,9 @@ extends RefCounted
 ##     save fields of its own, so schema v2 stays untouched and legacy saves
 ##     never fabricate activations.
 ##   - Lifecycle states are DERIVED queries over facts + definitions, never
-##     stored: locked -> available -> activated.
+##     stored: activated > not_present > available > locked. An unplaced or
+##     inactive-island structure is never described as ready for activation
+##     (NOT_PRESENT), mirroring try_activate's island/world-presence rejects.
 ##   - Resource costs flow through the atomic EconomyLedger: validate ->
 ##     spend -> record fact. A failed activation never deducts resources or
 ##     mutates facts; a repeated activation is a rejected no-op that never
@@ -28,6 +30,7 @@ signal structure_action_rejected(reason: String)
 const STATE_LOCKED: String = "locked"
 const STATE_AVAILABLE: String = "available"
 const STATE_ACTIVATED: String = "activated"
+const STATE_NOT_PRESENT: String = "not_present"
 
 const INTERACT_RANGE: float = 96.0
 
@@ -84,7 +87,11 @@ func _requirements_satisfied(def: Dictionary, progression: ProgressionState) -> 
 
 
 ## Derived lifecycle (never stored):
-##   - ACTIVATED: the durable activation fact is present;
+##   - ACTIVATED: the durable activation fact is present (durable truth);
+##   - NOT_PRESENT: the structure is not a placeable part of the active world
+##     (it belongs to another island or has no world_x yet) - requirement
+##     eligibility is irrelevant until it exists in this world, so it is never
+##     described as ready for player activation;
 ##   - AVAILABLE: requirements satisfied, awaiting the player's activation;
 ##   - LOCKED: requirements not met.
 ## Unknown structure IDs return an empty string (fail closed for queries).
@@ -94,6 +101,8 @@ func get_lifecycle_state(structure_id: String, progression: ProgressionState) ->
 		return ""
 	if progression.has_fact(String(def["activation_fact"])):
 		return STATE_ACTIVATED
+	if String(def.get("island_id", "")) != SpecialistDomain.ACTIVE_ISLAND_ID or not def.has("world_x"):
+		return STATE_NOT_PRESENT
 	if _requirements_satisfied(def, progression):
 		return STATE_AVAILABLE
 	return STATE_LOCKED
@@ -134,7 +143,8 @@ func get_hud_text(progression: ProgressionState) -> String:
 
 ## Activation transaction. Order of operations:
 ##   1. Validate the definition, duplicate-activation guard, world presence,
-##      active island, proximity and requirement facts (all authoritative reads).
+##      active island, finite actor position, proximity and requirement facts
+##      (all authoritative reads).
 ##   2. Spend the activation cost through the atomic EconomyLedger.
 ##   3. Record the durable activation fact.
 ##   4. Emit the signal.
@@ -160,6 +170,12 @@ func try_activate(actor_x: float, structure_id: String, progression: Progression
 		structure_action_rejected.emit("%s is not present in this world yet" % display_name)
 		return false
 	var world_x: float = float(def["world_x"])
+	# NaN/+-inf actor coordinates would silently bypass the proximity comparison
+	# (every comparison against NaN is false), so reject them before any
+	# distance math - and before anything can mutate.
+	if not is_finite(actor_x):
+		structure_action_rejected.emit("Cannot activate %s from an invalid position" % display_name)
+		return false
 	if absf(actor_x - world_x) > INTERACT_RANGE:
 		structure_action_rejected.emit("Move closer to %s (x=%.0f) to activate it" % [display_name, world_x])
 		return false
