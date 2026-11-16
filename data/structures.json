@@ -1,0 +1,48 @@
+{
+  "structures": [
+    {
+      "id": "shrine_of_growth",
+      "category": "shrine",
+      "display_name": "Shrine of Growth",
+      "description": "A moss-grown shrine on the eastern shore. Activating it binds the island's growth spirits to your reign, blessing every piece of wood gathered with an extra unit of timber.",
+      "island_id": "forgotten_shore",
+      "activation_fact": "shrine_of_growth_activated",
+      "activation_cost": {
+        "gold": 4,
+        "wood": 2,
+        "stone": 3
+      },
+      "world_x": 820.0,
+      "requires": {
+        "all_of": [
+          "forgotten_shore_first_stone_wall_tier_2"
+        ]
+      }
+    },
+    {
+      "id": "statue_of_the_first_sailor",
+      "category": "statue",
+      "display_name": "Statue of the First Sailor",
+      "description": "A weathered statue honoring the first sailor to reach Forgotten Shore. Its activation rites are not yet part of the island's playable slice.",
+      "island_id": "forgotten_shore",
+      "activation_fact": "statue_of_the_first_sailor_activated",
+      "activation_cost": {
+        "gold": 6,
+        "stone": 4
+      }
+    },
+    {
+      "id": "temple_of_the_dawn",
+      "category": "temple",
+      "display_name": "Temple of the Dawn",
+      "description": "Ruins of a dawn temple whose priests once blessed entire settlements. Its restoration belongs to a future phase of the progression roadmap.",
+      "island_id": "forgotten_shore",
+      "activation_fact": "temple_of_the_dawn_activated",
+      "activation_cost": {
+        "gold": 10,
+        "wood": 6,
+        "stone": 8
+      }
+    }
+  ]
+}
