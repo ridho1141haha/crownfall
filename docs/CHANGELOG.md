@@ -9,6 +9,35 @@ This changelog records repository changes that actually occurred. Planned featur
 
 ---
 
+## [2026-11-16] Specialist & Research Foundations (Phases 3 & 4)
+
+**Type:** New Gameplay Systems (specialist domain foundation + research system foundation; save schema stays version 2)
+**Engine Verified:** `Godot 4.7.2.stable` (local headless run of `tests/run_all.sh`, exit 0 after the code changes and again after the documentation changes: static verifier `195` checks, world clock `5` checks, P0 unit `144` checks across `17` suites, M8 integration `38` checks, P1 experimental `14` checks, Phase 1 progression `139` checks across `6` suites, Phase 2 suite `162` checks across `8` suites, specialist suite `108` checks across `5` suites, research suite `130` checks across `6` suites — all green)
+
+### Summary
+Phase 3 adds the specialist domain foundation: a validated data-driven roster (`data/specialists.json` + `SpecialistCatalog.gd`) of the four established specialists, a four-state lifecycle (`undiscovered -> discovered -> recruitable -> recruited`) derived from durable progression facts plus live building state (no separate specialist save fields), discovery and recruitment as separate authoritative transactions (idempotent discovery; recruitment order validate -> atomic spend -> record fact -> signal; duplicate recruitment rejected; failed recruitment never mutates state), and a minimal housing requirement integrated with the data-driven building system via the new `hut_scientist_01` (`specialist_hut`) plot. The Scientist is the first playable specialist on Forgotten Shore: discover at `x=-1010`, build their hut at `x=-980`, recruit for `3G 2W`. All eight specialist fact IDs are registered; only the Scientist has a gameplay recording path, so no fact is fabricated for future islands.
+
+Phase 4 makes the Scientist provide a real function: a validated technology catalog (`data/technologies.json` + `TechnologyCatalog.gd`) with prerequisite-cycle detection and an effect registry that rejects unimplemented effects, `ResearchManager.gd` with one active project, authoritative requirements (recruited Scientist, prerequisite technologies, Stone Age fact gate), transactional starts through the atomic `EconomyLedger`, world-clock-driven progress (the session's scaled sim delta — no UI timers or frame counting), exactly-once completion with derived effects, and persistence as the optional top-level `research` save key. Two Forgotten Shore technologies ship: `inscription_studies` (Shrine Offering +3 gold) and `improved_flares` (Kindle Flare +4s), the latter gated on the Stone Age milestone. No Iron Age content exists on Forgotten Shore; schema stays version 2 and old saves without the research key load untouched (explicit null / unknown IDs / duplicate IDs are rejected wholesale with no partial mutation).
+
+### Key Changes
+- **`scripts/specialists/SpecialistCatalog.gd` + `data/specialists.json` (new):** fail-safe all-or-nothing definition loading with strict field sets, stable unique IDs, role/island whitelists, fact bindings pinned to the registered `<id>_discovered`/`<id>_recruited` pattern, positive EconomyLedger costs, and optional housing/world-position/requirement-fact fields; future-island specialists omit placement so discovery/recruitment fail closed.
+- **`scripts/specialists/SpecialistDomain.gd` (new):** derived lifecycle queries, idempotent discovery, and the authoritative recruitment transaction; no save state of its own (facts + buildings carry everything).
+- **`scripts/research/TechnologyCatalog.gd` + `data/technologies.json` (new):** validated technology definitions with cycles rejected and exactly the two scoped Forgotten Shore technologies.
+- **`scripts/research/ResearchManager.gd` (new):** availability/progress/completion state, transactional starts, authoritative world-time advancement, exactly-once completion, derived completion effects, and transactional save restore (unknown/duplicate technology IDs rejected against a file-derived fail-closed static registry; active projects resume with exact elapsed time and never re-deduct costs; completed technologies never re-apply rewards).
+- **`scripts/progression/ProgressionState.gd`:** registered the eight specialist facts (discovery/recruitment for scientist, blacksmith, architect, scholar).
+- **`data/buildings.json` + `scripts/save/SaveManager.gd`:** new `hut_scientist_01` specialist-hut plot (data-driven) added to the strict save plot whitelist.
+- **`scripts/world/ForgottenShoreSession.gd`:** specialist + research members and signal wiring; `discover_specialist` / `recruit_specialist` / `start_research` world commands (empty targets resolve deterministically); programmatic specialist-camp visuals and prompts; research advancement fed with the authoritative scaled sim delta; shrine offering and flare duration consume the aggregated research effects (fresh-session behavior unchanged); research state included in the save payload and restored transactionally on load.
+- **`scripts/player/InteractionResolver.gd`:** specialist interaction block (discover / recruit prompts with data-defined cost text) and the research prompt (first available technology in stable ID order, offered at the recruited specialist's position).
+- **`scripts/ui/ClockHUD.gd`:** research status line (`set_research_text`).
+- **Tests:** new `tests/test_specialist_domain.gd` (108 checks, 5 suites) and `tests/test_research_foundation.gd` (130 checks, 6 suites); registered in `tests/run_all.sh` and the CI workflow. Existing Phase 1/Phase 2 suites updated only where they used `scientist_recruited` as the canonical UNKNOWN fact-ID example (now `mount_tamed`; the unknown-ID rejection intent is unchanged) — Phase 1 stays at 139 checks, Phase 2 at 162 checks.
+- **Docs:** `PROGRESSION_FOUNDATION_DESIGN.md` sections 13-14 (shipped Phase 3/4 boundaries), `PROGRESSION_IMPLEMENTATION_ROADMAP.md` (Phases 3-4 marked implemented with exit criteria met), `ROADMAP.md` (implemented-vs-future summary), `GDD.md` (specialist and research bullets in the settlement section).
+
+### Deliberate boundaries
+- Specialist and research states stay separate domains: specialists are not villager NPCs, research completion is not duplicated into progression facts (one source of truth), and the multiplayer command whitelist stays unchanged (remote peers cannot trigger the new commands until multiplayer scope defines them).
+- Blacksmith/Architect/Scholar gameplay, additional technologies, research queues, and multi-island simulation are NOT implemented and are documented as future work.
+
+---
+
 ## [2026-11-16] Progression Phase 2.2 — Reject Malformed Progression Data Before Migration
 
 **Type:** Save Migration Correctness (narrow ordering fix on top of Phase 2.1; no gameplay, balance, or schema changes)

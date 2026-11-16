@@ -1,6 +1,6 @@
 # Crownfall — Progression Foundation Design
 
-**Status:** Phase 1 foundation implemented (fact service, unlock definition loader, deterministic evaluator, Stone Age milestone integration, save compatibility; merged via PR #3). Phase 2 era progression correction is implemented on `feat/progression-phase-2-era-correction` (Shipwreck Stage 3 = voyage readiness only; Iron Age gated behind the Eldergrove milestone; conservative legacy `iron_age` save migration; see section 12). Sections 4-10 remain the standing design reference; sections 11-12 record what actually shipped and what stays deferred. Later phases (specialists, research, resource access, islands, mounts) are still design-only.
+**Status:** Phase 1 foundation implemented (fact service, unlock definition loader, deterministic evaluator, Stone Age milestone integration, save compatibility; merged via PR #3). Phase 2 era progression correction implemented and merged via PR #4 (Shipwreck Stage 3 = voyage readiness only; Iron Age gated behind the Eldergrove milestone; conservative legacy `iron_age` save migration; see section 12). Phase 3 specialist domain foundation and Phase 4 research system foundation are implemented on `feat/specialist-research-phase-3-4` (see sections 13-14). Sections 4-10 remain the standing design reference; sections 11-14 record what actually shipped and what stays deferred. Later phases (resource access via shrines, islands, mounts) are still design-only.
 **Scope:** Foundational progression architecture for the existing single-player Forgotten Shore build.
 **Authority:** This document supplements `REVISED_PROJECT_BASELINE.md`; it does not silently replace approved vertical-slice requirements.
 
@@ -323,3 +323,124 @@ dictionary unchanged, while absent-field legacy migration and valid-array
 migration with deterministic sorting keep their existing idempotent behavior.
 Phase 1's `test_progression_foundation.gd` (139 checks) stays green, and the
 full headless suite (`tests/run_all.sh`) passes.
+
+## 13. Phase 3 implementation notes (specialist domain foundation, shipped behavior)
+
+Phase 3 implements the smallest reliable specialist domain on the Forgotten
+Shore vertical slice, on `feat/specialist-research-phase-3-4`:
+
+- **Definitions (`scripts/specialists/SpecialistCatalog.gd`, `data/specialists.json`).**
+  Data-driven roster of the four established specialists (`scientist`,
+  `blacksmith`, `architect`, `scholar`) with stable unique IDs, role whitelist
+  (`research`/`crafting`/`construction`/`knowledge`), island whitelist
+  (`forgotten_shore`/`eldergrove_forest`/`ancient_kingdom`), fact bindings pinned
+  to the registered `<id>_discovered` / `<id>_recruited` pattern, validated
+  positive `EconomyLedger` costs, and optional housing-plot/world-position/
+  requirement-fact fields. Loading is all-or-nothing (any error leaves the
+  catalog empty; nothing can become discoverable from malformed data). The three
+  future-island specialists intentionally omit `world_x`/`housing_plot_id`, so
+  their discovery and recruitment fail closed until their islands exist.
+- **Lifecycle (`scripts/specialists/SpecialistDomain.gd`).** The four states
+  `undiscovered -> discovered -> recruitable -> recruited` are logically
+  distinguishable and DERIVED, never stored: discovery and recruitment are
+  durable `ProgressionState` facts, housing is live `BuildingManager` state, and
+  `get_lifecycle_state()` evaluates the definition against them. The domain
+  keeps no save fields of its own.
+- **Discovery and recruitment are separate transactions.** Discovery records
+  the discovery fact after a real world interaction at the specialist's
+  position (idempotent repeat: success without a second signal). Recruitment
+  runs validate -> atomic `EconomyLedger` spend -> record recruitment fact ->
+  signal, and is rejected for unknown IDs, undiscovered specialists, unsatisfied
+  requirement facts, missing housing, insufficient funds, and duplicate
+  recruitment; failed recruitment never deducts resources or mutates facts.
+- **Housing.** Minimal, well-defined, and integrated with the existing
+  data-driven building system: the Scientist's housing is the new
+  `hut_scientist_01` plot (`specialist_hut` type in `data/buildings.json`); the
+  requirement is satisfied only when that plot exists and is COMPLETED in the
+  authoritative `BuildingManager` (a destroyed hut stops satisfying it). No
+  residential simulation, population, or happiness mechanics were added.
+- **Scientist playable path (Forgotten Shore only).** The shipwrecked Scientist
+  stands at `x=-1010` (data-defined): `[E]` discovers them, `[B]` builds their
+  hut at `x=-980`, `[E]` recruits them for the data-defined `3G 2W`. All of it
+  flows through the existing interaction resolver, world-command and building
+  transaction paths; specialist progress never enters the villager population
+  roster or cap.
+- **Facts.** All eight specialist fact IDs are registered in
+  `ProgressionState.KNOWN_FACT_IDS` (same rationale as `eldergrove_reached`:
+  stable references for definitions and future saves). Only the Scientist has a
+  gameplay recording path; registering an ID never records the fact, and no
+  fact exists without real gameplay evidence.
+- **Save compatibility.** Schema stays version 2 with NO new specialist fields:
+  discovery/recruitment persist through the existing strictly-validated
+  `progression_facts` array and housing persists through the buildings array
+  (`hut_scientist_01` added to the strict save plot whitelist). Legacy v2 saves
+  without specialist data load untouched (scientist undiscovered, hut a fresh
+  placeholder); malformed fact arrays are rejected exactly as before.
+
+Acceptance evidence: `tests/test_specialist_domain.gd` (108 checks across 5
+suites) covers definition validation and fail-safe loading, the four lifecycle
+states, discovery idempotency and rejection reasons, housing/recruitment
+atomicity (insufficient funds, destroyed housing, duplicate recruitment), the
+real session command and resolver paths, villager-population separation, and
+save round-trip/legacy/malformed compatibility.
+
+## 14. Phase 4 implementation notes (research system foundation, shipped behavior)
+
+Phase 4 makes the recruited Scientist provide a real gameplay function, on the
+same branch:
+
+- **Definitions (`scripts/research/TechnologyCatalog.gd`, `data/technologies.json`).**
+  Validated data-driven technology catalog: strict field sets, stable unique
+  IDs, non-empty positive `EconomyLedger` costs, positive finite durations, a
+  completion-effect registry that rejects unimplemented effect IDs (no fake
+  technologies), requirement fact groups evaluated with the existing
+  progression evaluator semantics, and prerequisite references resolved inside
+  the set with depth-first cycle detection. All-or-nothing loading. Exactly two
+  technologies ship: `inscription_studies` (requires `scientist_recruited`;
+  effect `shrine_offering_gold_bonus: +3`) and `improved_flares` (requires
+  `scientist_recruited` + `forgotten_shore_first_stone_wall_tier_2` as the
+  era/Stone-Age gate, prerequisite `inscription_studies`; effect
+  `flare_duration_bonus_sec: +4`). No Iron Age technology exists on Forgotten
+  Shore.
+- **Runtime (`scripts/research/ResearchManager.gd`).** One active project at a
+  time; the four states unavailable/available/in_progress/completed are
+  deterministic queries. `try_start` runs validate -> atomic spend -> set
+  active project -> signal; failures never deduct resources. Progress advances
+  only through `advance_research(delta)` fed with the session's scaled
+  world-simulation delta (the same authoritative time every other system uses;
+  no UI timers, frame counters, or offline progression). Completion happens
+  exactly once (the active project is cleared synchronously) and completion
+  rewards are DERIVED from the completed set (`get_effect_total`), so neither
+  repeated advances nor repeated loads can re-apply them.
+- **Effects consumed.** The session's shrine offering yields `2 + bonus` gold
+  and the Kindle Flare lasts `8 + bonus` seconds, both read from
+  `get_effect_total` (data-driven; fresh-session behavior unchanged with bonus
+  0). The HUD gains a research status line (`ClockHUD.set_research_text`) and
+  the recruited Scientist offers `[E] Research <tech> (<cost>)` at their camp.
+- **Save compatibility.** The research state persists as the optional
+  top-level `research` key (`{"completed_techs": [...sorted], "active_research":
+  {"technology_id", "elapsed_sec"} | null}`); schema stays version 2 and
+  `migrate_payload` is untouched (absent key = empty research state, so old
+  saves load with nothing to backfill). Strict validation rejects malformed
+  structures, unknown/duplicate technology IDs (against a file-derived
+  fail-closed static registry), negative elapsed time, and active-vs-completed
+  collisions; an explicit `"research": null` is malformed and rejected, like
+  the progression-facts policy. Loading an active project restores its exact
+  elapsed time and never re-deducts the cost; loading completed technologies
+  never re-applies rewards; failed loads never partially mutate live state.
+- **Ownership boundaries.** Definitions live in the catalog, durable research
+  state in `ResearchManager`, requirement facts stay in `ProgressionState`,
+  costs flow through `EconomyLedger`, and UI only renders. Completed research
+  is deliberately NOT duplicated into progression facts (one source of truth);
+  a future unlock definition that needs to require a technology can add that
+  bridge explicitly in a later phase.
+
+Acceptance evidence: `tests/test_research_foundation.gd` (130 checks across 6
+suites) covers definition validation including prerequisite cycles, the
+availability truth table, transactional starts (insufficient resources,
+unknown technology, duplicate project), authoritative timing with exactly-once
+completion, save round-trips (active project resumes without re-deduction,
+completed effects never re-applied, legacy saves, explicit-null and unknown-ID
+rejection with no partial mutation), session effect integration through the
+real command paths, and era-safety regression (no Iron Age, no fabricated
+Eldergrove fact, fail-closed era gate).

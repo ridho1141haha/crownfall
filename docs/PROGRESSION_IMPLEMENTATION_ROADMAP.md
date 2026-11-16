@@ -71,6 +71,15 @@ exact legacy `iron_age` migration policy. Phases 3+ below remain planning only.
 
 ## Phase 3 — Specialist domain foundation
 
+**Status:** Implemented on `feat/specialist-research-phase-3-4` (validated data-driven
+specialist catalog, four-state derived lifecycle, separate idempotent discovery and
+authoritative recruitment transactions, minimal housing requirement integrated with
+the data-driven building system, Scientist playable path on Forgotten Shore, facts-
+based persistence with schema v2 kept). See
+`PROGRESSION_FOUNDATION_DESIGN.md` section 13 for the shipped boundary. The
+Blacksmith/Architect (Eldergrove Forest) and Scholar (Ancient Kingdom) gameplay
+remains future work; their definitions and fact IDs exist and fail closed.
+
 **Goal:** extend recruitment without coupling specialists to ordinary villagers.
 
 - Define specialist IDs and role metadata.
@@ -79,9 +88,18 @@ exact legacy `iron_age` migration policy. Phases 3+ below remain planning only.
 - Later stages add Blacksmith and Architect on Eldergrove Forest, then Scholar on Ancient Kingdom.
 - Do not make every specialist a subclass of the current Builder actor without evidence that behavior is shared.
 
-**Exit criteria:** specialist state is testable, saved, and separate from the current villager population cap / Builder state unless an explicit design decision merges them.
+**Exit criteria:** specialist state is testable, saved, and separate from the current villager population cap / Builder state unless an explicit design decision merges them. — Met: specialist state derives from registered progression facts plus building state (no separate save fields), is covered by `tests/test_specialist_domain.gd` (108 checks, 5 suites), and stays fully separate from `NPCPopulationManager`.
 
 ## Phase 4 — Research and technology
+
+**Status:** Implemented on `feat/specialist-research-phase-3-4` (validated technology
+catalog with prerequisite-cycle detection, one active project at a time, transactional
+starts through the atomic EconomyLedger, authoritative world-time progress,
+exactly-once completion with derived effects, optional top-level `research` save key
+with schema v2 kept and strict malformed-data rejection). See
+`PROGRESSION_FOUNDATION_DESIGN.md` section 14 for the shipped boundary. Two Forgotten
+Shore technologies ship (`inscription_studies`, `improved_flares`); larger trees,
+research queues, and Iron Age research remain future work.
 
 - Add research definitions only when at least one real technology is scoped.
 - Research requirements can depend on specialist recruitment, era, resource access, and prior research.
@@ -89,7 +107,7 @@ exact legacy `iron_age` migration policy. Phases 3+ below remain planning only.
 - Time-based research must use the authoritative world clock, not UI timers.
 - UI cannot mark research completed.
 
-**Exit criteria:** one end-to-end research item is discoverable, affordable, completable, saveable, and unlocks a real gameplay feature.
+**Exit criteria:** one end-to-end research item is discoverable, affordable, completable, saveable, and unlocks a real gameplay feature. — Met: `inscription_studies` requires the recruited Scientist, costs 3G 2W through `EconomyLedger`, advances on the authoritative world clock, completes exactly once, persists across save/load, and its completion effect (shrine offering +3 gold) is a real, tested gameplay change (`tests/test_research_foundation.gd`, 130 checks, 6 suites).
 
 ## Phase 5 — Shrines, statues, temples, and resource access
 
