@@ -65,7 +65,7 @@ Do not add unused fields until a real feature needs them.
 Durable accomplishments made by the player, such as:
 - `forgotten_shore_first_stone_wall_tier_2`
 - `scientist_recruited`
-- `eld ergrove_reached` (final ID must use a normalized underscore spelling, e.g. `eldergrove_reached`)
+- `eldergrove_reached`
 - `iron_forge_research_completed`
 
 Facts are recorded only after the corresponding gameplay transaction succeeds. They are stable IDs and should be validated against known definitions or a known fact registry.
