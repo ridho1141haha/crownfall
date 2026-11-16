@@ -65,9 +65,10 @@ func get_effect_total(effect_type: String, activated_structure_ids: Array[String
 	return total
 
 
-## Human-readable blessing summaries for presentation layers (empty input ->
-## empty output). Values are derived on the fly, never cached.
-func get_active_buff_summaries(activated_structure_ids: Array[String]) -> Array[String]:
+## Human-readable blessing summaries for the given activated structure set
+## (empty input -> empty output; callers pass real activation evidence).
+## Values are derived on the fly, never cached.
+func get_buff_summaries(activated_structure_ids: Array[String]) -> Array[String]:
 	var activated: Dictionary = {}
 	for sid: String in activated_structure_ids:
 		activated[sid] = true

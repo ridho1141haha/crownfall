@@ -59,8 +59,11 @@ const OPTIONAL_BUFF_KEYS: Array[String] = ["display_name"]
 ## consumer implemented in this build (same rule as TechnologyCatalog's
 ## KNOWN_EFFECT_IDS): registering an effect without a consumer is rejected.
 ## Current consumers (ForgottenShoreSession):
-##   - wood_gathering_bonus: extra wood added to every wood acquisition
-##     (resource-node collection and tree felling).
+##   - wood_gathering_bonus: extra wood added to every island wood
+##     acquisition — player resource-node collection, tree felling, and
+##     idle-villager auto-chop deliveries. Access gating applies to
+##     player-initiated acquisition; villager deliveries collect only
+##     base-accessible resources.
 const KNOWN_EFFECT_TYPES: Array[String] = ["wood_gathering_bonus"]
 
 const EFFECT_WOOD_GATHERING_BONUS: String = "wood_gathering_bonus"
@@ -139,7 +142,7 @@ static func validate_buffs_payload(data: Variant, known_structure_ids: Array[Str
 			return {}
 		var bid: String = bid_val
 		if validated.has(bid):
-			errors.append("Duplicate buff id: %s" % bid)
+			errors.append("buffs[%d] duplicates buff id '%s'" % [i, bid])
 			return {}
 
 		var effect_type: String = String(def["effect_type"])

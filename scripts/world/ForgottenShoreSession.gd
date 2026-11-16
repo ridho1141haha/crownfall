@@ -381,8 +381,10 @@ func execute_world_command(actor_id: String, command: StringName, target_id: Str
 					var gather_bonus: int = 0
 					if String(nd["resource"]) == &"wood":
 						gather_bonus = structures.get_effect_total(BuffCatalog.EFFECT_WOOD_GATHERING_BONUS, progression)
+					var blessing_applied: bool = false
 					if gather_bonus > 0:
-						economy.try_add(&"wood", gather_bonus)
+						blessing_applied = economy.try_add(&"wood", gather_bonus)
+					if blessing_applied:
 						_spawn_floating_text(float(nd["x"]), "+%d Wood" % (int(nd["amount"]) + gather_bonus))
 						feedback_message.emit("Collected: %s (+%d blessing Wood)" % [String(nd["label"]), gather_bonus])
 					else:
@@ -391,10 +393,8 @@ func execute_world_command(actor_id: String, command: StringName, target_id: Str
 				else:
 					_record_rejection(String(res.get("reason", "Collection failed")))
 			else:
-				var res_unknown: Dictionary = resource_mgr.try_collect(resolved_target, actor_x, economy)
-				ok = bool(res_unknown.get("ok", false))
-				if not ok:
-					_record_rejection(String(res_unknown.get("reason", "Collection failed")))
+				# Unknown node ID: same rejection reason try_collect produces.
+				_record_rejection("Unknown resource node: %s" % resolved_target)
 
 		&"assign_tool":
 			if resolved_target.is_empty():
@@ -561,8 +561,10 @@ func execute_world_command(actor_id: String, command: StringName, target_id: Str
 					_play_sfx("sfx_build")
 					if bool(cres.get("felled", false)):
 						var fell_bonus: int = structures.get_effect_total(BuffCatalog.EFFECT_WOOD_GATHERING_BONUS, progression)
+						var fell_blessing_applied: bool = false
 						if fell_bonus > 0:
-							economy.try_add(&"wood", fell_bonus)
+							fell_blessing_applied = economy.try_add(&"wood", fell_bonus)
+						if fell_blessing_applied:
 							_spawn_floating_text(float(td["x"]), "+%d Wood" % (int(cres["wood_gained"]) + fell_bonus))
 							feedback_message.emit("Tree felled! +%d Wood (+%d blessing Wood)" % [int(cres["wood_gained"]), fell_bonus])
 						else:
@@ -1010,9 +1012,16 @@ func _on_farmer_gold_earned(npc_id: String, amount: int) -> void:
 
 
 func _on_auto_chop_collected(npc_id: String, amount: int) -> void:
+	# Phase 5: idle villagers chopping timber count as island wood gathering,
+	# so the derived blessing bonus applies to their deliveries too.
+	var chop_bonus: int = structures.get_effect_total(BuffCatalog.EFFECT_WOOD_GATHERING_BONUS, progression)
+	var bonus_applied: bool = false
+	if chop_bonus > 0:
+		bonus_applied = economy.try_add(&"wood", chop_bonus)
+	var delivered: int = amount + (chop_bonus if bonus_applied else 0)
 	_play_sfx("sfx_coin")
-	_spawn_floating_text(_get_agent_position(npc_id), "+%d Wood" % amount)
-	feedback_message.emit("Builder %s chopped +%d Wood while idle!" % [npc_id, amount])
+	_spawn_floating_text(_get_agent_position(npc_id), "+%d Wood" % delivered)
+	feedback_message.emit("Builder %s chopped +%d Wood while idle!" % [npc_id, delivered])
 
 
 func _on_tool_confiscated(npc_id: String, former_role: String) -> void:

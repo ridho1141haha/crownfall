@@ -107,23 +107,29 @@ func get_effect_total(effect_type: String, progression: ProgressionState) -> int
 	return buff_domain.get_effect_total(effect_type, get_activated_structure_ids(progression))
 
 
-## Display-ready blessing summaries granted by one structure (deep-derived
-## from the BuffCatalog; presentation only).
+## Display-ready blessing summaries granted by one ACTIVATED structure
+## (deep-derived from the BuffCatalog; presentation only — call this only
+## with structures whose activation fact is present, e.g. right after a
+## successful activation or for HUD summaries of activated structures).
 func get_structure_buff_summaries(structure_id: String) -> Array[String]:
-	return buff_domain.get_active_buff_summaries([structure_id])
+	return buff_domain.get_buff_summaries([structure_id])
 
 
-## Display summary of active structure blessings for the HUD (presentation
-## only — the HUD never owns or mutates this state). Empty when nothing is
-## activated.
+## Display summary of activated structures and their blessings for the HUD
+## (presentation only — the HUD never owns or mutates this state). Empty
+## when nothing is activated.
 func get_hud_text(progression: ProgressionState) -> String:
 	var activated: Array[String] = get_activated_structure_ids(progression)
 	if activated.is_empty():
 		return ""
-	var names: Array[String] = []
+	var entries: Array[String] = []
 	for sid: String in activated:
-		names.append(get_structure_display_name(sid))
-	return "Structures: %s" % ", ".join(names)
+		var entry: String = get_structure_display_name(sid)
+		var blessings: Array[String] = get_structure_buff_summaries(sid)
+		if not blessings.is_empty():
+			entry += " (%s)" % ", ".join(blessings)
+		entries.append(entry)
+	return "Structures: %s" % ", ".join(entries)
 
 
 ## Activation transaction. Order of operations:
@@ -165,14 +171,15 @@ func try_activate(actor_x: float, structure_id: String, progression: Progression
 		return false
 	var cost: Dictionary = (def["activation_cost"] as Dictionary).duplicate()
 	if not economy.try_spend(cost):
-                # The ledger emitted transaction_rejected with the precise
-                # insufficient-resource reason; no state changed.
+		# The ledger emitted transaction_rejected with the precise
+		# insufficient-resource reason; no state changed.
 		structure_action_rejected.emit("Cannot afford to activate %s yet" % display_name)
 		return false
 	if not progression.record_fact(String(def["activation_fact"])):
-                # Unreachable for validated definitions (the fact ID is
-                # registry-approved at load time), but fail loud if it happens:
-                # no partial activation may exist.
+		# Unreachable for validated definitions (the fact ID is
+		# registry-approved at load time), but fail loud if it happens:
+		# refund the committed spend so no partial activation can exist.
+		economy.try_add_bundle(cost)
 		structure_action_rejected.emit("Activation fact could not be recorded")
 		return false
 	structure_activated.emit(structure_id)

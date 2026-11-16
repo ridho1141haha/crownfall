@@ -525,6 +525,46 @@ func _test_session_integration_and_blessings() -> bool:
 	if not _check(bool(stone_res.get("ok", false)) and sess.economy.get_amount(&"stone") == 3, "Stone collection is unchanged (no cross-resource blessing)"):
 		return false
 
+	# Regression (self-review): at the ledger cap the blessing top-up fails,
+	# and the feedback falls back to the base amount instead of claiming
+	# wood the ledger never granted (UI agrees with authoritative state).
+	# Uses tree felling (timber_pile_west was already collected above; the
+	# felling adds exactly 4 wood, so wood = cap - 4 forces the cap failure).
+	var blessing_feedback: Array = []
+	sess.feedback_message.connect(func(text: String) -> void: blessing_feedback.append(text))
+	if not _fund(sess, 0, EconomyLedger.MAX_RESOURCE_CAP - 4, 0):
+		return false
+	sess.set_actor_position("player_1", -680.0)
+	var fell_ok: bool = true
+	for chop_i: int in range(3):
+		fell_ok = fell_ok and bool(sess.execute_world_command("player_1", &"chop_tree", "tree_west_01").get("ok", false))
+	if not _check(fell_ok, "Cap regression setup: tree_west_01 chopped down"):
+		return false
+	if not _check(sess.economy.get_amount(&"wood") == EconomyLedger.MAX_RESOURCE_CAP, "Cap-exceeded felling keeps the exact base amount (blessing add rejected by the ledger cap)"):
+		return false
+	var claimed_blessing: bool = false
+	for msg: String in blessing_feedback:
+		if msg.contains("blessing Wood"):
+			claimed_blessing = true
+			break
+	if not _check(not claimed_blessing, "Failed blessing top-up never claims blessing Wood in feedback"):
+		return false
+
+	# Regression (self-review): idle-villager auto-chop deliveries also carry
+	# the island blessing. The agent adds the base wood before emitting; the
+	# session handler contributes ONLY the derived bonus on top.
+	if not _fund(sess, 0, 0, 0):
+		return false
+	sess._on_auto_chop_collected("npc_builder", 4)
+	if not _check(sess.economy.get_amount(&"wood") == 1, "Villager auto-chop handler adds exactly the +1 blessing on top of the agent-delivered base"):
+		return false
+	var plain_npc: ForgottenShoreSession = _fresh_session()
+	if not _fund(plain_npc, 0, 0, 0):
+		return false
+	plain_npc._on_auto_chop_collected("npc_builder", 4)
+	if not _check(plain_npc.economy.get_amount(&"wood") == 0, "Villager auto-chop without the blessing adds no bonus"):
+		return false
+
 	# Without the blessing the amounts are the untouched base values.
 	var plain_sess: ForgottenShoreSession = _fresh_session()
 	if not _fund(plain_sess, 0, 0, 0):
@@ -537,8 +577,8 @@ func _test_session_integration_and_blessings() -> bool:
 	if not _check(String(sess.resource_access.catalog.get_resource("wood").get("id", "")) == "wood", "Session resource access uses the validated real catalog"):
 		return false
 
-	# HUD text is presentation-only and derived.
-	if not _check(sess.structures.get_hud_text(sess.progression) == "Structures: Shrine of Growth", "HUD blessings text reflects the activated structure"):
+	# HUD text is presentation-only and derived (structure + blessing effect).
+	if not _check(sess.structures.get_hud_text(sess.progression) == "Structures: Shrine of Growth (Growth Blessing (+1))", "HUD blessings text reflects the activated structure and its effect"):
 		return false
 	return true
 

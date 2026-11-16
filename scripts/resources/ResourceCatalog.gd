@@ -102,7 +102,7 @@ static func validate_resources_payload(data: Variant, errors: Array[String]) -> 
 			return {}
 		var rid: String = rid_val
 		if validated.has(rid):
-			errors.append("Duplicate resource id: %s" % rid)
+			errors.append("resources[%d] duplicates resource id '%s'" % [i, rid])
 			return {}
 
 		var has_base: bool = def.has("base_accessible")

@@ -122,7 +122,7 @@ static func validate_structures_payload(data: Variant, errors: Array[String]) ->
 			return {}
 		var sid: String = sid_val
 		if validated.has(sid):
-			errors.append("Duplicate structure id: %s" % sid)
+			errors.append("structures[%d] duplicates structure id '%s'" % [i, sid])
 			return {}
 
 		var category: String = String(def["category"])
