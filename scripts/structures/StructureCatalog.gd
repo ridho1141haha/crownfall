@@ -197,6 +197,9 @@ static func validate_structures_payload(data: Variant, errors: Array[String]) ->
 			if typeof(req_val) != TYPE_DICTIONARY:
 				errors.append("'%s' requires must be an all_of/any_of group object" % sid)
 				return {}
+			if (req_val as Dictionary).is_empty():
+				errors.append("'%s' requires must not be empty; a structure with no requirement groups would unlock unconditionally" % sid)
+				return {}
 			var groups: Dictionary = SpecialistCatalog._validate_requirement_groups(req_val as Dictionary, sid, errors)
 			if groups.is_empty():
 				return {}

@@ -99,3 +99,10 @@ jobs:
           godot --headless --script res://tests/test_research_foundation.gd 2>&1 | tee /tmp/godot_research.log
           ! grep -E "(SCRIPT ERROR:|Parser Error:|TEST FAILURE:)" /tmp/godot_research.log
           grep -q "PASS: All .* Research System Foundation" /tmp/godot_research.log
+
+      - name: Run Phase 5 Structure & Buff Foundation Tests
+        run: |
+          set -o pipefail
+          godot --headless --script res://tests/test_structure_buff_phase5.gd 2>&1 | tee /tmp/godot_phase5.log
+          ! grep -E "(SCRIPT ERROR:|Parser Error:|TEST FAILURE:)" /tmp/godot_phase5.log
+          grep -q "PASS: All .* Phase 5 Structure & Buff Foundation" /tmp/godot_phase5.log

@@ -129,6 +129,9 @@ static func validate_resources_payload(data: Variant, errors: Array[String]) -> 
 			if typeof(req_val) != TYPE_DICTIONARY:
 				errors.append("'%s' unlock_requires must be an all_of/any_of group object" % rid)
 				return {}
+			if (req_val as Dictionary).is_empty():
+				errors.append("'%s' unlock_requires must not be empty; a resource with no requirement groups would unlock unconditionally" % rid)
+				return {}
 			var groups: Dictionary = SpecialistCatalog._validate_requirement_groups(req_val as Dictionary, rid, errors)
 			if groups.is_empty():
 				return {}
