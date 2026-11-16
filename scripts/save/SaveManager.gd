@@ -152,14 +152,19 @@ static func _normalize_reign_state(raw_val: Variant) -> String:
 ## Backfill fakta progresi untuk migrasi. Deterministik dan idempotent:
 ##   - field tidak ada (save lama) -> array baru berisi satu fakta tersebut;
 ##   - array valid tanpa fakta itu -> tambahkan tepat sekali;
-##   - array invalid -> sengaja dibiarkan apa adanya agar validate_payload
+##   - nilai eksplisit selain array valid (null, string, angka, dict, array
+##     invalid) -> sengaja dibiarkan apa adanya agar validate_payload
 ##     menolaknya (migrasi tidak pernah "memperbaiki" data rusak diam-diam,
 ##     dan tidak pernah menghasilkan state hidup yang setengah dimigrasi).
+## Field yang EKSPLISIT bernilai null BUKAN sama dengan field yang tidak ada:
+## get() saja tidak bisa membedakan keduanya, jadi kehadiran field dicek
+## dengan Dictionary.has() secara eksplisit.
 static func _backfill_progression_fact(pf: Dictionary, fact_id: String) -> void:
-	var facts_val: Variant = pf.get("progression_facts", null)
-	if facts_val == null:
+	if not pf.has("progression_facts"):
 		pf["progression_facts"] = [fact_id]
-	elif typeof(facts_val) == TYPE_ARRAY and ProgressionState.is_valid_fact_array(facts_val):
+		return
+	var facts_val: Variant = pf["progression_facts"]
+	if typeof(facts_val) == TYPE_ARRAY and ProgressionState.is_valid_fact_array(facts_val):
 		if not (facts_val as Array).has(fact_id):
 			(facts_val as Array).append(fact_id)
 

@@ -9,6 +9,21 @@ This changelog records repository changes that actually occurred. Planned featur
 
 ---
 
+## [2026-11-16] Progression Phase 2.1 — Strict Save Migration Validation Fix
+
+**Type:** Save Migration Correctness (small review fix on top of Phase 2; no gameplay, balance, or schema changes)
+**Engine Verified:** `Godot 4.7.2.stable` (local headless run of `tests/run_all.sh`, exit 0: static verifier `185` checks, world clock `5` checks, P0 unit `144` checks across `17` suites, M8 integration `38` checks, P1 experimental `14` checks, Phase 1 progression `139` checks across `6` suites, Phase 2 suite `133` checks across `7` suites — all green)
+
+### Summary
+Code-review fix for a migration validation gap: `SaveManager._backfill_progression_fact()` read the field with `get("progression_facts", null)`, which cannot distinguish a genuinely absent field (legitimate legacy save; deterministic backfill intended) from an explicitly stored `null` (malformed payload). An explicit `"progression_facts": null` combined with `shipwreck_stage == 3` (or `era_id == "stone_age"`) was therefore silently repaired into a valid fact array and accepted, violating the strict malformed-save rejection policy. The backfill now uses an explicit `Dictionary.has()` presence check: a genuinely absent field is backfilled exactly as before (legacy Stone Age evidence and Stage-3 vessel readiness preserved; legacy `iron_age` without Eldergrove evidence still downgraded; migration stays deterministic and idempotent), while any explicitly present value that is not a valid fact array (`null`, string, number, dictionary, invalid array) is left untouched so `validate_payload` rejects the payload wholesale — no backfill, no partial application to live state. Valid arrays keep the existing strict checks (known IDs, duplicates, structure). Save schema stays version 2.
+
+### Key Changes
+- **`scripts/save/SaveManager.gd`:** `_backfill_progression_fact` distinguishes field absence from an explicitly present malformed value via `Dictionary.has()`; doc comment updated. No other migration, gameplay, or schema behavior changed.
+- **`tests/test_progression_phase2_era_correction.gd`:** new suite "Strict Malformed Facts Rejection" (26 checks) covering absent-field migration success (Stage-3 vessel backfill intact), legacy `iron_age` without fact field still downgraded, valid Eldergrove evidence still retaining Iron Age, explicit `progression_facts: null` rejected (alone, combined with `shipwreck_stage == 3`, and on a `stone_age` save — with no backfill applied), explicit malformed string/dictionary rejected untouched, rejection mutating neither the caller's payload nor live progression state, failed malformed-file load leaving live state intact, and deterministic/idempotent rejection. Verified to fail against the pre-fix implementation and pass after the fix; suite count 6 -> 7, checks 107 -> 133.
+- **Docs:** `PROGRESSION_FOUNDATION_DESIGN.md` section 12 now documents the absent vs explicitly-null handling and the updated suite counts.
+
+---
+
 ## [2026-11-16] Progression Phase 2 — Era Progression Correction & Conservative Legacy Save Migration
 
 **Type:** Progression Correctness & Save Compatibility (deliberate era unlock semantics change; no gameplay balance changes)

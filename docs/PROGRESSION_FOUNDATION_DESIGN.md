@@ -286,16 +286,22 @@ behavior on `feat/progression-phase-2-era-correction`:
      `to_save_array()` contract; invalid arrays are never repaired or sorted —
      they are rejected by `validate_payload`, never partially applied.
   Malformed progression data (unknown IDs, non-arrays, duplicates) keeps the
-  Phase 1 behavior: the whole payload is rejected safely. An invalid fact array
-  containing `eldergrove_reached` does NOT count as evidence; the era is still
-  downgraded and the payload is rejected wholesale.
+  Phase 1 behavior: the whole payload is rejected safely. An explicitly present
+  `progression_facts: null` is malformed, not missing: it is never backfilled or
+  repaired — only a genuinely absent field (a legacy save without the key)
+  triggers the deterministic backfill, which the backfill helper distinguishes
+  via an explicit `Dictionary.has()` presence check (a plain `get()` cannot tell
+  an absent field from a stored null) — and the payload is rejected wholesale.
+  An invalid fact array containing `eldergrove_reached` does NOT count as
+  evidence; the era is still downgraded and the payload is rejected wholesale.
 
-Acceptance evidence: `tests/test_progression_phase2_era_correction.gd` (107
-checks across 6 suites) covers fresh-start era, the wall/shipwreck command paths
+Acceptance evidence: `tests/test_progression_phase2_era_correction.gd` (133
+checks across 7 suites) covers fresh-start era, the wall/shipwreck command paths
 with exact balance regression, the fail-closed Iron Age gate, the intended
 Eldergrove unlock path end-to-end (including an `iron_age` save round-trip),
 all legacy migration branches with determinism/idempotency proof, malformed-data
-rejection, and data-contract regression guards. Phase 1's
+rejection (including the absent-field vs explicitly-present-null distinction),
+and data-contract regression guards. Phase 1's
 `test_progression_foundation.gd` (139 checks) stays green with its legacy
 iron-age migration assertions updated to the Phase 2 policy, and the full
 headless suite (`tests/run_all.sh`) passes.
