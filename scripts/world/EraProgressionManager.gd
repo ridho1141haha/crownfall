@@ -2,9 +2,16 @@ class_name EraProgressionManager
 extends RefCounted
 
 ## Progresi zaman bertahap (Wood Age -> Stone Age -> Iron Age).
-## Zaman tidak muncul sekaligus di pulau pertama: Wood Age aktif sejak awal,
-## Stone Age terbuka saat tembok pertama menjadi Stone Wall Tier 2, dan Iron Age
-## terbuka saat kapal hasil perbaikan Shipwreck mencapai Stage 3.
+## Zaman tidak muncul sekaligus di pulau pertama: Wood Age aktif sejak awal, dan
+## Stone Age terbuka saat tembok pertama menjadi Stone Wall Tier 2.
+## Koreksi era Fase 2: Shipwreck Stage 3 hanya berarti kapal siap berlayar
+## (voyage readiness) dan TIDAK lagi membuka Iron Age. Iron Age kini hanya
+## terbuka lewat milestone Eldergrove Forest: pemanggil wajib mencatat fakta
+## durables `eldergrove_reached` terlebih dahulu, lalu memanggil
+## notify_eldergrove_milestone() yang fail-closed bila fakta itu tidak ada.
+## Tidak ada jalur gameplay Forgotten Shore yang memanggilnya, jadi Iron Age
+## tidak bisa dicapai di Forgotten Shore. Integrasi gameplay Eldergrove sendiri
+## adalah bagian fase multi-island mendatang.
 
 signal era_changed(era_id: String, era_name: String)
 
@@ -85,7 +92,15 @@ func notify_stone_wall_built() -> bool:
 	return _advance_to_index(target)
 
 
-func notify_vessel_ready() -> bool:
+## Koreksi era Fase 2: maju ke Iron Age HANYA bila fakta milestone Eldergrove
+## (`eldergrove_reached`) sudah tercatat pada ProgressionState yang diberikan.
+## Fail-closed: tanpa fakta itu (atau tanpa progression state sama sekali), era
+## tidak pernah maju ke Iron Age — tidak ada jalur yang bisa membuka Iron Age
+## hanya dari notifikasi gameplay biasa. Batas integrasi untuk sesi Eldergrove
+## Forest masa depan: rekam fakta milestone-nya lebih dulu, lalu panggil metode ini.
+func notify_eldergrove_milestone(progression: ProgressionState) -> bool:
+	if progression == null or not progression.has_fact(ProgressionState.FACT_ELDERGROVE_REACHED):
+		return false
 	var target: int = get_era_index_by_id("iron_age")
 	if target < 0:
 		return false

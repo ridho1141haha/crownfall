@@ -1,6 +1,8 @@
 extends SceneTree
 
-## Phase 1 Progression Foundation test suite. Follows the repo test conventions:
+## Phase 1 Progression Foundation test suite (updated by Phase 2 era correction:
+## suite 6 now asserts the conservative legacy iron_age migration policy).
+## Follows the repo test conventions:
 ## fail-fast _check helper, tab indentation, no raw engine assert calls, and no
 ## scene-tree child injection. Covers fact recording/idempotency/validation,
 ## serialization round-trips, definition validation, all_of/any_of evaluation,
@@ -62,11 +64,13 @@ func _test_fact_recording_basics() -> bool:
 		return false
 
 	# Well-formed but unknown to the registry: rejected (no ghost facts).
-	if not _check(not p.record_fact("eldergrove_reached"), "Unknown well-formed fact id is rejected by registry"):
+	# ("eldergrove_reached" became a registered fact in Phase 2, so an ID that
+	# stays unregistered is used for the negative checks.)
+	if not _check(not p.record_fact("scientist_recruited"), "Unknown well-formed fact id is rejected by registry"):
 		return false
-	if not _check(not ProgressionState.is_valid_fact_id("eldergrove_reached"), "is_valid_fact_id rejects unknown id"):
+	if not _check(not ProgressionState.is_valid_fact_id("scientist_recruited"), "is_valid_fact_id rejects unknown id"):
 		return false
-	if not _check(ProgressionState.is_valid_stable_id("eldergrove_reached") and not ProgressionState.is_valid_fact_id("eldergrove_reached"), "Unknown id is well-formed but not registry-approved"):
+	if not _check(ProgressionState.is_valid_stable_id("scientist_recruited") and not ProgressionState.is_valid_fact_id("scientist_recruited"), "Unknown id is well-formed but not registry-approved"):
 		return false
 
 	# Internal collection is never exposed: get_fact_ids returns a copy.
@@ -108,8 +112,8 @@ func _test_fact_serialization_roundtrip() -> bool:
 	# Invalid payloads: rejected with zero partial mutation.
 	var invalid_payloads: Array = [
 		FACT, 42, {}, {"forgotten_shore_first_stone_wall_tier_2": true},
-		[42], [""], ["BAD ID"], ["stone-wall"], ["eldergrove_reached"],
-		[FACT, FACT], [FACT, ""], [FACT, "eldergrove_reached"],
+		[42], [""], ["BAD ID"], ["stone-wall"], ["scientist_recruited"],
+		[FACT, FACT], [FACT, ""], [FACT, "scientist_recruited"],
 	]
 	for bad_payload: Variant in invalid_payloads:
 		var before: Array = p.get_fact_ids()
@@ -134,7 +138,7 @@ func _test_definition_validation() -> bool:
 	var def: Dictionary = catalog.get_definition("stone_age_era")
 	if not _check(String(def.get("id", "")) == "stone_age_era" and (def.get("requires", {}) as Dictionary).get("all_of", []) == [FACT], "stone_age_era definition requires the stone wall fact via all_of"):
 		return false
-	if not _check(catalog.get_definition_ids() == ["stone_age_era"], "Catalog exposes exactly the shipped definition IDs"):
+	if not _check(catalog.get_definition_ids() == ["forgotten_shore_voyage_ready", "iron_age_era", "stone_age_era"], "Catalog exposes exactly the shipped definition IDs (Phase 2 adds voyage + iron_age gates)"):
 		return false
 	# Defensive copies: mutating a returned definition cannot corrupt the catalog.
 	var tampered: Dictionary = catalog.get_definition("stone_age_era")
@@ -159,7 +163,7 @@ func _test_definition_validation() -> bool:
 		{"unlocks": [{"id": "def_a", "requires": {"all_of": []}}]},
 		{"unlocks": [{"id": "def_a", "requires": {"any_of": []}}]},
 		{"unlocks": [{"id": "def_a", "requires": {"all_of": [FACT], "bogus": [FACT]}}]},
-		{"unlocks": [{"id": "def_a", "requires": {"all_of": ["eldergrove_reached"]}}]},
+		{"unlocks": [{"id": "def_a", "requires": {"all_of": ["scientist_recruited"]}}]},
 		{"unlocks": [{"id": "def_a", "requires": {"all_of": FACT}}]},
 		{"unlocks": [{"id": "def_a", "requires": {"all_of": [FACT, FACT]}}]},
 		{"unlocks": [{"id": "def_a", "requires": {"all_of": [FACT]}}, {"id": "def_a", "requires": {"any_of": [FACT]}}]},
@@ -243,7 +247,7 @@ func _test_unlock_evaluation() -> bool:
 		{"id": "e1", "requires": {"all_of": []}},
 		{"id": "e2", "requires": {"any_of": []}},
 		{"id": "e3", "requires": {}},
-		{"id": "e4", "requires": {"all_of": ["eldergrove_reached"]}},
+		{"id": "e4", "requires": {"all_of": ["scientist_recruited"]}},
 		{"id": "e5", "requires": {"bogus_group": [FACT]}},
 		null, 42, "x", {}, {"id": "e6"},
 		{"id": "e7", "requires": "x"},
@@ -392,13 +396,23 @@ func _test_save_compat_and_migration() -> bool:
 	if not _check(sm.validate_payload(v1w_migrated), "Wood-era migrated payload loads cleanly (old saves without facts load correctly)"):
 		return false
 
-	# Iron Age save (vessel-ready path can skip the stone wall): no inference.
+	# Fase 2 koreksi era: save iron_age legacy TIDAK dipercaya sebagai bukti
+	# Iron Age (implementasi lama membukanya lewat Shipwreck Stage 3). Era
+	# dihitung ulang HANYA dari bukti nyata pada save: tembok batu ada ->
+	# stone_age. Fakta vessel-ready di-backfill dari shipwreck_stage == 3
+	# (bukti faktual), fakta stone ikut di-backfill karena era kini stone_age,
+	# dan fakta Eldergrove tidak pernah difabrikasi.
 	var v2_iron: Dictionary = v2_old.duplicate(true)
 	var iron_pf: Dictionary = v2_iron["progression_flags"] as Dictionary
 	iron_pf["era_id"] = "iron_age"
 	iron_pf["shipwreck_stage"] = 3
 	var iron_migrated: Dictionary = SaveManager.migrate_payload(v2_iron) as Dictionary
-	if not _check(not (iron_migrated["progression_flags"] as Dictionary).has("progression_facts"), "Iron Age save never infers the stone wall fact (vessel path may have skipped it)"):
+	var iron_pf_mig: Dictionary = iron_migrated["progression_flags"] as Dictionary
+	if not _check(String(iron_pf_mig.get("era_id", "")) == "stone_age", "Legacy iron_age save is conservatively downgraded to stone_age from real stone-wall evidence"):
+		return false
+	if not _check(iron_pf_mig.get("progression_facts", []) == [FACT, "forgotten_shore_vessel_ready"], "Downgraded save keeps stone progress, gains vessel fact from stage 3, no Eldergrove fact fabricated"):
+		return false
+	if not _check(sm.validate_payload(iron_migrated), "Migrated legacy iron_age payload passes strict validation"):
 		return false
 
 	# Malformed progression_facts: migration must not repair it; the save must

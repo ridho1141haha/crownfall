@@ -17,7 +17,7 @@ The staged progression architecture and implementation sequence are documented i
 - [`PROGRESSION_FOUNDATION_DESIGN.md`](PROGRESSION_FOUNDATION_DESIGN.md) — progression facts, unlock evaluation, ownership boundaries, and save compatibility.
 - [`PROGRESSION_IMPLEMENTATION_ROADMAP.md`](PROGRESSION_IMPLEMENTATION_ROADMAP.md) — phased implementation, tests, acceptance criteria, and risk controls.
 
-These are planning documents only. They do not indicate that specialist recruitment, research, multiple islands, shrine/statue buffs, or mounts are implemented. The intended era correction (Shipwreck Stage 3 unlocks the voyage; Iron Age unlocks on Eldergrove) must be implemented and tested separately.
+These documents are planning references for everything that is still unimplemented: specialist recruitment, research, multiple islands, shrine/statue buffs, and mounts remain future work. The era correction itself (Shipwreck Stage 3 unlocks the voyage; Iron Age requires the Eldergrove milestone) is implemented and tested on `feat/progression-phase-2-era-correction` — see `docs/CHANGELOG.md` and `PROGRESSION_FOUNDATION_DESIGN.md` section 12. Eldergrove Forest gameplay (Island 2) itself does not exist yet; the milestone's gameplay trigger ships with the future multi-island phase.
 
 ---
 

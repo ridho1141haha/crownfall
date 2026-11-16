@@ -149,6 +149,26 @@ static func _normalize_reign_state(raw_val: Variant) -> String:
 	return "ACTIVE"
 
 
+## Backfill fakta progresi untuk migrasi. Deterministik dan idempotent:
+##   - field tidak ada (save lama) -> array baru berisi satu fakta tersebut;
+##   - array valid tanpa fakta itu -> tambahkan tepat sekali;
+##   - nilai eksplisit selain array valid (null, string, angka, dict, array
+##     invalid) -> sengaja dibiarkan apa adanya agar validate_payload
+##     menolaknya (migrasi tidak pernah "memperbaiki" data rusak diam-diam,
+##     dan tidak pernah menghasilkan state hidup yang setengah dimigrasi).
+## Field yang EKSPLISIT bernilai null BUKAN sama dengan field yang tidak ada:
+## get() saja tidak bisa membedakan keduanya, jadi kehadiran field dicek
+## dengan Dictionary.has() secara eksplisit.
+static func _backfill_progression_fact(pf: Dictionary, fact_id: String) -> void:
+	if not pf.has("progression_facts"):
+		pf["progression_facts"] = [fact_id]
+		return
+	var facts_val: Variant = pf["progression_facts"]
+	if typeof(facts_val) == TYPE_ARRAY and ProgressionState.is_valid_fact_array(facts_val):
+		if not (facts_val as Array).has(fact_id):
+			(facts_val as Array).append(fact_id)
+
+
 static func migrate_payload(data: Variant) -> Variant:
 	if typeof(data) != TYPE_DICTIONARY:
 		return data
@@ -193,9 +213,23 @@ static func migrate_payload(data: Variant) -> Variant:
 			ne_mig["current_day_number"] = maxi(1, int(roundf(float(d["day_count"]))))
 	# Backfill era untuk save yang dibuat sebelum sistem zaman ada: inferensi
 	# Stone Age bila ada tembok batu; selain itu Wood Age. Iron Age tidak pernah
-	# diinferensi karena hanya dicapai lewat Shipwreck Stage 3 (selalu tersimpan).
+	# diinferensi saat era_id hilang: era itu tidak punya bukti faktual pada
+	# save lama (lihat kebijakan koreksi era Fase 2 di bawah).
 	if d.has("progression_flags") and typeof(d["progression_flags"]) == TYPE_DICTIONARY:
 		var pf_mig: Dictionary = d["progression_flags"] as Dictionary
+		# Fase 2.2: seluruh migrasi terkait progresi hanya berjalan bila field
+		# progression_facts benar-benar TIDAK ada (jalur migrasi legacy sah) atau
+		# ada sebagai array fakta valid. Bila field EKSPLISIT ada tapi nilainya
+		# rusak (null, string, angka, dict, array invalid), jangan sentuh data
+		# progresi sama sekali: era_id tidak diinferensi atau dikoreksi, tidak ada
+		# backfill vessel/Stone Age, nilai rusak dibiarkan utuh (tidak
+		# dikanonikasi/disort) — validate_payload yang menolak payload ini secara
+		# keseluruhan. Migrasi tidak boleh memutasi field terkait progresi secara
+		# parsial sebelum payload ditolak. (Blok migrasi progresi ini adalah
+		# langkah migrasi terakhir, jadi return di sini hanya melewati blok ini.)
+		var facts_gate: Variant = pf_mig.get("progression_facts", null)
+		if pf_mig.has("progression_facts") and not ProgressionState.is_valid_fact_array(facts_gate):
+			return d
 		if not pf_mig.has("era_id") or String(pf_mig["era_id"]).is_empty():
 			var inferred_era: String = "wood_age"
 			if d.has("buildings") and typeof(d["buildings"]) == TYPE_ARRAY:
@@ -204,20 +238,48 @@ static func migrate_payload(data: Variant) -> Variant:
 						inferred_era = "stone_age"
 						break
 			pf_mig["era_id"] = inferred_era
+		# Koreksi era Fase 2 — migrasi konservatif untuk save legacy "iron_age".
+		# Implementasi lama membuka Iron Age hanya dari Shipwreck Stage 3, padahal
+		# Stage 3 berarti kapal siap berlayar, bukan milestone Eldergrove. Jadi
+		# era_id "iron_age" pada save lama TIDAK membuktikan milestone Eldergrove.
+		# Kebijakan (deterministik & idempotent):
+		#   - Save yang SUDAH membawa fakta eldergrove_reached (hanya bisa ditulis
+		#     oleh build yang benar-benar mencatat milestone-nya) mempertahankan
+		#     Iron Age — bukti faktualnya ada di save.
+		#   - Selain itu Iron Age dicabut dan era dihitung ulang HANYA dari bukti
+		#     yang benar-benar ada di save (tembok batu -> stone_age, selain itu
+		#     wood_age). Stone Age yang sah tetap terjaga; fakta Eldergrove TIDAK
+		#     PERNAH difabrikasi; progres lain tidak disentuh.
+		#   - shipwreck_stage == 3 adalah bukti faktual kapal siap (stage hanya
+		#     bertambah lewat transaksi repair yang berhasil), jadi fakta
+		#     vessel-ready di-backfill dari situ apa pun era-nya — progres
+		#     Shipwreck/vessel tidak pernah hilang.
+		var facts_legacy: Variant = pf_mig.get("progression_facts", null)
+		var has_eldergrove_evidence: bool = facts_legacy != null and typeof(facts_legacy) == TYPE_ARRAY and ProgressionState.is_valid_fact_array(facts_legacy) and (facts_legacy as Array).has(ProgressionState.FACT_ELDERGROVE_REACHED)
+		if String(pf_mig.get("era_id", "")) == "iron_age" and not has_eldergrove_evidence:
+			var corrected_era: String = "wood_age"
+			if d.has("buildings") and typeof(d["buildings"]) == TYPE_ARRAY:
+				for b_ia: Variant in (d["buildings"] as Array):
+					if typeof(b_ia) == TYPE_DICTIONARY and String((b_ia as Dictionary).get("type", "")) == "stone_wall":
+						corrected_era = "stone_age"
+						break
+			pf_mig["era_id"] = corrected_era
+		var sw_val: Variant = pf_mig.get("shipwreck_stage", null)
+		if EconomyLedger.is_exact_int_value(sw_val) and int(roundf(float(sw_val))) == 3:
+			_backfill_progression_fact(pf_mig, ProgressionState.FACT_FORGOTTEN_SHORE_VESSEL_READY)
 		# Backfill fakta fondasi progresi Fase 1: era_id "stone_age" hanya bisa
 		# dicapai lewat milestone Stone Wall Tier 2 pertama, jadi era tersebut
 		# membuktikan milestone-nya sudah terjadi. Deterministik dan idempotent.
-		# era iron_age TIDAK pernah menginferensi fakta ini: jalur vessel-ready
-		# bisa mencapai Iron Age tanpa stone wall, jadi tidak ada bukti faktual.
+		# (Juga berlaku untuk save iron_age legacy yang baru dikoreksi menjadi
+		# stone_age di atas: backfill berjalan setelah koreksi era.)
 		if String(pf_mig.get("era_id", "")) == "stone_age":
-			var facts_val: Variant = pf_mig.get("progression_facts", null)
-			if facts_val == null:
-				pf_mig["progression_facts"] = [ProgressionState.FACT_FORGOTTEN_SHORE_FIRST_STONE_WALL_TIER_2]
-			elif typeof(facts_val) == TYPE_ARRAY and ProgressionState.is_valid_fact_array(facts_val):
-				# Array valid tanpa fakta stone: tambahkan sekali. Array invalid
-				# sengaja dibiarkan apa adanya agar validate_payload menolaknya.
-				if not (facts_val as Array).has(ProgressionState.FACT_FORGOTTEN_SHORE_FIRST_STONE_WALL_TIER_2):
-					(facts_val as Array).append(ProgressionState.FACT_FORGOTTEN_SHORE_FIRST_STONE_WALL_TIER_2)
+			_backfill_progression_fact(pf_mig, ProgressionState.FACT_FORGOTTEN_SHORE_FIRST_STONE_WALL_TIER_2)
+		# Kanoniskasi: array fakta valid diurutkan agar payload hasil migrasi
+		# identik dengan kontrak to_save_array() (sorted). Array invalid tetap
+		# tidak disentuh sama sekali.
+		var facts_final: Variant = pf_mig.get("progression_facts", null)
+		if facts_final != null and typeof(facts_final) == TYPE_ARRAY and ProgressionState.is_valid_fact_array(facts_final):
+			(facts_final as Array).sort()
 	return d
 
 

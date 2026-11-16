@@ -78,3 +78,10 @@ jobs:
           godot --headless --script res://tests/test_progression_foundation.gd 2>&1 | tee /tmp/godot_progression.log
           ! grep -E "(SCRIPT ERROR:|Parser Error:|TEST FAILURE:)" /tmp/godot_progression.log
           grep -q "PASS: All .* Progression Foundation" /tmp/godot_progression.log
+
+      - name: Run Phase 2 Era Correction Tests
+        run: |
+          set -o pipefail
+          godot --headless --script res://tests/test_progression_phase2_era_correction.gd 2>&1 | tee /tmp/godot_progression_phase2.log
+          ! grep -E "(SCRIPT ERROR:|Parser Error:|TEST FAILURE:)" /tmp/godot_progression_phase2.log
+          grep -q "PASS: All .* Phase 2 Era Correction" /tmp/godot_progression_phase2.log

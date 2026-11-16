@@ -1,6 +1,6 @@
 # Crownfall — Progression Foundation Design
 
-**Status:** Phase 1 foundation implemented on `feat/progression-foundation-phase-1` (fact service, unlock definition loader, deterministic evaluator, Stone Age milestone integration, save compatibility). Sections 4-10 below remain the standing design reference; section 11 records what Phase 1 actually shipped and what stays deferred. Later phases (era correction, specialists, research, resource access, islands, mounts) are still design-only.
+**Status:** Phase 1 foundation implemented (fact service, unlock definition loader, deterministic evaluator, Stone Age milestone integration, save compatibility; merged via PR #3). Phase 2 era progression correction is implemented on `feat/progression-phase-2-era-correction` (Shipwreck Stage 3 = voyage readiness only; Iron Age gated behind the Eldergrove milestone; conservative legacy `iron_age` save migration; see section 12). Sections 4-10 remain the standing design reference; sections 11-12 record what actually shipped and what stays deferred. Later phases (specialists, research, resource access, islands, mounts) are still design-only.
 **Scope:** Foundational progression architecture for the existing single-player Forgotten Shore build.
 **Authority:** This document supplements `REVISED_PROJECT_BASELINE.md`; it does not silently replace approved vertical-slice requirements.
 
@@ -26,7 +26,7 @@ The first implementation target is the progression foundation only. It must pres
 The current project is a single-player vertical slice on Forgotten Shore.
 
 - `EconomyLedger` currently permits only `gold`, `wood`, and `stone`.
-- `EraProgressionManager` currently supports Wood, Stone, and Iron Age. Stone Age unlocks through the first Stone Wall Tier 2; Iron Age currently unlocks through Shipwreck Stage 3.
+- `EraProgressionManager` supports Wood, Stone, and Iron Age. Stone Age unlocks through the first Stone Wall Tier 2. Since Phase 2, Shipwreck Stage 3 no longer unlocks Iron Age — it only records voyage readiness; Iron Age requires the Eldergrove Forest milestone and is unreachable while playing on Forgotten Shore.
 - `SaveManager` currently writes schema version 2 and stores `progression_flags.era_id`.
 - `NPCPopulationManager` currently models villagers and combat/work roles; it is not yet a specialist recruitment system.
 - `ForgottenShoreSession` coordinates several systems and should not become the home for new progression rules.
@@ -147,7 +147,7 @@ The first coding milestone should:
 - add unit tests for validation, evaluation, duplicate facts, unknown IDs, and save round-tripping;
 - preserve existing save compatibility and current vertical-slice behavior.
 
-**Important design correction:** the desired final design removes the Iron Age unlock from Forgotten Shore / Shipwreck Stage 3 and moves it to an Eldergrove Forest milestone. This correction is a separate gameplay decision and should not be hidden inside the generic foundation refactor. Before the first content-facing implementation, update the era definition, migration/inference rules, UI copy, and tests together. Reaching Shipwreck Stage 3 should unlock the voyage/next-island transition, not Iron Age.
+**Important design correction (implemented in Phase 2):** the Iron Age unlock was removed from Forgotten Shore / Shipwreck Stage 3 and moved to an Eldergrove Forest milestone. The correction shipped as one atomic change: era definition copy, unlock definitions, the fail-closed era gate, migration rules, session messages, and tests were updated together. Reaching Shipwreck Stage 3 now unlocks the voyage/next-island transition (fact `forgotten_shore_vessel_ready`), not Iron Age. See section 12 for the shipped behavior and the legacy save migration policy.
 
 ## 9. Explicitly out of scope for the foundation
 
@@ -229,3 +229,97 @@ with transactional rejection, definition validation and fail-safe loading, the
 migration/round-trip behavior; the full headless suite
 (`tests/run_all.sh`, static verifier + world clock + P0 unit + M8 integration +
 experimental + progression) stays green.
+## 12. Phase 2 implementation notes (era progression correction, shipped behavior)
+
+Phase 2 aligns era unlocks with the island progression decision. Implemented
+behavior on `feat/progression-phase-2-era-correction`:
+
+- **Intended era progression.** Wood Age starts on Forgotten Shore. The first
+  Stone Wall Tier 2 upgrade unlocks Stone Age (unchanged from Phase 1). Shipwreck
+  Stage 3 records the voyage-readiness fact `forgotten_shore_vessel_ready` and
+  does NOT unlock any era. Iron Age unlocks only through the Eldergrove Forest
+  milestone fact `eldergrove_reached` — the defined Iron Age gate.
+- **New facts (`ProgressionState.gd`).** The registry now ships exactly three
+  facts: `forgotten_shore_first_stone_wall_tier_2`, `forgotten_shore_vessel_ready`
+  (recorded by the session only after the successful Stage-3 repair transaction,
+  idempotent), and `eldergrove_reached` (registered so the data-driven unlock
+  definition can require it and future saves can carry it; no Forgotten Shore
+  gameplay path records it, so Iron Age is unreachable on Forgotten Shore).
+- **Fail-closed era gate (`EraProgressionManager.gd`).** `notify_vessel_ready()`
+  was removed. `notify_eldergrove_milestone(progression)` advances to Iron Age
+  only when the passed `ProgressionState` already contains `eldergrove_reached`;
+  without the fact (or with a null state) it never advances. This is the
+  documented integration boundary for the future Eldergrove Forest session: it
+  will record the milestone fact first, then call this method. Stone Age
+  advancement intentionally stays as Phase 1 shipped (`notify_stone_wall_built()`
+  plus the deterministic save migration backfill).
+- **Data definitions.** `data/unlocks.json` now ships three definitions:
+  `stone_age_era` (all_of the stone-wall fact, unchanged),
+  `forgotten_shore_voyage_ready` (all_of the vessel fact), and `iron_age_era`
+  (all_of `eldergrove_reached`). `data/eras.json` iron_age description no longer
+  claims the ship Stage 3 trigger. No gameplay consumer of the catalog exists
+  yet (same boundary as Phase 1; the first availability UI will consume it).
+- **Session behavior (`ForgottenShoreSession.gd`).** The Shipwreck Stage 3
+  repair transaction still costs exactly 6G 8W 4S, still shows "Ship Stage 3/3",
+  and the repeated interaction still takes the existing ISLAND_CLEARED / Set
+  Sail path with the victory banner. The only changes: the Stage 3 message now
+  announces voyage readiness (no Iron Age claim), and the vessel fact is
+  recorded after the successful transaction. Wall upgrade gameplay, costs, and
+  messages are untouched.
+- **Save compatibility (`SaveManager.gd`).** Schema stays version 2; no new
+  fields. `migrate_payload` gained a deterministic, idempotent, conservative
+  legacy policy:
+  1. A save whose `era_id` is `iron_age` but that carries a valid
+     `progression_facts` array containing `eldergrove_reached` (new-format
+     evidence, writable only by a build that truly recorded the milestone) keeps
+     Iron Age and all facts untouched.
+  2. Any other legacy `iron_age` save has Iron Age revoked: the era is
+     recomputed from real evidence in the save (a `stone_wall` building ->
+     `stone_age`, otherwise `wood_age`). Stone Age progress is preserved; the
+     Phase 1 stone-fact backfill then applies to downgraded `stone_age` saves.
+     An Eldergrove fact is never fabricated.
+  3. `shipwreck_stage == 3` is genuine evidence of a completed vessel (the
+     stage only advances through successful repair transactions), so the
+     `forgotten_shore_vessel_ready` fact is backfilled from it for any era.
+     Shipwreck/vessel progress is never lost.
+  4. Backfilled fact arrays are canonicalized (sorted) to match the
+     `to_save_array()` contract; invalid arrays are never repaired or sorted —
+     they are rejected by `validate_payload`, never partially applied.
+  Phase 2.2 hardening: `migrate_payload` gates the whole progression migration
+  section (era inference, Iron Age correction, vessel/Stone Age backfills,
+  canonicalization) on an explicit `Dictionary.has("progression_facts")`
+  presence check — a plain `get()` cannot tell an absent field from a stored
+  null — so exactly three cases exist:
+  1. Missing `progression_facts` (a legacy save without the key): the valid
+     legacy migration path — era inference, conservative Iron Age correction,
+     and the deterministic backfills run exactly as before.
+  2. Present and a valid fact array: normal migration — Eldergrove evidence
+     retains Iron Age, backfills are idempotent, and the array is
+     canonically sorted.
+  3. Present but malformed (`null`, string, number, dictionary, unknown IDs,
+     duplicates): the whole progression migration is skipped. `era_id` is
+     neither inferred nor corrected, no vessel or Stone Age fact is backfilled,
+     and the malformed value is left untouched (never canonicalized, replaced,
+     or deleted); `validate_payload` rejects the payload wholesale. Migration
+     never partially mutates progression-related fields before rejection, the
+     caller's input dictionary is never modified, and no live gameplay state
+     changes.
+  An invalid fact array containing `eldergrove_reached` therefore does NOT
+  count as evidence and, since Phase 2.2, no longer triggers the era downgrade
+  either: the payload is simply rejected untouched (Phase 2 rejected it after
+  the downgrade mutation; Phase 2.2 rejects it without any mutation).
+
+Acceptance evidence: `tests/test_progression_phase2_era_correction.gd` (162
+checks across 8 suites) covers fresh-start era, the wall/shipwreck command paths
+with exact balance regression, the fail-closed Iron Age gate, the intended
+Eldergrove unlock path end-to-end (including an `iron_age` save round-trip),
+all legacy migration branches with determinism/idempotency proof, malformed-data
+rejection (including the absent-field vs explicitly-present-null distinction),
+and data-contract regression guards. The Phase 2.2 suite additionally proves
+the three-case gate: explicit null, malformed strings/dictionaries, and unknown
+or duplicate fact IDs skip the whole progression migration (era and facts
+untouched, no backfills) and are rejected wholesale with the caller's input
+dictionary unchanged, while absent-field legacy migration and valid-array
+migration with deterministic sorting keep their existing idempotent behavior.
+Phase 1's `test_progression_foundation.gd` (139 checks) stays green, and the
+full headless suite (`tests/run_all.sh`) passes.

@@ -641,8 +641,15 @@ func _on_player_interact_shipwreck(player_x: float) -> bool:
 	_play_sfx("sfx_build")
 	_spawn_payment_fly(cost, player_x, SHIPWRECK_X)
 	_spawn_floating_text(SHIPWRECK_X, "Ship Stage %d/3" % shipwreck_stage)
-	if shipwreck_stage >= 3 and era_mgr.notify_vessel_ready():
-		feedback_message.emit("Shipwreck repaired to Stage %d/3! The Iron Age has begun — heavy craft powers the great voyage." % shipwreck_stage)
+	if shipwreck_stage >= 3:
+		# Koreksi era Fase 2: menyelesaikan Shipwreck Stage 3 berarti kapal siap
+		# berlayar. Fakta voyage readiness dicatat HANYA setelah transaksi repair
+		# berhasil di atas; record_fact idempotent, jadi notifikasi berulang tidak
+		# pernah menduplikasi progresi. Stage 3 TIDAK lagi membuka Iron Age —
+		# Iron Age kini hanya bisa dibuka lewat milestone Eldergrove Forest
+		# (fakta `eldergrove_reached`, fase multi-island mendatang).
+		progression.record_fact(ProgressionState.FACT_FORGOTTEN_SHORE_VESSEL_READY)
+		feedback_message.emit("Shipwreck repaired to Stage 3/3! The vessel is ready to set sail from Forgotten Shore.")
 	else:
 		feedback_message.emit("Shipwreck repaired to Stage %d/3!" % shipwreck_stage)
 	return true

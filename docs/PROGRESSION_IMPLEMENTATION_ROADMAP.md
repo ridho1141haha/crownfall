@@ -53,16 +53,21 @@ Implementation tasks:
 
 ## Phase 2 — Era progression correction
 
+**Status:** Implemented on `feat/progression-phase-2-era-correction` (era gate,
+facts, unlock definitions, conservative legacy migration, tests, docs). See
+`PROGRESSION_FOUNDATION_DESIGN.md` section 12 for the shipped boundary and the
+exact legacy `iron_age` migration policy. Phases 3+ below remain planning only.
+
 **Goal:** align era unlocks with the island progression decision.
 
-- Wood Age starts on Forgotten Shore.
-- Stone Age begins when the first Stone Wall Tier 2 milestone is completed.
-- Shipwreck Stage 3 unlocks voyage readiness / travel to Eldergrove Forest, not Iron Age.
-- Iron Age unlocks only after a defined Eldergrove Forest milestone.
-- Existing saves with `iron_age` from the old trigger require an explicit compatibility policy; do not silently downgrade or silently preserve an unlock that violates the new progression design.
-- Update era definitions, HUD messages, migration rules, docs, and tests atomically.
+- Wood Age starts on Forgotten Shore. (Implemented; unchanged.)
+- Stone Age begins when the first Stone Wall Tier 2 milestone is completed. (Implemented; unchanged from Phase 1.)
+- Shipwreck Stage 3 unlocks voyage readiness / travel to Eldergrove Forest, not Iron Age. (Implemented: Stage 3 records the `forgotten_shore_vessel_ready` fact and the session messages announce voyage readiness only.)
+- Iron Age unlocks only after a defined Eldergrove Forest milestone. (Implemented as the stable fact `eldergrove_reached` plus the fail-closed `EraProgressionManager.notify_eldergrove_milestone()` gate; the Eldergrove gameplay event that records the fact belongs to the future multi-island phase, so Iron Age is unreachable on Forgotten Shore today.)
+- Existing saves with `iron_age` from the old trigger follow an explicit conservative compatibility policy (implemented and tested: evidence-based era downgrade with vessel-readiness preservation; `eldergrove_reached`-carrying saves keep Iron Age; deterministic and idempotent; malformed data rejected).
+- Era definitions, session messages, migration rules, docs, and tests were updated atomically.
 
-**Exit criteria:** no path unlocks Iron Age while still on Forgotten Shore; old saves have a documented and tested migration outcome.
+**Exit criteria:** no path unlocks Iron Age while still on Forgotten Shore; old saves have a documented and tested migration outcome. — Met: the only Iron Age path requires the durable Eldergrove fact, and every legacy save branch has a tested, documented outcome.
 
 ## Phase 3 — Specialist domain foundation
 
