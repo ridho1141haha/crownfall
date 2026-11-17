@@ -42,6 +42,13 @@ func _process(_delta: float) -> bool:
 			return false
 
 		1:
+			# Start New Game may ask for confirmation when a valid save exists;
+			# confirm it if the overlay is visible, then wait for the transition.
+			var confirm_btn: Button = current_scene.find_child("ConfirmNewGameButton", true, false) as Button
+			if confirm_btn != null and confirm_btn.visible:
+				confirm_btn.pressed.emit()
+				_wait_frames = 0
+				return false
 			if current_scene == null or current_scene.name != "ForgottenShore":
 				return false
 			var session: ForgottenShoreSession = current_scene as ForgottenShoreSession

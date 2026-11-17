@@ -113,3 +113,24 @@ jobs:
           godot --headless --script res://tests/gameplay_scenarios.gd 2>&1 | tee /tmp/godot_gameplay.log
           ! grep -E "(SCRIPT ERROR:|Parser Error:|TEST FAILURE:)" /tmp/godot_gameplay.log
           grep -q "PASS: All 10 gameplay scenarios passed" /tmp/godot_gameplay.log
+
+      - name: Run Narrative Foundation Tests (N1)
+        run: |
+          set -o pipefail
+          godot --headless --script res://tests/test_narrative_foundation.gd 2>&1 | tee /tmp/godot_narrative.log
+          ! grep -E "(SCRIPT ERROR:|Parser Error:|TEST FAILURE:)" /tmp/godot_narrative.log
+          grep -q "PASS: All .* Narrative Foundation" /tmp/godot_narrative.log
+
+      - name: Run Dialogue Panel Tests (N2)
+        run: |
+          set -o pipefail
+          godot --headless --script res://tests/test_dialogue_panel.gd 2>&1 | tee /tmp/godot_dialogue.log
+          ! grep -E "(SCRIPT ERROR:|Parser Error:|TEST FAILURE:)" /tmp/godot_dialogue.log
+          grep -q "PASS: All .* Dialogue Panel" /tmp/godot_dialogue.log
+
+      - name: Run Sequence Runner Tests (N3)
+        run: |
+          set -o pipefail
+          godot --headless --script res://tests/test_sequence_runner.gd 2>&1 | tee /tmp/godot_sequence.log
+          ! grep -E "(SCRIPT ERROR:|Parser Error:|TEST FAILURE:)" /tmp/godot_sequence.log
+          grep -q "PASS: All .* Sequence Runner" /tmp/godot_sequence.log

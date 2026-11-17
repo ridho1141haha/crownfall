@@ -29,6 +29,9 @@ run_godot "Specialist domain" "--script res://tests/test_specialist_domain.gd" "
 run_godot "Research foundation" "--script res://tests/test_research_foundation.gd" "PASS: All .* Research System Foundation"
 run_godot "Phase 5 structures & buffs" "--script res://tests/test_structure_buff_phase5.gd" "PASS: All .* Phase 5 Structure & Buff Foundation"
 run_godot "Gameplay scenarios (headless)" "--script res://tests/gameplay_scenarios.gd" "PASS: All 10 gameplay scenarios"
+run_godot "Narrative foundation" "--script res://tests/test_narrative_foundation.gd" "PASS: All .* Narrative Foundation"
+run_godot "Dialogue panel" "--script res://tests/test_dialogue_panel.gd" "PASS: All .* Dialogue Panel"
+run_godot "Sequence runner" "--script res://tests/test_sequence_runner.gd" "PASS: All .* Sequence Runner"
 if [ "${failed}" -ne 0 ]; then
   echo "SOME SUITES FAILED (logs in ${LOG_DIR})"
   exit 1

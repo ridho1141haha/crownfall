@@ -1,0 +1,36 @@
+{
+  "sequences": [
+    {
+      "id": "test_probe_greeting",
+      "skip_allowed": true,
+      "steps": [
+        { "op": "lock_control" },
+        {
+          "op": "dialogue",
+          "lines": [
+            { "speaker": "Test Speaker", "text": "This is a non-canon test line." },
+            { "speaker": "Test Speaker", "text": "A second non-canon line for the fixture." }
+          ]
+        },
+        { "op": "wait", "seconds": 0.1 },
+        { "op": "play_cue", "cue_id": "test_cue" },
+        { "op": "unlock_control" },
+        { "op": "finish" }
+      ]
+    },
+    {
+      "id": "test_probe_transition",
+      "skip_allowed": true,
+      "steps": [
+        {
+          "op": "dialogue",
+          "lines": [
+            { "speaker": "Test Speaker", "text": "Handoff line before transition." }
+          ]
+        },
+        { "op": "change_scene", "scene_path": "res://scenes/world/ForgottenShore.tscn" },
+        { "op": "change_scene", "scene_path": "res://scenes/world/ForgottenShore.tscn" }
+      ]
+    }
+  ]
+}

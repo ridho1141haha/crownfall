@@ -1,7 +1,7 @@
 # CROWNFALL — NARRATIVE IMPLEMENTATION ROADMAP
 
-**Status:** Planning only — no narrative runtime or Prologue content is implemented by this roadmap.  
-**Baseline inspected:** `main` at `b19d109dd48af5f174ef0f973cc9f4b8af664433` (2026-11-16).  
+**Status:** Planning + minimal foundation — Prologue content and Chapter I narrative are NOT implemented. Phases N1–N3 exist only as a tested, test-fixture-based runtime foundation (see §3).  
+**Baseline inspected:** `main` at `6d209970170a9f1fa21946385c79ad02d5fb437d` (2026-11-16, after PR #10 merge).  
 **Story design:** [Prologue Story Design](narrative/PROLOGUE_STORY_DESIGN.md)
 
 > This roadmap defines implementation order and technical boundaries. The Prologue Story Design defines story beats. Neither document authorizes the coding agent to invent unresolved lore or change gameplay rules outside approved scope.
@@ -27,8 +27,10 @@ This is not a plan to implement all chapters, a branching RPG dialogue framework
 | [GDD](GDD.md) | High-level player experience, game pillars, world and chapter direction |
 | [Revised Project Baseline](REVISED_PROJECT_BASELINE.md) | Cross-project scope and architecture constraints |
 | [TDD](TDD.md) and [SYSTEMS](SYSTEMS.md) | Technical conventions and gameplay ownership |
-| [Narrative Implementation Audit](NARRATIVE_IMPLEMENTATION_AUDIT.md) | Source-audited implementation/readiness evidence (PR #10) |
+| [Narrative Implementation Audit](NARRATIVE_IMPLEMENTATION_AUDIT.md) | Source-audited implementation/readiness evidence |
 | [Chapter I Narrative Gap Analysis](CHAPTER_01_NARRATIVE_GAP_ANALYSIS.md) | Chapter I beats, implemented vs missing, Prologue/Chapter I boundary |
+| [Narrative Runtime Technical Design](narrative/NARRATIVE_RUNTIME_TECHNICAL_DESIGN.md) | N1–N3 runtime architecture decisions + N0 production contract |
+| [Prologue Production Breakdown](narrative/PROLOGUE_PRODUCTION_BREAKDOWN.md) | N4 readiness inventory (scenes, assets, audio, test criteria) |
 
 If a story detail is marked OPEN, preserve that uncertainty. If a technical decision is not covered, inspect the current implementation and propose options before changing architecture.
 
@@ -51,9 +53,10 @@ This is a static source inspection of `main` at the baseline SHA above. It is no
 ### Existing presentation and tests
 - The merged presentation split includes `ShoreView` and `ShoreFX`; these are world presentation helpers, not a narrative or cutscene runtime.
 - The merged gameplay harness covers new game, movement, resource collection, building, wall upgrade, Scientist, research, shrine, buff, and save/load scenarios.
-- The inspected source tree contains no dedicated narrative state, dialogue, quest, chapter, or cutscene runtime.
+- **Narrative runtime foundation (implemented on `feat/narrative-runtime-foundation`):** phases N1–N3 below are shipped as a minimal, test-fixture-only foundation — `NarrativeState` (in-memory), `NarrativeData` (validator), `DialoguePanel` + `PlayerControlLock`, `SequenceRunner`, the `dialogue_advance` input action, and a Start New Game overwrite confirmation. No Prologue content, no canon dialogue, no save-schema change.
+- The inspected source tree previously contained no dedicated narrative state, dialogue, quest, chapter, or cutscene runtime; the foundation above is the only narrative runtime that now exists.
 
-**Implication:** Do not assume a dialogue system, narrative save object, cutscene controller, or Prologue scene already exists. Reinspect latest `main` before each implementation phase.
+**Implication:** A dialogue panel, sequence runner, and in-memory state now exist as a foundation, but no narrative save object, cutscene controller, or Prologue scene exists. Reinspect latest `main` before each implementation phase.
 
 ## 4. Prologue scope
 
@@ -95,6 +98,8 @@ Tasks:
 
 ### N1 — Minimal narrative state and event foundation
 
+**Status: implemented (foundation only).** In-memory `NarrativeState` (per-run completion, idempotent), `NarrativeData` fail-closed validator/loader, non-canon fixture + 39-check suite. **No persistence, no schema change** (technical design D1/D2).
+
 **Technical foundation only. No Prologue scenes or dialogue UI in this phase.**
 
 Tasks:
@@ -112,6 +117,8 @@ Tasks:
 
 ### N2 — Dialogue presentation
 
+**Status: implemented (foundation only).** `DialoguePanel` (separate CanvasLayer, speaker/body/advance, consumes input while open), `PlayerControlLock`, `dialogue_advance` action, Start New Game overwrite confirmation; 19-check suite. No portraits/choices/voice/history.
+
 Tasks:
 - Add a reusable, minimal dialogue view for speaker and line text.
 - Support advancing and closing lines deterministically.
@@ -123,6 +130,8 @@ Tasks:
 **Exit criteria:** Dialogue can show, advance, and close without mutating gameplay state or leaking input into the world.
 
 ### N3 — Minimal scripted sequence runner
+
+**Status: implemented (foundation only).** `SequenceRunner` with typed allowlisted steps, frame-counted waits, injected cue/transition callables, exactly-once completion, skip/cancel/cleanup; 31-check suite. `camera_focus`/`pause_world` ops remain PROPOSED.
 
 Tasks:
 - Support only typed operations needed by the Prologue: show/hide dialogue, play an animation/effect, change camera framing, wait for a bounded duration/event, lock/unlock player control, and transition to an approved scene/state.
@@ -230,14 +239,11 @@ This is a recommendation, not an approved implementation contract until the proj
 
 ## 10. First task for the coding agent
 
-**Do not implement the Prologue yet.** First deliver a technical proposal for Phase N1 based on current `main`:
+**Do not implement the Prologue yet.** Phases N1–N3 are implemented on `feat/narrative-runtime-foundation` (foundation only). The next tasks, in order:
 
-1. Trace Start New Game and Continue through `Main.gd`, `ForgottenShoreSession`, and `SaveManager`.
-2. Identify the narrow scene entry/exit seam for a Prologue.
-3. Compare non-resumable and resumable Prologue policies.
-4. Propose the smallest narrative state/event API actually needed (or justify why no persistent state is needed for the first Prologue).
-5. List files, tests, save compatibility impact, and migration behavior.
-6. Do not edit code until the proposal and open product decisions are reviewed.
+1. Get owner approval for the N0 design-lock items and the New Game/Continue entry-flow policy (section 6).
+2. On approval, prepare the N4 content proposal from `docs/narrative/PROLOGUE_PRODUCTION_BREAKDOWN.md` (scene shells, placeholder assets, beat-by-beat tasks).
+3. Do not edit code until the N0 approvals and the N4 proposal are reviewed.
 
 The objective is a small, testable story foundation, not a speculative narrative framework.
 
