@@ -36,6 +36,25 @@ extends Control
 ## transition happens here (the shore handoff is N4.5), NO completion marker
 ## is set, and the development exit remains the only way out.
 ##
+## N4.3-A INTEGRATION: the structural chain end after pl_02 is now the
+## exploration handoff — the shell enters the Prologue-specific exploration
+## segment (PrologueExplorationStage + PrologueExplorer on the ancient road)
+## instead of idling at the N4.2 terminal boundary. The shell is the sole
+## owner of authoritative NarrativeState.mark_completed() calls for the
+## exploration beats pl_03/pl_04: the stage emits one validated completion
+## request per interval (pl_03 = the actor reached the handoff area), the
+## shell validates the ACTIVE beat, records it exactly once, and immediately
+## activates the next beat. `skip_current_exploration_beat()` is the narrow
+## per-beat Skip path (pl_03 skip starts pl_04 normally; pl_04 skip ends the
+## N4.3 segment at a defined idle boundary). Cancellation, the development
+## exit, scene unload, and failed setup are NOT skip: they record nothing,
+## release the stage-owned actor lock, disable exploration input, and leave
+## the Prologue non-resumable. The runner keeps the shell as its control
+## target (pl_01/pl_02 have no actor); the exploration dialogue uses a
+## dedicated stage-owned PlayerControlLock on the actor instead. Headless
+## suites that must keep the N4.2 terminal-boundary behavior disable the
+## segment with the Engine meta "crownfall_prologue_exploration" = false.
+##
 ## COMPLETION SEMANTICS: this shell NEVER touches PlayerProfile. Entering,
 ## exiting, skipping, or closing the application must not mark
 ## prologue_completed_once; only the future N4.5 successful full-Prologue
@@ -52,6 +71,20 @@ const _ALLOWED_SEQUENCE_SCENES: Array[String] = [FORGOTTEN_SHORE_SCENE]
 ## Engine meta override for headless suites (repo injection convention, see
 ## header). Production never sets it, so the Prologue auto-plays on load.
 const AUTOSTART_META: String = "crownfall_prologue_autostart"
+## Engine meta override that keeps the N4.2 terminal-boundary behavior (no
+## exploration segment after pl_02). Production never sets it, so exploration
+## is the default. Same injection convention as AUTOSTART_META.
+const EXPLORATION_META: String = "crownfall_prologue_exploration"
+## Engine meta override for the explorer texture path — headless tests inject
+## a nonexistent path to prove the failed-setup path leaves no stale state.
+const STAGE_TEXTURE_META: String = "crownfall_prologue_stage_texture"
+## The existing adult-Monarch sprite sheet (planning reuse policy): frames
+## 0-3 idle / 4-7 walk, identical convention to the gameplay player scene.
+const EXPLORER_TEXTURE_PATH: String = "res://assets/characters/player/player_monarch_sheet.png"
+## Tree index the exploration stage is inserted at: above the backdrop layers
+## and below the CenterContainer UI, so the development exit button stays
+## reachable during exploration.
+const EXPLORATION_STAGE_UI_INDEX: int = 2
 
 ## Test/handoff observability contract (same style as Main.set_route_transition):
 ## the injected callable receives the exit scene path instead of a real
@@ -67,6 +100,10 @@ var _runner: SequenceRunner = null
 ## N4.2 chain state (per-run, dies with the scene like all shell runtime).
 var _current_beat_id: String = ""
 var _prologue_reached_end: bool = false
+## N4.3-A exploration segment state (per-run, dies with the scene).
+var _exploration_stage: PrologueExplorationStage = null
+var _exploration_beat: String = ""
+var _n43_segment_ended: bool = false
 ## Labelled placeholder stage for beat cues (no art assets ship in N4.2).
 var _stage_backdrop: ColorRect = null
 var _stage_caption_label: Label = null
@@ -166,12 +203,15 @@ func skip_sequence() -> void:
 
 ## Aborts the current sequence without completion (N3 semantics; cleanup only).
 ## The chain does NOT advance on a cancellation, and the placeholder stage is
-## hidden so the shell returns to its idle screen.
+## hidden so the shell returns to its idle screen. An active exploration
+## segment is torn down the same way: cancellation is NOT a skip, so nothing
+## is recorded, and the stage-owned actor lock is released deterministically.
 func cancel_sequence() -> void:
 	if _runner != null:
 		_runner.cancel()
 	_current_beat_id = ""
 	_hide_stage()
+	_abort_exploration_segment(true)
 
 
 ## Starts the Prologue content chain: plays the first uncompleted authored
@@ -191,10 +231,12 @@ func current_beat_id() -> String:
 
 
 ## True only when the authored chain structurally ended: the completed beat
-## was the last authored beat (pl_02 — pl_03+ are future milestones). Every
-## other chain stop (exit started, busy runner, already-completed next beat,
-## invalid beat data, play() rejection) keeps this FALSE, so a playback
-## failure is never reported as a successful milestone boundary.
+## was the last authored runner beat (pl_02 — exploration beats pl_03/pl_04
+## are shell-orchestrated and never runner sequences). Every other chain stop
+## (exit started, busy runner, already-completed next beat, invalid beat data,
+## play() rejection) keeps this FALSE, so a playback failure is never reported
+## as a successful milestone boundary. Note: with exploration enabled this
+## structural end ALSO enters the N4.3-A exploration segment.
 func prologue_reached_end() -> bool:
 	return _prologue_reached_end
 
@@ -268,10 +310,15 @@ func _on_runner_sequence_completed(sequence_id: String) -> void:
 	_hide_stage()
 	var next_id: String = _next_beat_id(sequence_id)
 	if next_id.is_empty():
-		# N4.2 boundary: the completed beat was the last authored beat
-		# (pl_03+ not implemented). This is the ONLY boundary trigger.
+		# N4.2 boundary: the completed beat was the last authored beat. This
+		# is the ONLY boundary trigger. With exploration enabled (production
+		# default), this structural chain end is ALSO the N4.3-A exploration
+		# handoff: the shell enters pl_03 instead of idling here.
 		_prologue_reached_end = true
-		_set_boundary_status()
+		if _exploration_enabled() and not _exit_started:
+			_begin_exploration_segment()
+		else:
+			_set_boundary_status()
 		return
 	if not _play_next_beat(sequence_id):
 		# A next authored beat EXISTS but could not start (exit started, busy
@@ -288,6 +335,172 @@ func _on_runner_sequence_completed(sequence_id: String) -> void:
 func _on_runner_sequence_failed(_sequence_id: String, _reason: String) -> void:
 	_current_beat_id = ""
 	_hide_stage()
+
+
+## --- N4.3-A exploration segment (shell-owned beat routing and completion) ---
+
+## True while an exploration beat (pl_03/pl_04) is the active segment state.
+func in_exploration() -> bool:
+	return _exploration_beat != ""
+
+
+## The active exploration beat id ("" when not in exploration).
+func active_exploration_beat() -> String:
+	return _exploration_beat
+
+
+## True once the N4.3 segment ended at its defined idle boundary (pl_04 skip).
+func n43_segment_complete() -> bool:
+	return _n43_segment_ended
+
+
+## The exploration stage instance (null outside the exploration segment).
+func exploration_stage() -> PrologueExplorationStage:
+	return _exploration_stage
+
+
+## Exploration is the production default; headless suites may restore the N4.2
+## terminal-boundary behavior via the Engine meta injection convention.
+func _exploration_enabled() -> bool:
+	return bool(Engine.get_meta(EXPLORATION_META, true))
+
+
+## Enters the exploration segment (pl_03) after the authored chain structurally
+## ends. Build order is fail-closed: a texture load failure or a failed
+## stage.setup() frees the stage, records NOTHING, acquires NO lock, and falls
+## back to the defined N4.2-style idle boundary (dev exit available).
+func _begin_exploration_segment() -> void:
+	var texture_path: String = String(Engine.get_meta(STAGE_TEXTURE_META, EXPLORER_TEXTURE_PATH))
+	var texture: Texture2D = load(texture_path) as Texture2D
+	var stage := PrologueExplorationStage.new()
+	_exploration_stage = stage
+	add_child(stage)
+	move_child(stage, EXPLORATION_STAGE_UI_INDEX)
+	if texture == null or not stage.setup(_panel, texture):
+		# Failed setup is not a skip: no beat recorded, no lock left behind,
+		# defined idle state instead of a half-built exploration segment.
+		push_warning("[PrologueShell] exploration stage setup failed; falling back to the idle boundary")
+		_exploration_stage = null
+		stage.free()
+		_set_boundary_status()
+		return
+	stage.exploration_handoff_reached.connect(_on_exploration_handoff_reached)
+	_exploration_beat = PrologueBeats.PL_03_WANDERER
+	_set_exploration_status(PrologueBeats.PL_03_WANDERER)
+	stage.begin_beat(PrologueBeats.PL_03_WANDERER)
+
+
+## The stage's ONE pl_03 completion request (actor reached the handoff area).
+## The shell validates the request against the ACTIVE beat and records the
+## completion exactly once; duplicate or inactive-beat requests are ignored.
+func _on_exploration_handoff_reached() -> void:
+	if _exit_started or _exploration_stage == null:
+		return
+	if _exploration_beat != PrologueBeats.PL_03_WANDERER:
+		# A request for an inactive beat is never accepted (late duplicate,
+		# torn-down stage, or a beat that already moved on).
+		return
+	if not _record_exploration_beat(PrologueBeats.PL_03_WANDERER):
+		return
+	_activate_exploration_beat(PrologueBeats.PL_04_REPEATED_MARK)
+
+
+## The shell is the SOLE writer of exploration completions in NarrativeState
+## (the stage never records; the runner never sees exploration beats).
+## mark_completed is idempotent, so a duplicate request is a rejected no-op.
+func _record_exploration_beat(beat_id: String) -> bool:
+	if _state == null:
+		return false
+	var recorded: bool = _state.mark_completed(beat_id)
+	if not recorded:
+		push_warning("[PrologueShell] duplicate exploration completion request for '%s' ignored" % beat_id)
+	return recorded
+
+
+## Activates the next exploration beat on the validated stage.
+func _activate_exploration_beat(beat_id: String) -> void:
+	_exploration_beat = beat_id
+	if _exploration_stage != null:
+		_exploration_stage.set_active_beat(beat_id)
+	_set_exploration_status(beat_id)
+
+
+## Narrow Prologue-specific per-beat Skip path (N4.3 planning, DECIDED): not a
+## global shortcut, not SequenceRunner.skip (exploration beats are not runner
+## runs), and never a full-Prologue skip. Skipping pl_03 records it once and
+## starts pl_04 normally (pl_04 is NOT skipped); skipping pl_04 records it
+## once, closes any active dialogue, releases the stage-owned actor lock, and
+## ends the N4.3 segment at its defined boundary without fabricating pl_05.
+## Returns false when no exploration beat is active, the segment already
+## ended, an exit started, or the beat was already completed (duplicate skip).
+func skip_current_exploration_beat() -> bool:
+	if _exit_started or _n43_segment_ended:
+		return false
+	var beat: String = _exploration_beat
+	if beat != PrologueBeats.PL_03_WANDERER and beat != PrologueBeats.PL_04_REPEATED_MARK:
+		return false
+	if not _record_exploration_beat(beat):
+		return false
+	if _exploration_stage != null:
+		_exploration_stage.close_active_dialogue()
+	if beat == PrologueBeats.PL_03_WANDERER:
+		_activate_exploration_beat(PrologueBeats.PL_04_REPEATED_MARK)
+		return true
+	if _exploration_stage != null:
+		_exploration_stage.end_segment()
+	_exploration_beat = ""
+	_n43_segment_ended = true
+	_set_n43_boundary_status()
+	return true
+
+
+## Cancellation/exit cleanup for the exploration segment — explicitly NOT a
+## skip: nothing is recorded, the stage-owned lock is released, exploration
+## input is disabled, and the segment state returns to "" so a later
+## handoff/skip request can never complete a torn-down beat. Idempotent;
+## safe even when the actor or stage was already freed (stage.teardown() is
+## freed-safe). update_status refreshes the idle status text on cancellation.
+func _abort_exploration_segment(update_status: bool) -> void:
+	if _exploration_stage == null:
+		return
+	_exploration_stage.teardown()
+	_exploration_stage = null
+	_exploration_beat = ""
+	if update_status and not _exit_started:
+		_set_cancelled_exploration_status()
+
+
+## Exploration status text (beat-aware, labelled placeholder presentation).
+func _set_exploration_status(beat_id: String) -> void:
+	var status: Label = get_node_or_null("CenterContainer/VBoxContainer/StatusLabel") as Label
+	if status != null:
+		status.text = "[Placeholder art] N4.3 exploration — %s: a quiet, weathered ancient road." % PrologueBeats.exploration_beat_title(beat_id)
+	var detail: Label = get_node_or_null("CenterContainer/VBoxContainer/DetailLabel") as Label
+	if detail != null:
+		if beat_id == PrologueBeats.PL_03_WANDERER:
+			detail.text = "Walk the road (A/D or arrow keys) and reach the far end to continue. Nothing records Prologue completion."
+		else:
+			detail.text = "Mark inspection is not implemented yet (N4.3-B). The per-beat skip and the development exit remain available."
+
+
+## Defined N4.3 boundary presentation (pl_04 skip): mirrors the N4.2 boundary.
+func _set_n43_boundary_status() -> void:
+	var status: Label = get_node_or_null("CenterContainer/VBoxContainer/StatusLabel") as Label
+	if status != null:
+		status.text = "N4.3 Prologue exploration complete (pl_03 + pl_04). Later beats (N4.4+) are not implemented yet."
+	var detail: Label = get_node_or_null("CenterContainer/VBoxContainer/DetailLabel") as Label
+	if detail != null:
+		detail.text = "No scene transition happens here (the shore handoff is N4.5) and nothing records Prologue completion. Use the development exit to return to the menu."
+
+
+## Defined idle presentation after a cancelled exploration segment.
+func _set_cancelled_exploration_status() -> void:
+	var status: Label = get_node_or_null("CenterContainer/VBoxContainer/StatusLabel") as Label
+	if status != null:
+		status.text = "Prologue exploration cancelled — nothing was recorded."
+	var detail: Label = get_node_or_null("CenterContainer/VBoxContainer/DetailLabel") as Label
+	if detail != null:
+		detail.text = "The Prologue is non-resumable: the next New Game restarts it from the beginning. Use the development exit to return to the menu."
 
 
 ## SequenceRunner cue callable (configured at init): updates the labelled
@@ -367,6 +580,10 @@ func _begin_exit(scene_path: String, cancel_running_sequence: bool) -> bool:
 		# closes the panel, completes nothing). cancel() is a safe no-op when
 		# idle; a finishing handoff sequence is never routed through here.
 		cancel_sequence()
+	# An active exploration segment is torn down on EVERY exit path (this is
+	# not a skip: nothing is recorded). Idempotent — the dev exit already
+	# aborted the segment through cancel_sequence above.
+	_abort_exploration_segment(false)
 	if _exit_transition.is_valid():
 		_exit_transition.call(scene_path)
 		return true

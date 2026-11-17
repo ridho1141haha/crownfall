@@ -1,6 +1,6 @@
 # Crownfall — N4.3 Planning: The Wanderer & The Repeated Mark
 
-**Status:** Owner-approved planning direction; implementation NOT started.  
+**Status:** Owner-approved planning direction; **slice A (technical spike & exploration stage) implemented** on `feat/n43a-exploration-stage` (exploration stage + actor + beat-state/completion handshake + per-beat Skip + cancellation/teardown semantics; 95-check suite). Slices B (repeated-mark interaction) and C (integration & regression) are NOT started.  
 **Planning baseline:** `main` at `539f8564` (2026-11-17, after PR #15 / N4.2 merge).  
 **Story authority:** [Prologue Story Design](PROLOGUE_STORY_DESIGN.md).  
 **Production inventory:** [Prologue Production Breakdown](PROLOGUE_PRODUCTION_BREAKDOWN.md).  
