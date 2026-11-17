@@ -162,3 +162,10 @@ jobs:
           godot --headless --script res://tests/test_n43a_exploration_stage.gd 2>&1 | tee /tmp/godot_n43a.log
           ! grep -E "(SCRIPT ERROR:|Parser Error:|TEST FAILURE:)" /tmp/godot_n43a.log
           grep -q "PASS: All .* N43A Exploration Stage" /tmp/godot_n43a.log
+
+      - name: Run N43B Mark Inspection Tests
+        run: |
+          set -o pipefail
+          godot --headless --script res://tests/test_n43b_mark_inspection.gd 2>&1 | tee /tmp/godot_n43b.log
+          ! grep -E "(SCRIPT ERROR:|Parser Error:|TEST FAILURE:)" /tmp/godot_n43b.log
+          grep -q "PASS: All .* N43B Mark Inspection" /tmp/godot_n43b.log
