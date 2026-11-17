@@ -248,7 +248,7 @@ This policy is approved for N4 planning. It does not authorize implementation un
 **No gameplay or narrative runtime code is authorized by this documentation milestone.** N1–N3 are already merged into `main` through PR #11. Next:
 
 1. Review N0/entry-flow decisions still marked PROPOSED or OPEN in the technical design and Prologue Story Design.
-2. Prepare the N4 implementation proposal from `narrative/PROLOGUE_PRODUCTION_BREAKDOWN.md`; New Game routing, interruption, and first-playthrough skip policy are now approved. The proposal must include a separate global profile flag, validation/failure behavior, and tests before implementation.
+2. Use the N4.0–N4.6 PR-sized implementation slices in `narrative/PROLOGUE_PRODUCTION_BREAKDOWN.md`. Start with N4.0 (global profile + entry/skip gate), then proceed in order. New Game routing, interruption, and first-playthrough skip policy are approved; each slice still needs its own code review, tests, and windowed verification before merge.
 3. Review [`CHAPTER_01_BEAT_SHEET.md`](CHAPTER_01_BEAT_SHEET.md) and resolve its owner questions. Chapter I implementation remains downstream of the Prologue handoff.
 4. Keep subsequent code work in separate PRs with tests and windowed inspection.
 
