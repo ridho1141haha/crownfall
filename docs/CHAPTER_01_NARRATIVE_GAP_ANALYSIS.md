@@ -45,7 +45,7 @@ The Prologue is designed but has **no playable content implementation** (no Prol
 - Leadership must be earned; bloodline and power do not make a worthy ruler (`:38`, `:44`).
 - Do not reveal the ruler's identity, dynasty/kingdom name, power source, crown origin, or Great Eclipse cause (beat 06; roadmap §4).
 
-**Remaining OPEN for the Prologue** (`PROLOGUE_STORY_DESIGN.md:248-265`): the royal symbol's exact design, the ruins' name, the exact childhood location, prior travel notes/artifacts, the ship's origin, the voyage destination, the cause of the storm, the crown's post-wreck appearance (draft), dialogue language/voice, and Prologue skip behavior.
+**Remaining OPEN for the Prologue** (`PROLOGUE_STORY_DESIGN.md:248-265`): the royal symbol's exact design, the ruins' name, the exact childhood location, prior travel notes/artifacts, the ship's origin, the voyage destination, the cause of the storm, the crown's post-wreck appearance (draft), voice/audio, and Prologue skip behavior. English is the approved default dialogue language.
 
 **Verdict:** crown discovery, awakening, and vision are **designed Prologue beats awaiting the N0 design-lock approvals and N4 content**, not missing Chapter I beats. They are not implemented today.
 
@@ -107,7 +107,7 @@ Status: **EXISTS** = implemented and reachable; **PARTIAL** = gameplay/system ex
 - Chapter I dialogue that expresses the survival-first mindset (candidate lines only; no script).
 
 **Dependencies / decisions**
-- Dialogue language/voice (OPEN); which Chapter I beats carry the identity line (N5 beat sheet).
+- English is the approved default/source language; voice/audio and which Chapter I beats carry the identity line remain OPEN.
 
 **Status:** **DESIGNED (Prologue), not implemented in-game.**
 
@@ -270,7 +270,7 @@ Status: **EXISTS** = implemented and reachable; **PARTIAL** = gameplay/system ex
 - New Game / Continue entry-flow policy and legacy-save behavior (roadmap §6 — policy is documented, but remaining PROPOSED/OPEN items still require owner approval before N4 wiring).
 - N0 production details: repeated-symbol visual design, childhood staging, vision visual language, ship-to-island transition.
 - N4 Prologue production/implementation and the fresh Forgotten Shore handoff.
-- N5 Chapter I core progression decisions were approved by the owner on 2026-11-17: mandatory first night with recoverable breach path; optional Scientist recruitment with research/specialist-upgrade gates; Chapter I ends on Eldergrove arrival. Dialogue language/voice, remaining NPC roles, and transition presentation remain open.
+- N5 Chapter I core progression decisions were approved by the owner on 2026-11-17: mandatory first night with recoverable breach path; optional Scientist recruitment with research/specialist-upgrade gates; Chapter I ends on Eldergrove arrival. Dialogue presentation/voice, remaining NPC roles, and transition presentation remain open; English is the approved default/source language.
 - Whether any gameplay-embedded sequence needs explicit world pause; current technical design says world simulation continues during gameplay dialogue unless a future approved operation changes that policy.
 - Whether a narrow `talk` interaction is needed for approved NPC beats; do not add it pre-emptively.
 
@@ -322,4 +322,4 @@ The runtime foundation is already implemented. Content implementation remains ga
 
 ## 9. Chapter I beat sheet status
 
-The candidate Chapter I sequence and per-beat gameplay mapping are documented in [`CHAPTER_01_BEAT_SHEET.md`](CHAPTER_01_BEAT_SHEET.md). That document is a **proposal only**. It does not settle the Chapter I ending, shrine/relic/Greedling lore, NPC personalities, or dialogue language. Owner approval is required before implementation.
+The candidate Chapter I sequence and per-beat gameplay mapping are documented in [`CHAPTER_01_BEAT_SHEET.md`](CHAPTER_01_BEAT_SHEET.md). That document is a **proposal only**. It does not settle the Chapter I ending, shrine/relic/Greedling lore, NPC personalities, or unresolved lore. English is the approved default/source language; remaining presentation decisions still require owner approval before implementation.

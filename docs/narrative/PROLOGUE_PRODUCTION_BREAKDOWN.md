@@ -113,7 +113,9 @@ Entry/exit contract: New Game → pl_01…pl_09 → `scenes/world/ForgottenShore
 | Royal symbol design | **OPEN / P** | Use one labelled placeholder until approved |
 | Crown/altar props | **M/N** | Must not imply unapproved lore; placeholder first |
 | Audio pipeline | **R** | `assets/audio/*.wav` + SFX player exist; music/ambience channels TBD |
-| Localization | **M** | Candidate lines are English drafts; language/voice OPEN |
+| Dialogue source language | **DECIDED** | English is the default/source language for all authored in-game dialogue. Keep dialogue data ready for future localization without building a localization framework now |
+| Localization pipeline | **FUTURE** | Additional languages are out of current N4 scope; do not block Prologue implementation |
+| Voice acting | **FUTURE / OPTIONAL** | Initial implementation may use text-only dialogue; no voice recording is required |
 
 ## 4. Suggested implementation order (post-foundation)
 

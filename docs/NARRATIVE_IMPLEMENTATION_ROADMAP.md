@@ -89,7 +89,7 @@ Each phase should be a small, independently reviewable PR. Do not combine all ph
 
 Tasks:
 - Review and approve the Prologue beats and candidate text.
-- Finalize only production details needed to build it: visual design of the repeated symbol, staging of the childhood manifestation, visual language of the vision, and minimum ship-to-island transition.
+- Finalize only production details needed to build it: visual design of the repeated symbol, staging of the childhood manifestation, visual language of the vision, and minimum ship-to-island transition. Authored dialogue uses English as its default/source language; localization and voice acting are not N4 blockers.
 - Keep unnecessary lore explanations OPEN.
 - Decide New Game / Continue / legacy-save behavior (section 6).
 - Keep GDD and ROADMAP explicit that the Prologue is planned but not implemented.

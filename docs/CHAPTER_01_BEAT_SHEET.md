@@ -65,7 +65,7 @@ No final dialogue lines are authored here. Candidate speaker roles:
 - **Scientist:** may explain the practical purpose of research and observations. Do not use the Scientist to explain the crown, Great Eclipse, Greedling origins, Ancient Relic, or shrine identities.
 - **Environmental text:** optional and limited. Do not place definitive lore in inscriptions, item descriptions, HUD strings, or data descriptions without owner approval.
 
-Dialogue language, voice, speaker names, portrait style, and whether dialogue is skippable remain OPEN.
+**Language decision:** English is the default/source language for all authored in-game dialogue, including the Prologue and Chapter I. Additional language localization is future scope; do not build a localization framework for this milestone. Voice acting, speaker names, portrait style, and whether dialogue is skippable remain OPEN.
 
 ## 5. Gameplay integration contract
 
@@ -81,7 +81,7 @@ Dialogue language, voice, speaker names, portrait style, and whether dialogue is
 ## 6. Explicitly unresolved owner decisions
 
 1. Which existing NPCs, if any, should have authored dialogue? Are Vagrant and Scientist sufficient?
-2. What is the intended Chapter I dialogue language and presentation style?
+2. What dialogue presentation style best fits Chapter I (text-only, speaker label, portrait, or another minimal treatment)? English is the approved default language.
 3. Should the crown be visible during Chapter I gameplay, and if so, how is its visual continuity represented without adding an inventory system?
 4. Does any Chapter I beat mention the royal symbol or Monarch's unanswered questions, or should those remain subtle until later?
 5. What is the canonical relationship, if any, between Forgotten Shrine and Shrine of Growth? Keep separate until decided.
