@@ -1,6 +1,6 @@
 # CROWNFALL — NARRATIVE IMPLEMENTATION ROADMAP
 
-**Status:** N1–N3 narrative runtime foundation is implemented and merged. N4.0 (global player profile + New Game/Continue entry gate) is implemented; the Prologue content itself (N4.1–N4.6) is not implemented and the Prologue is not playable. Chapter I content (N5) is in design planning; the beat sheet is a non-canon proposal pending owner approval.  
+**Status (updated 2026-11-17):** N1–N3, N4.0, N4.1, and N4.2 are implemented and merged. N4.2 delivers pl_01 *The Lost World* and pl_02 *A Faint Resonance*, including Prologue shell auto-start/chaining. N4.3–N4.6 remain unimplemented. The Prologue is partially playable, not complete. Chapter I (N5) remains in design planning; its beat sheet is a non-canon proposal pending owner approval.  
 **Baseline inspected:** `main` at `a34e5b3` (2026-11-17, after PR #12 merge; N4.0 verified against this baseline).  
 **Story design:** [Prologue Story Design](narrative/PROLOGUE_STORY_DESIGN.md)
 
