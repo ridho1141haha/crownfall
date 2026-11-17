@@ -1,7 +1,7 @@
 # Crownfall — Narrative Runtime Technical Design
 
 **Status:** Technical contract for the implemented N1–N3 runtime + N0 production contract (story/entry-flow items remain DECIDED / PROPOSED / OPEN as marked). N4.0 (entry gate + player profile), N4.1 (functional Prologue shell), and N4.2 (beats pl_01 + pl_02 with shell auto-start/chaining) are implemented; the story slices N4.3–N4.6 are not.  
-**Baseline:** N4.0 verified against `main` @ `a34e5b3` (PR #12 merge), Godot `4.7.2.stable`.  
+**Baseline (updated 2026-11-17):** `main` @ `539f8564`, Godot `4.7.2.stable`. N4.0–N4.2 are implemented; N4.3–N4.6 are not. Earlier baseline references are historical.  
 **Story source:** [`PROLOGUE_STORY_DESIGN.md`](PROLOGUE_STORY_DESIGN.md) — content authority for the Prologue.  
 **Implementation plan:** [`../NARRATIVE_IMPLEMENTATION_ROADMAP.md`](../NARRATIVE_IMPLEMENTATION_ROADMAP.md) phases N0–N5. This document owns the *technical* decisions for the N1–N3 runtime foundation; the roadmap owns phase sequencing.
 
