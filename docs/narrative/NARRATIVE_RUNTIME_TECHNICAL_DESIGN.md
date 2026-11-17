@@ -1,7 +1,7 @@
 # Crownfall — Narrative Runtime Technical Design
 
-**Status:** PROPOSED technical design + N0 production contract (decisions marked DECIDED / PROPOSED / OPEN).  
-**Baseline:** `main` @ `6d209970170a9f1fa21946385c79ad02d5fb437d` (after PR #10 merge), Godot `4.7.2.stable`.  
+**Status:** Technical contract for the implemented N1–N3 runtime + N0 production contract (story/entry-flow items remain DECIDED / PROPOSED / OPEN as marked).  
+**Baseline:** `main` @ `eb82ae4d63a33a5c0fb9bb3f17f4bf832860c79a` (after PR #11 merge), Godot `4.7.2.stable`.  
 **Story source:** [`PROLOGUE_STORY_DESIGN.md`](PROLOGUE_STORY_DESIGN.md) — content authority for the Prologue.  
 **Implementation plan:** [`../NARRATIVE_IMPLEMENTATION_ROADMAP.md`](../NARRATIVE_IMPLEMENTATION_ROADMAP.md) phases N0–N5. This document owns the *technical* decisions for the N1–N3 runtime foundation; the roadmap owns phase sequencing.
 

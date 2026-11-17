@@ -26,9 +26,10 @@ These documents are planning references for everything that is still unimplement
 The planned Prologue and its staged implementation are documented in:
 
 - [`narrative/PROLOGUE_STORY_DESIGN.md`](narrative/PROLOGUE_STORY_DESIGN.md) — story beats for **The Crown's Call**, character direction, candidate dialogue, visual/audio intent, and unresolved lore boundaries.
-- [`NARRATIVE_IMPLEMENTATION_ROADMAP.md`](NARRATIVE_IMPLEMENTATION_ROADMAP.md) — current code baseline, New Game/Continue and save-compatibility policy proposal, technical phases, ownership boundaries, and test gates.
+- [`NARRATIVE_IMPLEMENTATION_ROADMAP.md`](NARRATIVE_IMPLEMENTATION_ROADMAP.md) — technical phases, ownership boundaries, save policy, and test gates.
+- [`CHAPTER_01_BEAT_SHEET.md`](CHAPTER_01_BEAT_SHEET.md) — draft, non-canon Chapter I beat proposal pending owner approval.
 
-These are planning documents only. The current game still starts directly on Forgotten Shore; the Prologue, dialogue runtime, narrative state, and cutscene/sequence runtime are **not implemented**. The roadmap requires a design/entry-flow review and a small technical proposal before any narrative code is changed. Existing Chapter I vertical-slice gameplay remains the target to preserve.
+The current game still starts directly on Forgotten Shore and has no playable Prologue or Chapter I story content. The N1–N3 dialogue/sequence runtime foundation is implemented and merged, but is not connected to canon content. N4 Prologue implementation and N5 Chapter I implementation remain planned. Existing Chapter I vertical-slice gameplay remains the target to preserve.
 
 ---
 

@@ -1,7 +1,7 @@
 # Crownfall — Narrative Implementation Readiness Audit
 
-**Audit date:** 2026-11-16 (revised)  
-**Repository snapshot:** `main` @ `6d209970170a9f1fa21946385c79ad02d5fb437d` (PR #10 merged); foundation revision audited on `feat/narrative-runtime-foundation` (phases N1–N3 implemented, test fixtures only).  
+**Audit date:** 2026-11-17 (refreshed after PR #11)  
+**Repository snapshot:** `main` @ `eb82ae4d63a33a5c0fb9bb3f17f4bf832860c79a` (PR #11 merged; N1–N3 runtime foundation is now on main).  
 **Engine:** Godot `4.7.2.stable`  
 **Scope:** narrative implementation only. No gameplay code was modified, no features were added, no lore was invented.  
 **Companion documents:** [`CHAPTER_01_NARRATIVE_GAP_ANALYSIS.md`](CHAPTER_01_NARRATIVE_GAP_ANALYSIS.md), the official [`NARRATIVE_IMPLEMENTATION_ROADMAP.md`](NARRATIVE_IMPLEMENTATION_ROADMAP.md) (phases N0–N5), and [`narrative/PROLOGUE_STORY_DESIGN.md`](narrative/PROLOGUE_STORY_DESIGN.md)
@@ -20,7 +20,7 @@ Inspected evidence classes:
 - Assets: `assets/**` (asset inventory and filename searches)
 - Documentation: `readme.md`, `docs/GDD.md`, `docs/PRD.md`, `docs/REVISED_PROJECT_BASELINE.md`, `docs/SYSTEMS.md`, `docs/TDD.md`, `docs/DECISIONS_M2_M8.md`, `docs/PROGRESSION_FOUNDATION_DESIGN.md`, `docs/ASSET_GUIDELINES.md`, `docs/ROADMAP.md`, `docs/CHANGELOG.md`, `docs/NARRATIVE_IMPLEMENTATION_ROADMAP.md`, `docs/narrative/PROLOGUE_STORY_DESIGN.md`
 
-Boundary note: since the first audit, the repository gained a **Prologue story design** (`docs/narrative/PROLOGUE_STORY_DESIGN.md`, “The Crown's Call”, 9 beats) and an **official implementation roadmap** (`docs/NARRATIVE_IMPLEMENTATION_ROADMAP.md`, phases N0–N5). Both are planning documents, not shipped features. A **Chapter I beat sheet and dialogue script still do not exist** — the roadmap phase N5 explicitly requires writing them before Chapter I content is implemented. No narrative runtime exists to execute; this is a static readiness audit.
+Boundary note: the repository now contains the Prologue story design, the N0–N5 roadmap, and the N1–N3 runtime foundation merged by PR #11. The runtime is implemented and tested but is not wired to canon content. The Chapter I beat sheet is being introduced in `docs/CHAPTER_01_BEAT_SHEET.md` as a **draft, non-canon proposal** pending owner approval; it does not authorize implementation.
 
 ---
 
@@ -31,13 +31,13 @@ Boundary note: since the first audit, the repository gained a **Prologue story d
 | Gameplay loop | **Implemented / tested** | Movement, economy, building, NPC builder/farmer/archer, night defense, save/load, specialists, research, shrine/structure foundation, buffs, era progression. The presentation refactor (`ShoreView`/`ShoreFX`, PR #8) is merged. |
 | Narrative design | **Prologue designed, Chapter I not yet** | “The Crown's Call” defines 9 Prologue beats, Monarch direction, vision content, and an OPEN-decision list. Chapter I has no approved beat sheet yet (roadmap N5). |
 | Narrative content (runtime) | **Near-zero** | No playable opening, crown, vision, dialogue, or chapter progression. Only functional prompts/status text and a few lore-flavoured names/descriptions. |
-| Narrative infrastructure | **Foundation only (N1–N3)** | Dialogue panel, control lock, sequence runner, and in-memory state exist as a tested, test-fixture-only foundation. No quest/objective system, no chapter state, no cutscene content, no narrative save fields. |
+| Narrative infrastructure | **Implemented foundation (N1–N3)** | Dialogue panel, control lock, sequence runner, validator, and in-memory state are merged and tested. They are not yet connected to authored content. No quest/objective system, chapter progression, cutscene content, or narrative save fields. |
 | Narrative data | **Fragments** | Narrative-flavoured `description` fields exist in data JSON but are validated only; no UI reads them. |
 | Narrative assets | **Absent** | No crown, portrait, dialogue box, cutscene, or vision assets. Asset guidelines defer narrative asset sets; the Prologue design lists the needed assets. |
 
-**Verdict:** the project remains a runnable **gameplay vertical slice**, not a narrative implementation. The Prologue design and N0–N5 roadmap remove the earlier “no narrative direction” blocker, but **nothing narrative is implemented**: the crown discovery, awakening, and vision are now *designed Prologue content*, not shipped features, and Chapter I still has no beat sheet. The project is ready to start the roadmap's **N1 narrative-state/event foundation** once the N0 design-lock approvals are granted.
+**Verdict:** the project remains a runnable **gameplay vertical slice with a merged narrative runtime foundation**, not a playable narrative implementation. N1–N3 are implemented and tested, but no canon Prologue or Chapter I content is wired into them. The Prologue remains designed, not playable. Chapter I now has a draft beat sheet proposal (`CHAPTER_01_BEAT_SHEET.md`) pending owner approval; N4 Prologue content remains the next narrative implementation milestone.
 
-The biggest gaps are: (1) no dialogue runtime/UI, (2) no narrative state/sequence/chapter infrastructure, (3) no implemented Prologue content (though designed), (4) no Chapter I beat sheet, and (5) still-unresolved lore identities: the two “shrines”, the “Ancient Relic”, and Greedling/Greed Portal origins.
+The biggest gaps are: (1) no Prologue scenes/content, (2) no integration of the runtime with NPCs or gameplay beats, (3) no chapter progression/quest system (and no evidence yet that one is needed), (4) no approved Chapter I beat sheet or dialogue script, and (5) unresolved lore identities: the two shrines, the Ancient Relic, and Greedling/Greed Portal origins.
 
 ---
 
@@ -181,24 +181,20 @@ No intentional mystery is resolved here; the audit only flags where decisions ar
 | `PauseMenu` + scene transitions | Existing pause/return-to-menu flow. | Narrative must integrate pause/input and avoid autosave mid-sequence. |
 | Tests + repo verifier | `SceneTree` harness patterns, headless suites, integrity checks. | Narrative tests must follow tab indentation, `_check`, no raw `assert`, no `root.add_child`. |
 
-### 6.2 Systems needing small extensions
+### 6.2 Systems needing content integration
 
-- **InteractionResolver**: add a `talk`/`converse` target kind and prompt; keep existing priorities. Session needs a dispatch path that starts dialogue without consuming gameplay resources.
-- **ClockHUD or a new CanvasLayer**: add a dialogue panel (speaker, body, advance/skip) rather than overloading `FeedbackLabel` (roadmap N2).
-- **Input map**: add `dialogue_advance` / `dialogue_skip` actions (currently absent from `project.godot`).
-- **Save payload**: add a validated narrative-state section (or register narrative facts) with migration and strict rejection — the N1 save decision must be made first.
-- **Trigger evaluation**: reuse `ProgressionUnlockEvaluator` semantics (all_of/any_of over registered facts) but do not pretend it is a narrative event system; add once-only/seen state.
+- **SequenceRunner / DialoguePanel:** author validated sequence data and connect it through a narrow scene/session entry point. Do not move narrative ownership into `ForgottenShoreSession`.
+- **NPC conversations:** if the approved beat sheet requires NPC dialogue, add a narrow talk interaction path to `InteractionResolver` and dispatch it to the narrative presenter. Preserve existing recruit/research interaction priorities.
+- **Gameplay beat triggers:** bind only to existing authoritative milestones/signals (first-night outcome, Scientist discovery/recruitment, research completion, ship readiness) and make triggers idempotent and load-silent.
+- **Camera/fade/world-pause support:** add an operation only when an approved beat requires it; these are not part of the current runner contract.
+- **Persistence:** keep `NarrativeState` in-memory unless a resumable/cross-session story requirement is approved. SaveManager schema v2 is unchanged.
 
-### 6.3 Missing foundations
+### 6.3 Missing content and optional systems
 
-- Dialogue data format, validation, and runtime (nodes, lines, conditions, localization keys).
-- Narrative state model (seen beats/lines, sequence completion) with save/load and transactional rejection.
-- Narrative event/trigger system with idempotence, load-silence, skip/replay semantics, and conditions beyond facts.
-- Scripted-sequence runner (movement/input lock, camera control, fades, waits, skip, pause integration) — typed operations only (roadmap N3).
-- Narrative UI (dialogue box, speaker/portrait, advance indicator, accessibility).
-- Narrative asset pipeline (crown, portraits, cutscene art, audio, fonts) per the Prologue design §7.
-- Localization pipeline.
-- Narrative test harness and acceptance criteria.
+- Prologue scenes, art/audio, and New Game routing (N4).
+- Chapter I canon dialogue, beat triggers, and chapter-end presentation (after N5 design approval and N4 handoff).
+- A chapter/quest framework is absent, but should not be built by default. First prove that a small number of authored sequences and existing progression facts can deliver the approved beats.
+- Portraits, choices, voice, localization, and a full journal are optional future scope, not current requirements.
 
 ### 6.4 Architectural conflicts / risks
 
@@ -215,9 +211,10 @@ No intentional mystery is resolved here; the audit only flags where decisions ar
 
 ### 6.5 Readiness conclusion
 
-- **Implemented:** roadmap N1–N3 foundation (in-memory `NarrativeState`, `NarrativeData` validator, `DialoguePanel` + `PlayerControlLock`, `SequenceRunner`, `dialogue_advance` input, Start New Game overwrite confirmation) — test fixtures only, no canon content, no save-schema changes.
-- **Not ready:** Prologue and Chapter I content until the N0 design-lock approvals and the N5 Chapter I beat sheet.
-- **Recommended gate:** approve the N0 items and the New Game/Continue entry-flow policy, then proceed to N4 content using `docs/narrative/PROLOGUE_PRODUCTION_BREAKDOWN.md`.
+- **Implemented:** N1–N3 narrative runtime foundation merged on `main` by PR #11: `NarrativeState`, `NarrativeData` validation, `DialoguePanel`, `PlayerControlLock`, and `SequenceRunner`. Automated narrative suites and the merge-commit CI check passed.
+- **Not implemented:** playable Prologue scenes/content, NPC conversation integration, Chapter I canon dialogue/beats, chapter progression, and narrative save fields.
+- **Planning state:** Chapter I beat sheet exists as a non-canon draft proposal. Owner approval is required before proposed story details become canon or code tasks.
+- **Recommended sequence:** resolve N0/entry-flow approvals, prepare and implement N4 Prologue in a separate PR, then implement only the approved Chapter I beats in small N5 PRs.
 
 ---
 
@@ -258,6 +255,7 @@ No intentional mystery is resolved here; the audit only flags where decisions ar
 - `data/resources.json` — only gold/wood/stone.
 
 **Documentation**
+- `docs/CHAPTER_01_BEAT_SHEET.md` — draft, non-canon Chapter I proposal; owner approval pending.
 - `docs/narrative/PROLOGUE_STORY_DESIGN.md:24-38` (agreed direction), `:49-162` (beats 01–09), `:218-231` (Prologue/Chapter I boundary), `:233-246` (acceptance), `:248-265` (open decisions).
 - `docs/NARRATIVE_IMPLEMENTATION_ROADMAP.md` — official N0–N5 phases, §4 out-of-scope lore, §6 entry-flow policy, §7 ownership, §8 quality gates.
 - `docs/GDD.md:66,112` — updated narrative scope (Prologue planned, not shipped).

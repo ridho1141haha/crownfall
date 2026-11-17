@@ -57,13 +57,13 @@ The Monarch's journey is tied to an ancient crown and the gradual restoration of
 
 | Chapter | Working Title | Long-Term Direction | Current Status |
 |---|---|---|---|
-| I | The Forgotten Shore | Establish the first settlement | Vertical-slice location and gameplay proof only |
+| I | The Forgotten Shore | Establish the first settlement | Vertical-slice gameplay exists; narrative beat sheet is draft planning only |
 | II | The Lost Kingdom | Discover the remains of an ancient kingdom | Future |
 | III | Beyond the Forest | Explore other regions and civilizations | Future |
 | IV | The Hollow Crown | Uncover the crown's origin | Future |
 | V | The Last Light | Determine Aetherion's future | Future |
 
-**Scope clarification:** the current vertical-slice build still starts directly on Forgotten Shore and does not yet contain a playable Prologue, dialogue runtime, quest chain, or cinematic story sequence. A separate Prologue, **The Crown's Call**, is now in narrative planning before Chapter I. Its story design is documented in [`docs/narrative/PROLOGUE_STORY_DESIGN.md`](narrative/PROLOGUE_STORY_DESIGN.md), and its staged technical plan is in [`docs/NARRATIVE_IMPLEMENTATION_ROADMAP.md`](NARRATIVE_IMPLEMENTATION_ROADMAP.md). Both are planned work, not shipped features. The first-slice settlement and first-night gameplay loop remains the behavior to preserve.
+**Scope clarification:** the current vertical-slice build still starts directly on Forgotten Shore and does not yet contain playable Prologue or Chapter I story content. The N1–N3 narrative runtime foundation (dialogue panel, control lock, sequence runner, and in-memory state/validation) is implemented and merged, but is not connected to canon story content. The Prologue, **The Crown's Call**, is designed but not playable; see [`docs/narrative/PROLOGUE_STORY_DESIGN.md`](narrative/PROLOGUE_STORY_DESIGN.md). Chapter I has a draft, non-canon beat sheet proposal in [`docs/CHAPTER_01_BEAT_SHEET.md`](CHAPTER_01_BEAT_SHEET.md). The staged implementation plan is [`docs/NARRATIVE_IMPLEMENTATION_ROADMAP.md`](NARRATIVE_IMPLEMENTATION_ROADMAP.md). Preserve the first-slice settlement and first-night gameplay loop.
 
 ### 2.3 First Location — Forgotten Shore
 
@@ -109,7 +109,7 @@ The loop should make the relationship between daytime decisions and nighttime co
 | Buildings | Town Center, Wooden Wall, Stone Wall Tier 2, Watchtower, and Farm Plots | Full kingdom upgrade tree |
 | Enemies | One basic enemy archetype | Multiple enemy families and bosses |
 | Survival | One night encounter and sunrise | Blood Moon and advanced world events |
-| Narrative | Current build: environmental atmosphere and world premise; Prologue story design planned in `docs/narrative/PROLOGUE_STORY_DESIGN.md` | Prologue runtime, dialogue/sequence systems, quests, branching story, and complete Chapter I narrative |
+| Narrative | Current build: environmental atmosphere and world premise; N1–N3 dialogue/sequence runtime foundation implemented but not connected to canon content | Playable Prologue (N4), Chapter I narrative integration (N5), quest/branching systems unless separately approved |
 | Persistence | Local versioned save | Cloud saves and multiplayer session persistence |
 
 ### 3.3 Resources
