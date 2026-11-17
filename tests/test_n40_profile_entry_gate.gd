@@ -224,6 +224,10 @@ func _initialize() -> void:
 	# installed, no scene loads, and the run ends with exit code 1.
 	if not _set_metas(PROFILE_MISSING, SAVE_NONE):
 		return
+	# N4.2: the shell now auto-plays the authored opening beat by default;
+	# this suite exercises the shell as a lifecycle target on an idle
+	# instance (the auto-start flow is covered by test_n42_prologue_beats.gd).
+	Engine.set_meta("crownfall_prologue_autostart", false)
 	_stage = 1
 	change_scene_to_file(MAIN_SCENE)
 

@@ -7,6 +7,29 @@ This changelog records repository changes that actually occurred. Planned featur
 
 ---
 
+## [2026-11-17] N4.2 The Lost World + A Faint Resonance (beats pl_01 + pl_02)
+
+**Type:** Prologue story content (two authored beats + shell auto-start/chaining; no SaveManager/schema change, no PlayerProfile writes, no new runner ops, no art/audio assets)
+**Engine Verified:** `Godot 4.7.2.stable.official.ed1daf0bf` (local headless run of the full `tests/run_all.sh`: all 16 suites passed, 0 failure markers; repository static verifier 238 checks)
+
+### Summary
+Implements roadmap slice **N4.2**: the Prologue's first two story beats are now authored and playable through the real New Game entry flow. `scripts/narrative/PrologueBeats.gd` (new content module, data only) authors `pl_01_lost_world` ("The Lost World") and `pl_02_faint_resonance` ("A Faint Resonance") as NarrativeData-validated sequences in the existing typed, allowlisted op format — no new runner ops, no quest/cinematic framework, no JSON-driven scripting. pl_01 uses the Story Design Beat 01 candidate narration verbatim and never states the cause of the Great Eclipse; pl_02 depicts exactly one small, uncontrolled childhood manifestation (one resonance cue, one narration line, then failed attempts to repeat it) with no spellcasting, no power origin, an unnamed stone location (OPEN decision preserved), and no crown in either beat. The shell (`PrologueShell.gd`) stays lifecycle-only: it auto-plays the first uncompleted beat on route load (production default, matching pl_01's "New Game start" entry condition; headless suites override via the Engine meta `crownfall_prologue_autostart`, same injection convention as `crownfall_load_on_start`), chains pl_01 → pl_02 exactly-once via `sequence_completed`, stages beat cues on a labelled placeholder stage (`[Placeholder art]` captions through the existing `play_cue` op), and stops at the N4.2 boundary — no scene transition (the shore handoff remains N4.5), no completion marking, and the development-only exit remains the only way out. Dialogue stays text-only English (DECIDED language).
+
+### Key Changes
+- **`scripts/narrative/PrologueBeats.gd` (new):** authored beat data — `BEAT_IDS` order, `get_beat(id)` (deep-copied, fail-closed for unknown ids), `stage_caption(cue_id)` (labelled placeholder captions), `is_beat(id)`. Content lives here; the shell authors no story text.
+- **`scripts/narrative/PrologueShell.gd`:** `start_prologue()` + auto-start on `_ready` (meta-gated), beat chaining from `sequence_completed` (runner idle at emit time; generation guards keep the finished run stale), `_on_sequence_cue` placeholder staging + `set_cue_player(Callable)` observability hook, `current_beat_id()` / `prologue_reached_end()` accessors, stage hide on completion/cancel/failure, and boundary status text. Non-beat sequences (e.g. the N4.1 suite's plumbing fixtures) still play via `play_sequence` and never trigger chaining.
+- **`scenes/narrative/PrologueShell.tscn`:** `StageBackdrop` + `StageCaption` labelled placeholder stage nodes (hidden by default) and N4.2 status text.
+- **`scripts/narrative/SequenceRunner.gd`:** `sequence_started` / `sequence_completed` / `sequence_failed` ids are now snapshotted into locals before emission — the shell's chain handler starts the next beat from inside the completion emission, which reassigns `_current_id`, and later listeners must still observe the id the signal is about (latent N3 quirk made visible by chaining; regression-covered by the N4.2 suite). Plus a read-only `is_control_locked()` accessor.
+- **`tests/test_n42_prologue_beats.gd` (new, 89 checks):** both beats load and validate fail-closed (single sequences + whole payload with unique ids); real entry flow (first New Game → shell); explicit `start_prologue` on an idle shell and the production auto-start flow; dialogue progression/completion through the panel; control lock engagement and restoration; NarrativeState records both completions exactly once; chain order pl_01 → pl_02 and the N4.2 boundary (no shore transition, no chain advance on cancellation, non-beat completions never chain); cue order across both beats (exactly one manifestation); invalid payloads fail closed; cancellation/dev-exit cleanup without completion; skip fast-forwards a beat and still completes exactly once; profile/world-save fixtures byte-exact untouched (plus the developer's real files, sidecars included).
+- **`tests/test_n40_profile_entry_gate.gd` + `tests/test_n41_prologue_shell.gd`:** one Engine-meta line each (`crownfall_prologue_autostart = false`) so their lifecycle assertions keep running against an idle shell; no other changes (101/87 checks unchanged).
+- **`tests/run_all.sh` + `.github/workflows/godot-ci.yml`:** N4.2 suite registered after N4.1.
+- **Docs:** roadmap §4/§5, `NARRATIVE_RUNTIME_TECHNICAL_DESIGN.md` (status, §A, §E emission-snapshot guard, N0 implemented-beats note), `PROLOGUE_PRODUCTION_BREAKDOWN.md` (status, §3 N4.2 row, §5 route-target note), audit header note.
+
+### Lore discipline (accepted constraints)
+No Eclipse cause, no power origin, no dynasty/kingdom/Crown invention, no crown appearance in pl_01/pl_02, exactly one manifestation, placeholder captions only (labelled, no implied canon), dialogue in English. The childhood stone location and the narration copy remain owner-reviewable (candidate text labelled in the breakdown).
+
+---
+
 ## [2026-11-17] N4.1 Prologue Shell (lifecycle only — story beats NOT included)
 
 **Type:** New narrative infrastructure (functional scene shell; no Prologue content, no canon dialogue, no SaveManager/schema change)
