@@ -103,7 +103,7 @@ Explicitly excluded (no arbitrary script execution, no eval, no JSON-driven GDSc
 
 - Data is schema-validated before playback; unknown ops/fields fail closed at load.
 - Completion emits `sequence_completed` **exactly once** per run (guarded by `NarrativeState`).
-- `skip()`: closes dialogue, executes pending `change_scene` at most once, restores control, then completes exactly once. Skippable flags come from data (`skip_allowed`); the foundation does not add a whole-Prologue skip (cutscene skip vs gameplay-beat skip is an N4 decision — **OPEN**).
+- `SequenceRunner.skip()` remains a per-sequence runtime operation: it closes dialogue, executes pending `change_scene` at most once, restores control, then completes exactly once. Whole-Prologue Skip is a separate New Game menu decision: hidden on the first-ever playthrough and offered only after `PlayerProfile.prologue_completed_once` is true. Individual beat/cutscene skip flags remain content-level N4 decisions.
 - `cancel()`: restores control and closes the panel without completion (used by scene unload/exit).
 - `_exit_tree` always runs cleanup; no leaked state, no orphan timers (waits are frame-counted).
 - Bounds: ≤128 steps per sequence, ≤256 dialogue lines, wait ≤60s, text ≤512 chars, speaker ≤64 chars — no unbounded hangs.

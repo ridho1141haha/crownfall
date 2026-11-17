@@ -45,7 +45,7 @@ The Prologue is designed but has **no playable content implementation** (no Prol
 - Leadership must be earned; bloodline and power do not make a worthy ruler (`:38`, `:44`).
 - Do not reveal the ruler's identity, dynasty/kingdom name, power source, crown origin, or Great Eclipse cause (beat 06; roadmap §4).
 
-**Remaining OPEN for the Prologue** (`PROLOGUE_STORY_DESIGN.md:248-265`): the royal symbol's exact design, the ruins' name, the exact childhood location, prior travel notes/artifacts, the ship's origin, the voyage destination, the cause of the storm, the crown's post-wreck appearance (draft), voice/audio, and Prologue skip behavior. English is the approved default dialogue language.
+**Remaining OPEN for the Prologue** (`PROLOGUE_STORY_DESIGN.md:248-265`): the royal symbol's exact design, the ruins' name, the exact childhood location, prior travel notes/artifacts, the ship's origin, the voyage destination, the cause of the storm, the crown's post-wreck appearance (draft), voice/audio, and individual beat/cutscene skip flags. Whole-Prologue menu Skip eligibility is approved. English is the approved default dialogue language.
 
 **Verdict:** crown discovery, awakening, and vision are **designed Prologue beats awaiting the N0 design-lock approvals and N4 content**, not missing Chapter I beats. They are not implemented today.
 
@@ -259,7 +259,7 @@ Status: **EXISTS** = implemented and reachable; **PARTIAL** = gameplay/system ex
 
 ### 5.2 Still OPEN
 
-**Prologue** (`PROLOGUE_STORY_DESIGN.md:248-265`): royal symbol design, ruins name, childhood location, travel notes/artifacts, ship origin, voyage destination, storm cause, crown post-wreck appearance (draft), voice/audio, skip behavior. English is the approved default/source dialogue language.
+**Prologue** (`PROLOGUE_STORY_DESIGN.md:248-265`): royal symbol design, ruins name, childhood location, travel notes/artifacts, ship origin, voyage destination, storm cause, crown post-wreck appearance (draft), voice/audio, and individual beat/cutscene skip flags. Whole-Prologue menu Skip eligibility is approved; English is the approved default/source dialogue language.
 
 **Protected mysteries (must not be revealed):** crown origin, power source, dynasty/ancestor, ancient kingdom name, Great Eclipse cause.
 

@@ -136,7 +136,7 @@ Tasks:
 Tasks:
 - Support only typed operations needed by the Prologue: show/hide dialogue, play an animation/effect, change camera framing, wait for a bounded duration/event, lock/unlock player control, and transition to an approved scene/state.
 - Provide explicit cleanup paths so control is always restored.
-- Define skip behavior if skip is approved; required handoff/completion actions must execute exactly once.
+- Implement the approved New Game menu gate: first-ever Prologue cannot be skipped; after one successful completion, offer Skip or Play Again. Keep menu-level whole-Prologue Skip distinct from per-sequence `SequenceRunner.skip()`; required handoff actions must execute exactly once.
 - Ensure pause, exit, and scene changes cannot leave input locked or duplicate events.
 - Do not build a general-purpose cinematic editor or arbitrary scripting language.
 
