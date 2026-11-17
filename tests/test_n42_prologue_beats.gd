@@ -18,7 +18,13 @@ extends SceneTree
 ##   8. sequence cancellation cleans up without completion, the development
 ##      exit still cancels a running beat, and skip fast-forwards a beat
 ##      while completing it exactly once,
-##   9. no PlayerProfile or world-save modification anywhere (byte-exact).
+##   9. no PlayerProfile or world-save modification anywhere (byte-exact),
+##  10. boundary strictness (review fix): the N4.2 boundary is marked ONLY
+##      when next-beat discovery finds no next authored beat after the
+##      completed beat — playback refusals (busy runner, already-completed
+##      next beat, invalid data, play() rejection) keep the boundary FALSE
+##      and are reported explicitly (stages 12-14), and the normal
+##      pl_01 → pl_02 flow must not mark the boundary prematurely (stage 3).
 ##
 ## ISOLATION CONTRACT (same style as test_n40/test_n41): every fixture lives
 ## under user://n42_test/ and is injected through the crownfall_profile_path /
@@ -286,6 +292,7 @@ func _process(_delta: float) -> bool:
 			_check(_completions == [BEAT_01], "sequence_completed fired exactly once for pl_01")
 			_check(shell.call("completed_sequence_count") == 1 and bool((shell.call("narrative_state") as NarrativeState).is_completed(BEAT_01)), "NarrativeState records the pl_01 completion")
 			_check(shell.call("is_sequence_running") and shell.call("current_beat_id") == BEAT_02, "the chain advanced automatically to pl_02_faint_resonance after pl_01")
+			_check(not shell.call("prologue_reached_end"), "the N4.2 boundary is NOT marked prematurely after pl_01 (pl_02 exists and started)")
 			_check(_cues.size() >= 3 and String(_cues[0]) == PrologueBeats.CUE_PL01_PROSPERITY and String(_cues[1]) == PrologueBeats.CUE_PL01_ECLIPSE and String(_cues[2]) == PrologueBeats.CUE_PL01_RUINS, "pl_01 stage cues fired in story order (prosperity, eclipse, ruins)")
 			var panel2: DialoguePanel = shell.call("dialogue_panel")
 			_check(panel2.is_open() and panel2.get_speaker_text() == "Narration" and panel2.get_body_text().contains("old stone wall"), "pl_02 opens with the childhood flashback framing")
@@ -443,6 +450,66 @@ func _process(_delta: float) -> bool:
 			_wait_frames = 0
 			return false
 		12:
+			if not _on_main():
+				return false
+			# --- Review-fix regression: boundary strictness (explicit flow) ---
+			Engine.set_meta(AUTOSTART_META, false)
+			change_scene_to_file(PROLOGUE_SHELL_SCENE)
+			_stage = 13
+			_wait_frames = 0
+			return false
+		13:
+			if not _on_shell():
+				return false
+			var shell: Control = _shell()
+			_check(not shell.call("is_sequence_running") and shell.call("completed_sequence_count") == 0 and not shell.call("prologue_reached_end"), "the boundary-strictness shell starts idle with a clean per-run state")
+			_wire_shell_observers(shell)
+			# --- Next-beat discovery is separated from next-beat playback ---
+			_check(String(shell.call("_next_beat_id", "")) == BEAT_01, "discovery from the chain start resolves the first authored beat")
+			_check(String(shell.call("_next_beat_id", BEAT_01)) == BEAT_02, "discovery after pl_01 resolves pl_02 structurally")
+			_check(String(shell.call("_next_beat_id", BEAT_02)) == "", "discovery after the last authored beat is empty (the only boundary trigger)")
+			_check(String(shell.call("_next_beat_id", "n42_unknown")) == "", "discovery for unknown ids is empty without side effects")
+			# --- Next beat exists but cannot start: busy runner keeps boundary false ---
+			_check(shell.call("_play_next_beat", ""), "playback starts the discovered chain-start beat")
+			_check(not shell.call("_play_next_beat", BEAT_01) and not shell.call("prologue_reached_end"), "playback refuses while the runner is busy and keeps the boundary FALSE")
+			shell.call("cancel_sequence")
+			_check(not shell.call("is_sequence_running") and shell.call("completed_sequence_count") == 0, "the busy-refusal shell returns to a clean idle state after cancellation")
+			# --- Next beat already completed (out-of-band): refuse, boundary false ---
+			_check((shell.call("narrative_state") as NarrativeState).mark_completed(BEAT_02), "pl_02 is completed out-of-band (NarrativeState API, no runner involvement)")
+			_check(not shell.call("_play_next_beat", BEAT_01) and not shell.call("prologue_reached_end"), "playback refuses to replay an already-completed next beat and keeps the boundary FALSE")
+			# --- The chain still starts at the first uncompleted beat ---
+			_check(shell.call("start_prologue") and shell.call("current_beat_id") == BEAT_01, "start_prologue resumes the chain at the first uncompleted beat (pl_01)")
+			_stage = 14
+			_wait_frames = 0
+			return false
+		14:
+			if not _on_shell():
+				return false
+			var shell: Control = _shell()
+			# --- Drive pl_01; the handler must refuse pl_02 (already completed) ---
+			if shell.call("is_sequence_running") and not _completions.has(BEAT_01):
+				_advance_if_open(shell)
+				return false
+			_check(_completions == [BEAT_01], "the chain ran pl_01 exactly once (pl_02 was completed out-of-band)")
+			_check(not shell.call("prologue_reached_end"), "the boundary is NOT marked when the next beat exists but cannot start (playback refusal)")
+			_check(not shell.call("is_sequence_running") and shell.call("current_beat_id") == "" and not (shell.call("dialogue_panel") as DialoguePanel).is_open(), "the shell returns to a defined idle state after the refusal")
+			var runner6: SequenceRunner = shell.call("sequence_runner")
+			_check(not runner6.is_control_locked(), "control is restored after the refusal (runner cleanup)")
+			_check(shell.call("completed_sequence_count") == 2, "NarrativeState holds both completions without a boundary")
+			var status2: Label = shell.get_node_or_null("CenterContainer/VBoxContainer/StatusLabel") as Label
+			_check(status2 != null and not status2.text.contains("Later beats (N4.3+)"), "the boundary status text is NOT applied on a playback refusal")
+			# --- Retry: every beat completed -> refuse again, boundary still false ---
+			_check(not shell.call("start_prologue") and not shell.call("prologue_reached_end"), "start_prologue with every beat completed stays false without falsely marking the boundary")
+			# --- The development exit still works from the refusal idle state ---
+			_check(shell.call("request_main_menu_return"), "the development exit is accepted from the refusal idle state")
+			_check(_shell_exits.size() == 1 and String(_shell_exits[0]) == "res://scenes/main/Main.tscn", "the development exit from the refusal state transitions to the main menu exactly once")
+			_check(not shell.call("prologue_reached_end"), "the exit from the refusal state still marks no boundary")
+			_fixture_completions_untouched()
+			change_scene_to_file(MAIN_SCENE)
+			_stage = 15
+			_wait_frames = 0
+			return false
+		15:
 			# --- Area 9 + hygiene: real files untouched, fixtures cleaned ---
 			if _real_profile_existed:
 				_check(FileAccess.get_file_as_string(REAL_PROFILE_PATH) == _real_profile_snapshot, "developer's real user://player_profile.json was never mutated")

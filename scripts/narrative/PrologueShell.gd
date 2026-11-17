@@ -28,10 +28,13 @@ extends Control
 ## suites that exercise lifecycle semantics on an idle shell disable it with
 ## the Engine meta "crownfall_prologue_autostart" = false (same injection
 ## convention as crownfall_load_on_start). When an authored beat completes
-## exactly once, the chain advances to the next authored beat and stops at
-## the N4.2 boundary (pl_03+ are future milestones): NO scene transition
-## happens here (the shore handoff is N4.5), NO completion marker is set,
-## and the development exit remains the only way out.
+## exactly once, the chain advances to the next authored beat and marks the
+## N4.2 boundary ONLY when no next authored beat exists (pl_03+ are future
+## milestones); when a next beat exists but cannot start (exit started, busy
+## runner, already-completed beat, invalid data, play() rejection), the
+## boundary stays FALSE and the refusal is reported explicitly. NO scene
+## transition happens here (the shore handoff is N4.5), NO completion marker
+## is set, and the development exit remains the only way out.
 ##
 ## COMPLETION SEMANTICS: this shell NEVER touches PlayerProfile. Entering,
 ## exiting, skipping, or closing the application must not mark
@@ -174,9 +177,12 @@ func cancel_sequence() -> void:
 ## Starts the Prologue content chain: plays the first uncompleted authored
 ## beat (production auto-start calls this from _ready; pl_01 entry condition
 ## is "New Game start"). Returns false when an exit already started, the
-## runner is busy, or every authored beat is already completed (boundary).
+## runner is busy, every authored beat is already completed this run, or the
+## discovered beat cannot start. This call NEVER marks the N4.2 boundary —
+## boundary decisions belong to the chain completion handler, which can
+## distinguish a structural chain end from a playback refusal.
 func start_prologue() -> bool:
-	return _play_beat_after("")
+	return _play_next_beat("")
 
 
 ## Id of the authored beat currently staged by the chain (empty when idle).
@@ -184,8 +190,11 @@ func current_beat_id() -> String:
 	return _current_beat_id
 
 
-## True once the chain reached the N4.2 boundary: every authored beat is
-## completed and no next beat exists (pl_03+ are future milestones).
+## True only when the authored chain structurally ended: the completed beat
+## was the last authored beat (pl_02 — pl_03+ are future milestones). Every
+## other chain stop (exit started, busy runner, already-completed next beat,
+## invalid beat data, play() rejection) keeps this FALSE, so a playback
+## failure is never reported as a successful milestone boundary.
 func prologue_reached_end() -> bool:
 	return _prologue_reached_end
 
@@ -197,26 +206,52 @@ func set_cue_player(observer: Callable) -> void:
 	_cue_observer = observer
 
 
-## Plays the authored beat that follows completed_id ("" = start of chain).
-## Fail-closed: no beat, an already-completed next beat, a busy runner, or a
-## started exit all resolve to false without side effects.
-func _play_beat_after(completed_id: String) -> bool:
+## Next-beat DISCOVERY (pure, no side effects, no playback): the authored
+## beat that should play after completed_id in BEAT_IDS order.
+##   - completed_id "" (chain start): the first UNCOMPLETED authored beat, or
+##     "" when every authored beat is already completed this run.
+##   - completed_id = an authored beat (chain advance): the structurally NEXT
+##     authored beat, or "" only when completed_id is the LAST authored beat.
+## The "" result after a completed beat is the ONLY N4.2 boundary condition;
+## every other outcome (including an unknown id) is not a boundary.
+func _next_beat_id(completed_id: String) -> String:
+	var beat_ids: Array[String] = PrologueBeats.BEAT_IDS
+	if completed_id.is_empty():
+		for beat_id: String in beat_ids:
+			if not _state.is_completed(beat_id):
+				return beat_id
+		return ""
+	for i: int in range(beat_ids.size()):
+		if beat_ids[i] == completed_id:
+			return beat_ids[i + 1] if i + 1 < beat_ids.size() else ""
+	return ""
+
+
+## Next-beat PLAYBACK (lifecycle, fail-safe): starts the beat discovered by
+## _next_beat_id(). Returns true only when the next beat actually started.
+## Every refusal returns false WITHOUT touching the N4.2 boundary:
+##   - an exit already started (the shell is leaving; no chain advance),
+##   - the runner is busy (a sequence is still running),
+##   - the discovered beat is already completed this run (never replayed),
+##   - its authored data is missing or fails NarrativeData validation,
+##   - SequenceRunner.play() rejects the start for any other reason.
+func _play_next_beat(completed_id: String) -> bool:
 	if _exit_started:
 		return false
-	var next_id: String = ""
-	var beat_ids: Array[String] = PrologueBeats.BEAT_IDS
-	for i: int in range(beat_ids.size()):
-		if completed_id.is_empty():
-			if not _state.is_completed(beat_ids[i]):
-				next_id = beat_ids[i]
-				break
-		elif beat_ids[i] == completed_id and i + 1 < beat_ids.size():
-			next_id = beat_ids[i + 1]
-			break
-	if next_id.is_empty() or _state.is_completed(next_id):
+	if _runner.is_running():
+		return false
+	var next_id: String = _next_beat_id(completed_id)
+	if next_id.is_empty():
+		return false
+	if _state.is_completed(next_id):
+		push_warning("[PrologueShell] beat '%s' is already completed this run; the chain will not replay it" % next_id)
 		return false
 	var sequence: Dictionary = PrologueBeats.get_beat(next_id)
-	if sequence.is_empty() or not _runner.play(sequence):
+	if sequence.is_empty() or not NarrativeData.validate_sequence(sequence):
+		push_warning("[PrologueShell] authored beat '%s' is missing or invalid; the chain refused to start it" % next_id)
+		return false
+	if not _runner.play(sequence):
+		push_warning("[PrologueShell] SequenceRunner.play rejected beat '%s'" % next_id)
 		return false
 	_current_beat_id = next_id
 	return true
@@ -231,10 +266,21 @@ func _on_runner_sequence_completed(sequence_id: String) -> void:
 		return
 	_current_beat_id = ""
 	_hide_stage()
-	if not _play_beat_after(sequence_id):
-		# N4.2 boundary: no next authored beat (pl_03+ not implemented).
+	var next_id: String = _next_beat_id(sequence_id)
+	if next_id.is_empty():
+		# N4.2 boundary: the completed beat was the last authored beat
+		# (pl_03+ not implemented). This is the ONLY boundary trigger.
 		_prologue_reached_end = true
 		_set_boundary_status()
+		return
+	if not _play_next_beat(sequence_id):
+		# A next authored beat EXISTS but could not start (exit started, busy
+		# runner, already-completed beat, invalid data, play() rejection).
+		# This is NOT the N4.2 boundary: the shell returns to a defined idle
+		# state (no staged beat, stage hidden, control restored by the
+		# runner's cleanup) with the development exit available and
+		# start_prologue() able to retry the chain.
+		push_warning("[PrologueShell] chain did not advance past '%s': next beat '%s' exists but could not start" % [sequence_id, next_id])
 
 
 ## Any runner failure (fail-closed validation errors reject before playback;
