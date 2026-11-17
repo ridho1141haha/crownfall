@@ -124,7 +124,7 @@ The N4.3 orchestration contract is DECIDED:
 - Exploration beats are not active `SequenceRunner` runs, so `SequenceRunner.skip()` is not their skip mechanism.
 - Provide a narrow Prologue-specific `skip_current_exploration_beat()` path for the existing/future per-beat Skip affordance; do not add a new global shortcut, generic skip framework, or UI redesign as part of N4.3-A.
 - Skipping pl_03 records pl_03 once and starts pl_04 normally. It does not skip pl_04.
-- Skipping pl_04 records pl_04 once and ends the N4.3 segment at its defined boundary. It does not start pl_05.
+- Skipping pl_04 records pl_04 once and ends the N4.3 segment at its defined boundary. It does not start pl_05. If the recognition dialogue is already open, Skip closes the panel and releases the stage-owned actor lock before ending the beat.
 - Skip never marks `prologue_completed_once`, changes a world save, or skips the entire Prologue. The full-Prologue menu Skip remains a separate N4.0 returning-player choice.
 - Cancel, development exit, scene unload, or failed setup are not Skip: they do not record the active exploration beat as completed. The Prologue remains non-resumable, so a later New Game starts again from pl_01.
 
