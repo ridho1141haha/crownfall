@@ -7,6 +7,22 @@ This changelog records repository changes that actually occurred. Planned featur
 
 ---
 
+## [2026-11-17] N4.0 Player Profile & Entry Gate (Prologue content NOT included)
+
+**Type:** New narrative infrastructure + entry-flow change (no Prologue content, no canon dialogue, no SaveManager/schema change)
+**Engine Verified:** `Godot 4.7.2.stable.official.ed1daf0bf` (local headless run of the full `tests/run_all.sh`: all 14 suites passed, 0 failure markers; repository static verifier 231 checks)
+
+### Summary
+Implements roadmap slice **N4.0** decided in `docs/narrative/NARRATIVE_RUNTIME_TECHNICAL_DESIGN.md` §A/B: a minimal persistent `PlayerProfile` holding exactly one durable fact — `prologue_completed_once` — and the New Game / Continue entry gate. First-ever Start New Game routes to the labelled Prologue route placeholder with Skip locked; after one recorded completion, Start New Game offers **Play Prologue Again / Skip Prologue**; Skip enters a fresh Forgotten Shore session without touching the profile; Continue bypasses the Prologue entirely and keeps loading existing world saves (including legacy v1). `SaveManager`, `ProgressionState`, world-save schema v2, and `ForgottenShoreSession` are unchanged. **The nine Prologue beats are NOT implemented**: `scenes/narrative/PrologueShell.tscn` is a clearly labelled, inert N4.0 placeholder (no beats, dialogue, handoff, or completion marking), and nothing in the runtime flow sets the completion flag. N4.1–N4.6 remain not implemented.
+
+### Key Changes
+- **`scripts/narrative/PlayerProfile.gd` (new):** global profile at `user://player_profile.json`, schema `{"schema_version": 1, "prologue_completed_once": false}`. Strict fail-closed validation (exact two-key shape, exact-int schema version, bool flag; missing/malformed/unsupported-version/unreadable data all read as "not completed" and never block New Game or Continue). Atomic persistence (`.tmp` → re-read verify → staged rename with `.old` rollback, SaveManager convention; no SaveManager code reuse or modification). API: `load_profile(path) -> {ok, error}`, `is_prologue_completed_once() -> bool`, `mark_prologue_completed(path) -> bool` (reports persistence success). Unsafe paths rejected; no signals, no autoload, no settings framework.
+- **`scripts/core/Main.gd`:** after the existing (unchanged-wording) overwrite confirmation, the profile gate routes Start New Game: `prologue_completed_once == false` → Prologue route (`crownfall_load_on_start = false`, no Skip offered); `true` → returning-player choice overlay (**Play Prologue Again** / **Skip Prologue** / Cancel; Cancel stays in the menu). Skip and Play Again are single-transition guarded (`_route_started`); the confirm-overlay Cancel button is now named `CancelNewGameButton`. Continue is untouched and never reads the profile.
+- **`scenes/narrative/PrologueShell.tscn` + `scripts/narrative/PrologueShell.gd` (new):** N4.0 placeholder route target for `Main.PROLOGUE_ROUTE_SCENE`; inert except a Return to Main Menu button so the build cannot dead-end. **N4.1 replaces the scene content at the same path** (or updates the constant in the same PR); the routing decision does not change.
+- **Tests:** `tests/test_n40_profile_entry_gate.gd` (new, 66 checks): profile behavior matrix (missing/false/true/malformed/missing-field/unsupported-version/unreadable/write-failure/reload), entry flow (first-ever routing, no Skip, choice, cancel paths, repeated-press single-transition guard), Skip → fresh Forgotten Shore (previous day-2 save left intact, default ledger), Continue independence (v2 + legacy v1 loads, corrupted profile does not disable Continue), placeholder sanity, and byte-exact proof that the developer's real `user://player_profile.json` is never mutated. Registered in `tests/run_all.sh` and `.github/workflows/godot-ci.yml`.
+- **`tests/test_integration_m8_slice.gd`:** entry stage adapted to the new gate — it runs as a returning player via an injected pre-completed profile and reaches Forgotten Shore through the real Skip path; all 39 gameplay/save/continue checks are unchanged in behavior (overlay visibility now uses `is_visible_in_tree()` so hidden overlays are never re-pressed).
+- **Docs:** roadmap §3/§5 (N4.0 implemented, N4.1–N4.6 not), `NARRATIVE_RUNTIME_TECHNICAL_DESIGN.md` §A (verified implementation + N4.1/N4.5 contract), `PROLOGUE_PRODUCTION_BREAKDOWN.md` §5 (as-built profile/entry contract), audit snapshot note.
+
 ---
 
 ## [2026-11-16] Narrative Runtime Foundation (N1–N3, test fixtures only)

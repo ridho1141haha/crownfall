@@ -1252,7 +1252,16 @@ func _apply_loaded_payload(data: Dictionary) -> bool:
 func _consume_pending_load_if_requested() -> void:
 	if Engine.has_meta("crownfall_load_on_start") and bool(Engine.get_meta("crownfall_load_on_start")):
 		Engine.set_meta("crownfall_load_on_start", false)
-		if load_game_state():
-			feedback_message.emit("Loaded saved kingdom state from user://save_slot_0.json")
+		# N4.0 test isolation: when the menu's injected save path meta is set
+		# (crownfall_menu_save_path, see Main.MENU_SAVE_PATH_META), Continue
+		# loads from that same path instead of the default slot — the menu's
+		# has_valid_save() check already validated it. In production the meta
+		# is unset and the default player save slot applies (behavior
+		# unchanged).
+		var load_path: String = SaveManager.DEFAULT_SAVE_PATH
+		if Engine.has_meta("crownfall_menu_save_path"):
+			load_path = String(Engine.get_meta("crownfall_menu_save_path"))
+		if load_game_state(load_path):
+			feedback_message.emit("Loaded saved kingdom state from %s" % load_path)
 		else:
 			feedback_message.emit("Failed to load saved kingdom state — starting a fresh reign")

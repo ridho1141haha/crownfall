@@ -1,7 +1,7 @@
 # Crownfall — Narrative Runtime Technical Design
 
-**Status:** Technical contract for the implemented N1–N3 runtime + N0 production contract (story/entry-flow items remain DECIDED / PROPOSED / OPEN as marked).  
-**Baseline:** `main` @ `eb82ae4d63a33a5c0fb9bb3f17f4bf832860c79a` (after PR #11 merge), Godot `4.7.2.stable`.  
+**Status:** Technical contract for the implemented N1–N3 runtime + N0 production contract (story/entry-flow items remain DECIDED / PROPOSED / OPEN as marked). N4.0 (entry gate + player profile) is implemented; the Prologue content slices N4.1–N4.6 are not.  
+**Baseline:** N4.0 verified against `main` @ `a34e5b3` (PR #12 merge), Godot `4.7.2.stable`.  
 **Story source:** [`PROLOGUE_STORY_DESIGN.md`](PROLOGUE_STORY_DESIGN.md) — content authority for the Prologue.  
 **Implementation plan:** [`../NARRATIVE_IMPLEMENTATION_ROADMAP.md`](../NARRATIVE_IMPLEMENTATION_ROADMAP.md) phases N0–N5. This document owns the *technical* decisions for the N1–N3 runtime foundation; the roadmap owns phase sequencing.
 
@@ -13,9 +13,12 @@
 
 ### Current implementation (verified)
 
-- `scripts/core/Main.gd:18-27` — Start New Game sets `crownfall_load_on_start = false` and calls `change_scene_to_file("res://scenes/world/ForgottenShore.tscn")`; Continue sets it to `true` and does the same.
-- `scripts/world/ForgottenShoreSession.gd:1252` (`_consume_pending_load_if_requested`) loads the existing save silently when the flag is set.
+- `scripts/core/Main.gd` — Start New Game first keeps the DECIDED (D3) overwrite confirmation when a valid world save exists (Cancel stays in the menu). After the confirmation point it consults the global player profile (entry gate): if `prologue_completed_once` is false (including missing/corrupt data), it routes to `res://scenes/narrative/PrologueShell.tscn` with `crownfall_load_on_start = false` and offers no Skip; if true, it offers **Play Prologue Again** / **Skip Prologue** / Cancel. Play Prologue Again routes to the same Prologue route target; Skip starts a fresh Forgotten Shore session (`crownfall_load_on_start = false`, profile flag untouched). Continue sets `crownfall_load_on_start = true` and goes straight to Forgotten Shore — it never reads the profile.
+- `scripts/world/ForgottenShoreSession.gd` (`_consume_pending_load_if_requested`) loads the existing save silently when the flag is set. The session owns the load path and is unchanged in N4.0.
 - `SaveManager` uses schema v2; the world save lives at `user://save_slot_0.json`.
+- `scripts/narrative/PlayerProfile.gd` (N4.0) — minimal global profile at `user://player_profile.json`: `{"schema_version": 1, "prologue_completed_once": false}`. API: `load_profile(path) -> Dictionary {ok, error}`, `is_prologue_completed_once() -> bool`, `mark_prologue_completed(path) -> bool` (reports persistence success). Strict validation; any missing/malformed/unsupported-version/unreadable data reads as "not completed"; atomic `.tmp` → verify → staged rename with rollback; unsafe paths rejected. `SaveManager` and schema v2 are unchanged.
+- `scenes/narrative/PrologueShell.tscn` + `scripts/narrative/PrologueShell.gd` (N4.0) — clearly labelled, inert placeholder route target (no beats, no dialogue, no handoff, no completion marking; only "Return to Main Menu"). N4.1 replaces the scene content at the same path (or updates `Main.PROLOGUE_ROUTE_SCENE` in the same PR); the routing decision does not change. Headless tests observe routing via `Main.set_route_transition(Callable)` and Engine metas `crownfall_profile_path` / `crownfall_menu_save_path` (same contract style as `crownfall_load_on_start`).
+- N4.0 automated evidence: `tests/test_n40_profile_entry_gate.gd` (66 checks, profile behavior + entry flow + fresh-session + placeholder sanity), registered in `tests/run_all.sh` and `.github/workflows/godot-ci.yml`; the M8 integration slice now enters Forgotten Shore through the real Skip path (pre-completed injected profile). The actual nine Prologue beats are NOT implemented; N4.0 does not mark completion anywhere in its runtime flow.
 
 ### Decision — DECIDED (foundation scope)
 

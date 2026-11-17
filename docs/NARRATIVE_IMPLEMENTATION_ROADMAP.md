@@ -1,7 +1,7 @@
 # CROWNFALL — NARRATIVE IMPLEMENTATION ROADMAP
 
-**Status:** N1–N3 narrative runtime foundation is implemented and merged. Prologue content (N4) is not implemented. Chapter I content (N5) is in design planning; the beat sheet is a non-canon proposal pending owner approval.  
-**Baseline inspected:** `main` at `eb82ae4d63a33a5c0fb9bb3f17f4bf832860c79a` (2026-11-17, after PR #11 merge).  
+**Status:** N1–N3 narrative runtime foundation is implemented and merged. N4.0 (global player profile + New Game/Continue entry gate) is implemented; the Prologue content itself (N4.1–N4.6) is not implemented and the Prologue is not playable. Chapter I content (N5) is in design planning; the beat sheet is a non-canon proposal pending owner approval.  
+**Baseline inspected:** `main` at `a34e5b3` (2026-11-17, after PR #12 merge; N4.0 verified against this baseline).  
 **Story design:** [Prologue Story Design](narrative/PROLOGUE_STORY_DESIGN.md)
 
 > This roadmap defines implementation order and technical boundaries. The Prologue Story Design defines story beats. Neither document authorizes the coding agent to invent unresolved lore or change gameplay rules outside approved scope.
@@ -40,8 +40,8 @@ This is a static source inspection of `main` at the baseline SHA above. It is no
 
 ### Current entry flow
 - `scenes/main/Main.tscn` provides Start New Game, Continue Saved Reign, and Exit Game.
-- `scripts/core/Main.gd` currently routes both Start New Game and Continue directly to `scenes/world/ForgottenShore.tscn`.
-- Start New Game sets `crownfall_load_on_start = false`; Continue sets it to `true`.
+- Start New Game keeps the existing overwrite confirmation for a valid world save, then consults the N4.0 player-profile gate: first playthrough routes to the labelled Prologue route placeholder (no Skip); after one recorded completion it offers Play Prologue Again / Skip; Skip enters a fresh Forgotten Shore session without touching the profile.
+- Start New Game and Skip set `crownfall_load_on_start = false`; Continue sets it to `true` and never reads the profile.
 - `ForgottenShoreSession` consumes the pending-load flag and owns the active world/save orchestration.
 
 ### Existing persistence
@@ -54,6 +54,7 @@ This is a static source inspection of `main` at the baseline SHA above. It is no
 - The merged presentation split includes `ShoreView` and `ShoreFX`; these are world presentation helpers, not a narrative or cutscene runtime.
 - The merged gameplay harness covers new game, movement, resource collection, building, wall upgrade, Scientist, research, shrine, buff, and save/load scenarios.
 - **Narrative runtime foundation (PR #11, merged as `eb82ae4`):** N1–N3 are implemented on `main`: `NarrativeState` (in-memory), `NarrativeData` validation, `DialoguePanel`, `PlayerControlLock`, `SequenceRunner`, `dialogue_advance`, and the New Game overwrite confirmation. Automated narrative suites and headless CI passed for the merge commit.
+- **Entry gate + profile (N4.0):** `PlayerProfile`, the profile gate, the returning-player choice, the Prologue route placeholder, and the N4.0 suite are implemented; full headless suite green (see §5 N4 status).
 - The runtime is not yet connected to canon Prologue or Chapter I content. There is no playable Prologue, NPC conversation integration, chapter progression system, quest/objective framework, or narrative save state. SaveManager remains schema v2.
 
 **Implication:** The technical foundation exists and can now be used by content work. N4 remains the next implementation milestone; N5 is being designed in parallel as a draft, but Chapter I implementation must respect the Prologue/Chapter I boundary and approved sequencing.
@@ -143,6 +144,10 @@ Tasks:
 **Exit criteria:** A small sequence runs, interrupts/skips according to policy, cleans up reliably, and passes headless plus windowed tests.
 
 ### N4 — Prologue content integration
+
+**Status: N4.0 implemented (entry + profile gate only).** `scripts/narrative/PlayerProfile.gd` (`user://player_profile.json`, `{"schema_version": 1, "prologue_completed_once": false}`, strict validation, atomic writes, fail-safe "not completed" default), the New Game entry gate with the returning-player Play Prologue Again / Skip choice, Continue independence, and the labelled `PrologueShell` placeholder route target are implemented and covered by `tests/test_n40_profile_entry_gate.gd` (66 checks). The Prologue scenes/beats are NOT implemented: the shell is an inert placeholder and nothing in the runtime flow sets the completion flag. N4.1–N4.6 remain not implemented.
+
+The N4.0 entry contract for N4.1: the Prologue shell lives at `res://scenes/narrative/PrologueShell.tscn` (or `Main.PROLOGUE_ROUTE_SCENE` is updated in the same N4.1 PR); Main routes to it with `crownfall_load_on_start = false`; routing decisions are observable headlessly via `Main.set_route_transition(Callable)` and the `crownfall_profile_path` / `crownfall_menu_save_path` Engine metas. N4.5 wires the completion marker (`PlayerProfile.mark_prologue_completed()`, called only after the pl_09 handoff commits) and the fresh-shore handoff.
 
 Recommended independent sub-steps:
 1. Opening and childhood resonance.

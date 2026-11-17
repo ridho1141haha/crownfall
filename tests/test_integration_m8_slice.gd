@@ -1,6 +1,10 @@
 extends SceneTree
 
 const TEST_SAVE_PATH: String = "user://test_m8_integration_save.json"
+## N4.0: the entry gate now consults a PlayerProfile. The M8 slice runs as a
+## returning player (pre-completed profile) so the gameplay scenario reaches
+## ForgottenShore through the real Skip path (fresh session), unchanged.
+const TEST_PROFILE_PATH: String = "user://test_m8_profile.json"
 const MAX_WAIT_FRAMES: int = 120
 
 var _stage: int = 0
@@ -18,6 +22,16 @@ func _check(cond: bool, msg: String) -> bool:
 
 
 func _initialize() -> void:
+	# N4.0 entry isolation: inject a pre-completed profile so the menu's
+	# returning-player choice appears; Skip starts a fresh ForgottenShore
+	# session, exactly the session the original gameplay checks expect.
+	Engine.set_meta("crownfall_profile_path", TEST_PROFILE_PATH)
+	var f: FileAccess = FileAccess.open(TEST_PROFILE_PATH, FileAccess.WRITE)
+	if not _check(f != null, "M8 test profile file created"):
+		return
+	f.store_string(JSON.stringify({"schema_version": 1, "prologue_completed_once": true}, "\t"))
+	f.flush()
+	f.close()
 	Engine.set_meta("crownfall_load_on_start", false)
 	var err: Error = change_scene_to_file("res://scenes/main/Main.tscn")
 	_check(err == OK, "Initial change_scene_to_file to Main.tscn")
@@ -42,11 +56,21 @@ func _process(_delta: float) -> bool:
 			return false
 
 		1:
-			# Start New Game may ask for confirmation when a valid save exists;
-			# confirm it if the overlay is visible, then wait for the transition.
+			# N4.0: Start New Game may ask for the existing overwrite confirmation
+			# when a valid save exists, then the returning-player Prologue choice
+			# (pre-completed injected profile). Confirm/skip in order, then wait
+			# for the fresh ForgottenShore transition via Skip. Visibility is
+			# checked with is_visible_in_tree(): a hidden overlay keeps the
+			# buttons' own .visible flag true, so pressing on .visible would
+			# re-fire the handler every frame and never let the loop settle.
 			var confirm_btn: Button = current_scene.find_child("ConfirmNewGameButton", true, false) as Button
-			if confirm_btn != null and confirm_btn.visible:
+			if confirm_btn != null and confirm_btn.is_visible_in_tree():
 				confirm_btn.pressed.emit()
+				_wait_frames = 0
+				return false
+			var skip_btn: Button = current_scene.find_child("SkipPrologueButton", true, false) as Button
+			if skip_btn != null and skip_btn.is_visible_in_tree():
+				skip_btn.pressed.emit()
 				_wait_frames = 0
 				return false
 			if current_scene == null or current_scene.name != "ForgottenShore":
@@ -170,6 +194,9 @@ func _process(_delta: float) -> bool:
 			if not _check(loaded_session.execute_command(&"repair_wall", 360.0) and loaded_session.building_mgr.durability == 150, "Day 2 wall repair to 150 HP"):
 				return true
 
+			# N4.0 hygiene: remove the injected profile fixture before reporting.
+			if FileAccess.file_exists(TEST_PROFILE_PATH):
+				DirAccess.remove_absolute(ProjectSettings.globalize_path(TEST_PROFILE_PATH))
 			print("PASS: All %d M8 Multi-Frame Scene Transition & Save/Continue Integration Checks succeeded!" % _checks)
 			quit(0)
 			return true
