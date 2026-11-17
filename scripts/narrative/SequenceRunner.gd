@@ -64,6 +64,12 @@ func is_running() -> bool:
 	return _running
 
 
+## Read-only control-lock state for lifecycle observation (headless tests now,
+## shell UI later). The lock itself stays owned by the runner cleanup paths.
+func is_control_locked() -> bool:
+	return _lock != null and _lock.is_locked()
+
+
 func current_sequence_id() -> String:
 	return _current_id
 
@@ -86,7 +92,11 @@ func play(sequence: Dictionary) -> bool:
 	_scene_changed = false
 	_completion_emitted = false
 	_panel_open = false
-	sequence_started.emit(_current_id)
+	# Snapshot the id: a signal handler may start another run (the shell's
+	# beat chain does), which reassigns _current_id mid-emission — later
+	# listeners must still observe the id that actually started.
+	var started_id: String = _current_id
+	sequence_started.emit(started_id)
 	_execute(sequence, gen)
 	return true
 
@@ -217,12 +227,18 @@ func _finalize_completion(gen: int) -> void:
 	if _state != null:
 		_state.mark_completed(_current_id)
 	_cleanup(gen)
-	sequence_completed.emit(_current_id)
+	# Snapshot the id: the shell's chain handler starts the next beat from
+	# inside this emission, which reassigns _current_id before later
+	# listeners observe the signal — they must receive the id that completed.
+	var completed_id: String = _current_id
+	sequence_completed.emit(completed_id)
 
 
 func _fail(gen: int, reason: String) -> void:
 	_cleanup(gen)
-	sequence_failed.emit(_current_id, reason)
+	# Snapshot for the same mid-emission reassignment safety as completion.
+	var failed_id: String = _current_id
+	sequence_failed.emit(failed_id, reason)
 
 
 func _cleanup(gen: int) -> void:

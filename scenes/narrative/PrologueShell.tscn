@@ -20,6 +20,31 @@ grow_horizontal = 2
 grow_vertical = 2
 color = Color(0.04, 0.035, 0.06, 1)
 
+[node name="StageBackdrop" type="ColorRect" parent="."]
+visible = false
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+color = Color(0.02, 0.015, 0.035, 1)
+
+[node name="StageCaption" type="Label" parent="StageBackdrop"]
+visible = false
+layout_mode = 1
+anchors_preset = 12
+anchor_top = 1.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_top = -104.0
+offset_bottom = -56.0
+grow_horizontal = 2
+grow_vertical = 0
+theme_override_font_sizes/font_size = 20
+text = "[Placeholder art]"
+horizontal_alignment = 1
+
 [node name="CenterContainer" type="CenterContainer" parent="."]
 layout_mode = 1
 anchors_preset = 15
@@ -39,12 +64,12 @@ horizontal_alignment = 1
 
 [node name="StatusLabel" type="Label" parent="CenterContainer/VBoxContainer"]
 layout_mode = 2
-text = "N4.1 development shell — narrative runtime active (dialogue + sequence runner ready)."
+text = "N4.2 Prologue shell — authored opening beats (pl_01, pl_02) start automatically."
 horizontal_alignment = 1
 
 [node name="DetailLabel" type="Label" parent="CenterContainer/VBoxContainer"]
 layout_mode = 2
-text = "Story sequences (N4.2–N4.5) are not implemented yet. Nothing in this scene records Prologue completion."
+text = "pl_03+ (N4.3+) are not implemented yet. Nothing in this scene records Prologue completion."
 horizontal_alignment = 1
 
 [node name="DevExitButton" type="Button" parent="CenterContainer/VBoxContainer"]
