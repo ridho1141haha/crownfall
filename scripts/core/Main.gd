@@ -244,5 +244,10 @@ func _show_prologue_choice_overlay() -> void:
 
 
 func _on_cancel_prologue_choice() -> void:
+	# Canceling the returning-player choice also revokes the pending New Game
+	# confirmation (review fix): the next Play press must run the normal
+	# overwrite confirmation again when a valid save exists. The existing save
+	# itself is never cleared or modified on Cancel.
+	_new_game_confirmed = false
 	if _choice_overlay != null:
 		_choice_overlay.visible = false

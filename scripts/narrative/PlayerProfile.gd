@@ -106,17 +106,25 @@ func load_profile(profile_path: String = _profile_path) -> Dictionary:
 
 
 ## Records one successful full Prologue completion (called only after the full
-## Prologue reaches its successful handoff path — never by Skip). Sets the
-## in-run flag and persists it atomically. Returns whether the flag was
-## actually persisted; a failed write must not be reported as persisted, and
-## the next launch will correctly read the flag as still unset.
+## Prologue reaches its successful handoff path — never by Skip). The
+## in-memory flag is only committed when persistence actually succeeded: a
+## failed atomic write restores the previous in-memory state and returns
+## false, so memory and disk can never disagree about a write that never
+## happened. A failed write must not be reported as persisted, and the next
+## launch will correctly read the flag as still unset. There is intentionally
+## NO setter that would let Skip mark completion.
 func mark_prologue_completed(profile_path: String = _profile_path) -> bool:
+	var previous_state: bool = _prologue_completed_once
 	_prologue_completed_once = true
-	return _write_and_verify_profile(profile_path)
+	if _write_and_verify_profile(profile_path):
+		return true
+	_prologue_completed_once = previous_state
+	return false
 
 
 func _write_and_verify_profile(profile_path: String) -> bool:
 	if not is_safe_profile_path(profile_path):
+		push_warning("PlayerProfile: unsafe profile path rejected: %s" % profile_path)
 		return false
 	var payload: Dictionary = {
 		KEY_SCHEMA_VERSION: SCHEMA_VERSION,
@@ -124,6 +132,7 @@ func _write_and_verify_profile(profile_path: String) -> bool:
 	}
 	var json_text: String = JSON.stringify(payload, "\t")
 	if json_text.is_empty():
+		push_warning("PlayerProfile: failed to serialize the profile payload")
 		return false
 	var tmp_path: String = profile_path + ".tmp"
 	var old_path: String = profile_path + ".old"
@@ -133,22 +142,44 @@ func _write_and_verify_profile(profile_path: String) -> bool:
 		_remove_if_exists(tmp_path)
 		return false
 	# Step 2: staged atomic replacement with rollback (never delete before
-	# the replacement is verified on disk).
+	# the replacement is verified on disk). A failure here leaves any
+	# previously valid profile at its existing path untouched.
 	if not _safe_replace_file(tmp_path, profile_path, old_path):
 		_remove_if_exists(tmp_path)
+		push_warning("PlayerProfile: staged replacement failed for %s; the previous profile (if any) is left intact" % profile_path)
 		return false
 	return true
 
 
 func _write_and_verify_file(path: String, text: String) -> bool:
-	var f: FileAccess = FileAccess.open(path, FileAccess.WRITE)
-	if f == null:
+	# Godot 4.7.2 (verified against the engine binary): FileAccess.open() plus
+	# the static get_open_error() report open failures; get_error() reports
+	# store/flush failures; get_length() reports the flushed byte count. The
+	# handle is closed on every exit path before verification re-reads the file
+	# and compares it byte-exactly against the expected payload — stronger than
+	# a schema-only re-validation, which cannot catch a partial write that
+	# happens to still parse as JSON.
+	var file: FileAccess = FileAccess.open(path, FileAccess.WRITE)
+	if file == null:
+		push_warning("PlayerProfile: could not open %s for writing (open error %d)" % [path, FileAccess.get_open_error()])
 		return false
-	f.store_string(text)
-	f.flush()
-	f.close()
-	var verify: Variant = JSON.parse_string(FileAccess.get_file_as_string(path))
-	return validate_payload(verify)
+	file.store_string(text)
+	file.flush()
+	var write_error: int = file.get_error()
+	var written_bytes: int = file.get_length()
+	file.close()
+	if write_error != OK:
+		push_warning("PlayerProfile: store/flush reported error %d for %s" % [write_error, path])
+		return false
+	var expected_bytes: int = text.to_utf8_buffer().size()
+	if written_bytes != expected_bytes:
+		push_warning("PlayerProfile: flushed %d bytes but the payload is %d bytes for %s" % [written_bytes, expected_bytes, path])
+		return false
+	var read_back: String = FileAccess.get_file_as_string(path)
+	if FileAccess.get_open_error() != OK or read_back != text:
+		push_warning("PlayerProfile: verification re-read of %s does not match the expected payload byte-exactly" % path)
+		return false
+	return validate_payload(JSON.parse_string(read_back))
 
 
 func _safe_replace_file(src_tmp_path: String, dst_path: String, staged_old_path: String) -> bool:

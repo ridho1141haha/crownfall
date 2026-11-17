@@ -4,8 +4,13 @@ extends SceneTree
 ## persistence, the New Game profile gate (no Skip on first playthrough;
 ## Play Again / Skip choice for returning players), Continue independence,
 ## fresh Forgotten Shore sessions, and the labelled Prologue route placeholder.
-## All fixtures live under user://n40_test/ — the developer's real
-## user://player_profile.json and user://save_slot_0.json are never touched.
+##
+## ISOLATION CONTRACT (review fix): every fixture lives under user://n40_test/
+## and is injected through the crownfall_profile_path / crownfall_menu_save_path
+## Engine metas — including the ForgottenShoreSession pending-load consumption.
+## The developer's real user://player_profile.json, user://save_slot_0.json and
+## their sidecar files are NEVER written, deleted, or staged; they are only
+## READ once for byte-exact non-mutation proof at the end of the run.
 
 const MAIN_SCRIPT: GDScript = preload("res://scripts/core/Main.gd")
 const PROLOGUE_SHELL_SCRIPT: GDScript = preload("res://scripts/narrative/PrologueShell.gd")
@@ -23,31 +28,46 @@ const PROFILE_WRITE_BLOCKED: String = "user://n40_test/blocker_file/blocked.json
 const SAVE_NONE: String = "user://n40_test/save_none.json"
 const SAVE_PREV: String = "user://n40_test/save_prev.json"
 const SAVE_LEGACY: String = "user://n40_test/save_legacy.json"
-## The session consumes the DEFAULT world-save slot on Continue
-## (ForgottenShoreSession._consume_pending_load_if_requested). Real-transition
-## Continue checks therefore stage their fixture at the default slot, with a
-## byte-exact snapshot/restore so the developer's real save is untouched.
-const DEFAULT_SAVE_SLOT: String = "user://save_slot_0.json"
 const MAX_WAIT_FRAMES: int = 600
 
 var _checks: int = 0
+var _failures: int = 0
 var _stage: int = 0
 var _wait_frames: int = 0
 var _routes: Array[String] = []
 var _real_profile_snapshot: String = ""
 var _real_profile_existed: bool = false
-var _default_save_snapshot: String = ""
-var _default_save_existed: bool = false
+var _real_save_snapshot: String = ""
+var _real_save_existed: bool = false
+## Sidecar snapshots (suffix -> {existed, content}): other suites and normal
+## development may legitimately leave .tmp/.bak/.old beside the real save, so
+## isolation is proven RELATIVELY — byte-identical before/after this suite —
+## never by asserting global absence.
+var _real_save_sidecars: Dictionary = {}
+var _real_profile_sidecars: Dictionary = {}
 
 
 func _check(cond: bool, msg: String) -> bool:
 	_checks += 1
 	if not cond:
-		printerr("TEST FAILURE [test_n40_profile_entry_gate]: " + msg)
+		_failures += 1
+		printerr("TEST FAILURE: [test_n40_profile_entry_gate] " + msg)
 		quit(1)
 		return false
 	print("PASS: " + msg)
 	return true
+
+
+func _snapshot_sidecar(path: String) -> Dictionary:
+	var existed: bool = FileAccess.file_exists(path)
+	var content: String = FileAccess.get_file_as_string(path) if existed else ""
+	return {"existed": existed, "content": content}
+
+
+func _assert_sidecar_untouched(path: String, snap: Dictionary, label: String) -> void:
+	var still_existed: bool = FileAccess.file_exists(path)
+	var content_now: String = FileAccess.get_file_as_string(path) if still_existed else ""
+	_check(bool((snap as Dictionary)["existed"]) == still_existed and content_now == String((snap as Dictionary)["content"]), "%s was never modified by this suite (existence and bytes unchanged)" % label)
 
 
 func _write_json(path: String, payload: Dictionary) -> void:
@@ -108,24 +128,12 @@ func _valid_v2_save_payload() -> Dictionary:
 	return payload
 
 
-func _stage_default_save(fixture_path: String) -> void:
-	var f: FileAccess = FileAccess.open(DEFAULT_SAVE_SLOT, FileAccess.WRITE)
-	if f != null:
-		f.store_string(FileAccess.get_file_as_string(fixture_path))
-		f.flush()
-		f.close()
-
-
-func _restore_default_save() -> void:
-	_rm(DEFAULT_SAVE_SLOT)
-	_rm(DEFAULT_SAVE_SLOT + ".tmp")
-	_rm(DEFAULT_SAVE_SLOT + ".bak")
-	_rm(DEFAULT_SAVE_SLOT + ".old")
-	if _default_save_existed:
-		_write_text(DEFAULT_SAVE_SLOT, _default_save_snapshot)
-
-
+## SAFETY ASSERTION (review fix): every injection point is audited — the test
+## must never resolve its save/profile target to the developer's real default
+## paths. Runs before every scenario hand-off.
 func _set_metas(profile_path: String, save_path: String) -> void:
+	_check(save_path != SaveManager.DEFAULT_SAVE_PATH and save_path.begins_with(TEST_DIR + "/"), "injected save path is isolated from the real player save (%s)" % save_path)
+	_check(profile_path != PlayerProfile.DEFAULT_PROFILE_PATH and profile_path.begins_with(TEST_DIR + "/"), "injected profile path is isolated from the real player profile (%s)" % profile_path)
 	Engine.set_meta("crownfall_profile_path", profile_path)
 	Engine.set_meta("crownfall_menu_save_path", save_path)
 
@@ -174,15 +182,17 @@ func _goto_main_next_stage(next_stage: int, profile_path: String, save_path: Str
 
 func _initialize() -> void:
 	_prepare_fixtures()
-	# Snapshot the developer's real profile (if any) to prove non-mutation.
+	# Read-only byte snapshots of the developer's real files (if any) to prove
+	# non-mutation at the end of the run. Nothing is ever written back.
 	_real_profile_existed = FileAccess.file_exists("user://player_profile.json")
 	if _real_profile_existed:
 		_real_profile_snapshot = FileAccess.get_file_as_string("user://player_profile.json")
-	# Snapshot the developer's real default save slot for restore after the
-	# real-transition Continue checks.
-	_default_save_existed = FileAccess.file_exists(DEFAULT_SAVE_SLOT)
-	if _default_save_existed:
-		_default_save_snapshot = FileAccess.get_file_as_string(DEFAULT_SAVE_SLOT)
+	_real_save_existed = FileAccess.file_exists(SaveManager.DEFAULT_SAVE_PATH)
+	if _real_save_existed:
+		_real_save_snapshot = FileAccess.get_file_as_string(SaveManager.DEFAULT_SAVE_PATH)
+	for suffix: String in [".tmp", ".bak", ".old"]:
+		_real_save_sidecars[suffix] = _snapshot_sidecar(SaveManager.DEFAULT_SAVE_PATH + suffix)
+		_real_profile_sidecars[suffix] = _snapshot_sidecar("user://player_profile.json" + suffix)
 	_set_metas(PROFILE_MISSING, SAVE_NONE)
 	_stage = 1
 	change_scene_to_file(MAIN_SCENE)
@@ -224,8 +234,9 @@ func _process(_delta: float) -> bool:
 			_check(not pu.is_prologue_completed_once(), "unreadable profile (directory at path) defaults to not completed")
 			_check(PlayerProfile.new().load_profile("res://outside.json").get("ok", false) == false, "unsafe profile path rejected")
 			var pc: PlayerProfile = PlayerProfile.new()
-			pc.load_profile(PROFILE_TRUE)
+			pc.load_profile(PROFILE_MISSING)
 			_check(pc.mark_prologue_completed(PROFILE_WRITE_TARGET), "successful completion writes the flag (atomic write reports success)")
+			_check(pc.is_prologue_completed_once(), "successful write commits the in-memory completion state")
 			var pc_check: PlayerProfile = PlayerProfile.new()
 			pc_check.load_profile(PROFILE_WRITE_TARGET)
 			_check(pc_check.is_prologue_completed_once(), "reloading after successful write preserves true")
@@ -233,10 +244,25 @@ func _process(_delta: float) -> bool:
 			var pw: PlayerProfile = PlayerProfile.new()
 			pw.load_profile(PROFILE_MISSING)
 			_check(not pw.mark_prologue_completed(PROFILE_WRITE_BLOCKED), "failed atomic write reports failure (parent is a file)")
+			_check(not pw.is_prologue_completed_once(), "failed write leaves the previous in-memory state untouched (false)")
 			_check(not FileAccess.file_exists(PROFILE_WRITE_BLOCKED), "failed write does not report successful persistence: no file was written")
 			var pw_check: PlayerProfile = PlayerProfile.new()
 			pw_check.load_profile(PROFILE_WRITE_BLOCKED)
 			_check(not pw_check.is_prologue_completed_once(), "failed write is treated as not persisted on reload")
+			# --- Review fix: in-memory state commits only after persistence succeeds ---
+			var pt_block: PlayerProfile = PlayerProfile.new()
+			pt_block.load_profile(PROFILE_TRUE)
+			_check(not pt_block.mark_prologue_completed(PROFILE_WRITE_BLOCKED), "failed write from a completed in-memory state returns false")
+			_check(pt_block.is_prologue_completed_once(), "failed write preserves the previous in-memory state (true stays true)")
+			var pf_block: PlayerProfile = PlayerProfile.new()
+			_check(not pf_block.mark_prologue_completed(PROFILE_WRITE_BLOCKED), "failed write from a fresh instance returns false")
+			_check(not pf_block.is_prologue_completed_once(), "failed write preserves the previous in-memory state (fresh instance stays false)")
+			var pr_true: PlayerProfile = PlayerProfile.new()
+			pr_true.load_profile(PROFILE_TRUE)
+			_check(pr_true.is_prologue_completed_once(), "reload after failed writes still reflects the persisted state (true file)")
+			var pr_false: PlayerProfile = PlayerProfile.new()
+			pr_false.load_profile(PROFILE_FALSE)
+			_check(not pr_false.is_prologue_completed_once(), "reload after failed writes still reflects the persisted state (false file)")
 			_check(not pw_check.is_prologue_completed_once(), "invalid profile data is never silently converted to completed")
 			_stage = 2
 			_wait_frames = 0
@@ -338,7 +364,7 @@ func _process(_delta: float) -> bool:
 				return false
 			_check(_routes.size() == 1, "switching Skip/Play Again after a route started never double-transitions")
 			_check(not bool(Engine.get_meta("crownfall_load_on_start")), "Play Again route does not load the world save")
-			# --- Overwrite confirmation compatibility + real Skip (tests 16/17/19/20) ---
+			# --- Overwrite confirmation compatibility + choice-cancel regression ---
 			_goto_main_next_stage(13, PROFILE_TRUE, SAVE_PREV)
 			return false
 		13:
@@ -386,14 +412,46 @@ func _process(_delta: float) -> bool:
 		17:
 			if _wait_frames < 2:
 				return false
-			var skip_btn2: Button = _find_button("SkipPrologueButton")
-			if not _check(skip_btn2 != null and skip_btn2.visible, "returning player with a valid save reaches the choice after confirmation"):
+			var skip_btn0: Button = _find_button("SkipPrologueButton")
+			var cancel_choice: Button = _find_button("CancelPrologueChoiceButton")
+			if not _check(skip_btn0 != null and skip_btn0.visible and cancel_choice != null, "returning player with a valid save reaches the choice after confirmation"):
 				return true
-			skip_btn2.pressed.emit()
+			# Review fix regression: cancel the CHOICE while a New Game was
+			# already confirmed — the pending confirmation must be revoked.
+			cancel_choice.pressed.emit()
 			_stage = 18
 			_wait_frames = 0
 			return false
 		18:
+			if _wait_frames < 2:
+				return false
+			_check(_on_main(), "canceling the Prologue choice stays in the main menu")
+			_check(SaveManager.new().has_valid_save(SAVE_PREV), "choice-cancel leaves the existing world save valid (never cleared)")
+			_press(true)
+			_stage = 19
+			_wait_frames = 0
+			return false
+		19:
+			if _wait_frames < 2:
+				return false
+			var confirm_btn3: Button = _find_button("ConfirmNewGameButton")
+			if not _check(confirm_btn3 != null and confirm_btn3.visible, "review regression: overwrite confirmation runs again after choice-cancel (pending confirmation revoked)"):
+				return true
+			confirm_btn3.pressed.emit()
+			_stage = 20
+			_wait_frames = 0
+			return false
+		20:
+			if _wait_frames < 2:
+				return false
+			var skip_btn2: Button = _find_button("SkipPrologueButton")
+			if not _check(skip_btn2 != null and skip_btn2.visible, "choice reappears after the repeated confirmation"):
+				return true
+			skip_btn2.pressed.emit()
+			_stage = 21
+			_wait_frames = 0
+			return false
+		21:
 			if not _on_shore_ready():
 				return false
 			var session: ForgottenShoreSession = _shore_session()
@@ -407,23 +465,22 @@ func _process(_delta: float) -> bool:
 			prof_after.load_profile(PROFILE_TRUE)
 			_check(prof_after.is_prologue_completed_once(), "Skip does not modify the completion flag")
 			# --- Continue independence (tests 21-23) ---
-			_goto_main_next_stage(19, PROFILE_TRUE, SAVE_PREV)
+			_goto_main_next_stage(22, PROFILE_TRUE, SAVE_PREV)
 			return false
-		19:
+		22:
 			if not _on_main():
 				return false
 			var cont: Button = current_scene.get_node_or_null("CenterContainer/VBoxContainer/ContinueButton") as Button
 			_check(cont != null and not cont.disabled, "Continue enabled with completed profile and valid save")
-			_stage_default_save(SAVE_PREV)
 			_press(false)
-			_stage = 20
+			_stage = 23
 			_wait_frames = 0
 			return false
-		20:
+		23:
 			if not _on_shore_ready():
 				return false
 			var session2: ForgottenShoreSession = _shore_session()
-			_check(session2.time_manager.current_day == 2 and session2.economy.get_amount(&"gold") == 99, "Continue bypasses the Prologue and loads the world save (day 2, gold 99)")
+			_check(session2.time_manager.current_day == 2 and session2.economy.get_amount(&"gold") == 99, "Continue bypasses the Prologue and loads the injected world save (day 2, gold 99)")
 			# --- Legacy v1 save via Continue (test 22) ---
 			var legacy: Dictionary = (_valid_v2_save_payload()).duplicate(true)
 			legacy["schema_version"] = 1
@@ -431,48 +488,46 @@ func _process(_delta: float) -> bool:
 			var pf_legacy: Dictionary = legacy["progression_flags"] as Dictionary
 			pf_legacy.erase("first_night_survived")
 			_write_json(SAVE_LEGACY, legacy)
-			_goto_main_next_stage(21, PROFILE_TRUE, SAVE_LEGACY)
+			_goto_main_next_stage(24, PROFILE_TRUE, SAVE_LEGACY)
 			return false
-		21:
+		24:
 			if not _on_main():
 				return false
 			var cont2: Button = current_scene.get_node_or_null("CenterContainer/VBoxContainer/ContinueButton") as Button
 			_check(cont2 != null and not cont2.disabled, "Continue enabled for a legacy v1 world save")
-			_stage_default_save(SAVE_LEGACY)
 			_press(false)
-			_stage = 22
+			_stage = 25
 			_wait_frames = 0
 			return false
-		22:
+		25:
 			if not _on_shore_ready():
 				return false
 			var session3: ForgottenShoreSession = _shore_session()
 			_check(session3.time_manager.current_day == 2 and session3.economy.get_amount(&"gold") == 99, "Continue loads a valid legacy world save (schema v1 via migration)")
 			# --- Corrupted profile must not disable Continue (test 23) ---
-			_goto_main_next_stage(23, PROFILE_MALFORMED, SAVE_PREV)
+			_goto_main_next_stage(26, PROFILE_MALFORMED, SAVE_PREV)
 			return false
-		23:
+		26:
 			if not _on_main():
 				return false
 			var cont3: Button = current_scene.get_node_or_null("CenterContainer/VBoxContainer/ContinueButton") as Button
 			_check(cont3 != null and not cont3.disabled, "corrupted profile does not disable Continue")
-			_stage_default_save(SAVE_PREV)
 			_press(false)
-			_stage = 24
+			_stage = 27
 			_wait_frames = 0
 			return false
-		24:
+		27:
 			if not _on_shore_ready():
 				return false
 			var session4: ForgottenShoreSession = _shore_session()
 			_check(session4.time_manager.current_day == 2, "Continue works despite corrupted profile (loads day 2)")
 			# --- Prologue route placeholder sanity (entry contract target) ---
-			Engine.set_meta("crownfall_profile_path", PROFILE_FALSE)
-			_stage = 25
+			_set_metas(PROFILE_FALSE, SAVE_NONE)
+			_stage = 28
 			_wait_frames = 0
 			change_scene_to_file(String(MAIN_SCRIPT.PROLOGUE_ROUTE_SCENE))
 			return false
-		25:
+		28:
 			if current_scene == null or current_scene.name != "PrologueShell":
 				return false
 			_check(current_scene.name == "PrologueShell" and current_scene.get_script() == PROLOGUE_SHELL_SCRIPT, "Prologue route target is the labelled N4.0 placeholder shell")
@@ -486,15 +541,14 @@ func _process(_delta: float) -> bool:
 			if not _check(ret_btn != null, "return button available before press"):
 				return true
 			ret_btn.pressed.emit()
-			_stage = 26
+			_stage = 29
 			_wait_frames = 0
 			return false
-		26:
+		29:
 			if not _on_main():
 				return false
 			_check(_on_main(), "placeholder shell returns to the main menu")
-			# --- Hygiene: restore the developer's real files, remove fixtures ---
-			_restore_default_save()
+			# --- Hygiene: remove fixtures, then prove the real files untouched ---
 			for path: String in [PROFILE_FALSE, PROFILE_TRUE, PROFILE_MALFORMED, PROFILE_NO_FIELD, PROFILE_SCHEMA2, PROFILE_WRITE_TARGET, SAVE_NONE, SAVE_PREV, SAVE_LEGACY]:
 				_rm(path)
 			if DirAccess.dir_exists_absolute(PROFILE_UNREADABLE):
@@ -502,11 +556,32 @@ func _process(_delta: float) -> bool:
 			_rm(TEST_DIR + "/blocker_file")
 			if DirAccess.dir_exists_absolute(TEST_DIR + "/blocker_file"):
 				DirAccess.remove_absolute(ProjectSettings.globalize_path(TEST_DIR + "/blocker_file"))
+			if DirAccess.dir_exists_absolute(TEST_DIR):
+				DirAccess.remove_absolute(ProjectSettings.globalize_path(TEST_DIR))
+			# Real player profile: byte-exact non-mutation proof (read-only).
 			if _real_profile_existed:
 				_check(FileAccess.get_file_as_string("user://player_profile.json") == _real_profile_snapshot, "developer's real user://player_profile.json was never mutated")
 			else:
 				_check(not FileAccess.file_exists("user://player_profile.json"), "suite never created the developer's real user://player_profile.json")
-			print("PASS: All %d N4.0 Profile & Entry Gate checks completed with 0 failures." % _checks)
-			quit(0)
+			_check(not FileAccess.file_exists("user://player_profile.json.tmp") and not FileAccess.file_exists("user://player_profile.json.old"), "no profile sidecar was created next to the real profile")
+			# Real world save + sidecars: the suite never stages, writes, or
+			# deletes them (review fix: Continue consumes the injected path).
+			# Sidecars are proven byte-identical to their pre-run snapshots —
+			# pre-existing sidecars from other suites or development are out
+			# of this suite's control and are only proven unmodified.
+			if _real_save_existed:
+				_check(FileAccess.get_file_as_string(SaveManager.DEFAULT_SAVE_PATH) == _real_save_snapshot, "developer's real user://save_slot_0.json was never mutated")
+			else:
+				_check(not FileAccess.file_exists(SaveManager.DEFAULT_SAVE_PATH), "suite never created the developer's real user://save_slot_0.json")
+			for suffix: String in [".tmp", ".bak", ".old"]:
+				_assert_sidecar_untouched(SaveManager.DEFAULT_SAVE_PATH + suffix, _real_save_sidecars[suffix], "real save sidecar %s" % suffix)
+			for suffix: String in [".tmp", ".old"]:
+				_assert_sidecar_untouched("user://player_profile.json" + suffix, _real_profile_sidecars[suffix], "real profile sidecar %s" % suffix)
+			if _failures == 0:
+				print("PASS: All %d N4.0 Profile & Entry Gate checks completed with 0 failures." % _checks)
+				quit(0)
+			else:
+				printerr("FAIL: N4.0 Profile & Entry Gate finished with %d failures out of %d checks." % [_failures, _checks])
+				quit(1)
 			return true
 	return false
