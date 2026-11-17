@@ -33,6 +33,7 @@ run_godot "Narrative foundation" "--script res://tests/test_narrative_foundation
 run_godot "Dialogue panel" "--script res://tests/test_dialogue_panel.gd" "PASS: All .* Dialogue Panel"
 run_godot "Sequence runner" "--script res://tests/test_sequence_runner.gd" "PASS: All .* Sequence Runner"
 run_godot "N4.0 profile & entry gate" "--script res://tests/test_n40_profile_entry_gate.gd" "PASS: All .* N4.0 Profile & Entry Gate"
+run_godot "N4.1 prologue shell" "--script res://tests/test_n41_prologue_shell.gd" "PASS: All .* N4.1 Prologue Shell"
 if [ "${failed}" -ne 0 ]; then
   echo "SOME SUITES FAILED (logs in ${LOG_DIR})"
   exit 1

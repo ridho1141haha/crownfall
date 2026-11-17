@@ -34,22 +34,22 @@ theme_override_constants/separation = 16
 
 [node name="TitleLabel" type="Label" parent="CenterContainer/VBoxContainer"]
 layout_mode = 2
-text = "PROLOGUE — THE CROWN'S CALL"
+text = "PROLOGUE"
 horizontal_alignment = 1
 
-[node name="PlaceholderLabel" type="Label" parent="CenterContainer/VBoxContainer"]
+[node name="StatusLabel" type="Label" parent="CenterContainer/VBoxContainer"]
 layout_mode = 2
-text = "N4.0 PLACEHOLDER — Prologue route target only."
+text = "N4.1 development shell — narrative runtime active (dialogue + sequence runner ready)."
 horizontal_alignment = 1
 
 [node name="DetailLabel" type="Label" parent="CenterContainer/VBoxContainer"]
 layout_mode = 2
-text = "The Prologue is not implemented yet. The scene shell arrives in N4.1."
+text = "Story sequences (N4.2–N4.5) are not implemented yet. Nothing in this scene records Prologue completion."
 horizontal_alignment = 1
 
-[node name="ReturnToMenuButton" type="Button" parent="CenterContainer/VBoxContainer"]
-custom_minimum_size = Vector2(260, 42)
+[node name="DevExitButton" type="Button" parent="CenterContainer/VBoxContainer"]
+custom_minimum_size = Vector2(320, 42)
 layout_mode = 2
-text = "Return to Main Menu"
+text = "Return to Main Menu (Development Exit)"
 
-[connection signal="pressed" from="CenterContainer/VBoxContainer/ReturnToMenuButton" to="." method="_on_return_to_menu_button_pressed"]
+[connection signal="pressed" from="CenterContainer/VBoxContainer/DevExitButton" to="." method="_on_dev_exit_button_pressed"]

@@ -7,6 +7,24 @@ This changelog records repository changes that actually occurred. Planned featur
 
 ---
 
+## [2026-11-17] N4.1 Prologue Shell (lifecycle only — story beats NOT included)
+
+**Type:** New narrative infrastructure (functional scene shell; no Prologue content, no canon dialogue, no SaveManager/schema change)
+**Engine Verified:** `Godot 4.7.2.stable.official.ed1daf0bf` (local headless run of the full `tests/run_all.sh`: all 15 suites passed, 0 failure markers; repository static verifier 234 checks)
+
+### Summary
+Implements roadmap slice **N4.1**: the labelled N4.0 route placeholder becomes the functional Prologue shell at the same path (`scenes/narrative/PrologueShell.tscn` + `scripts/narrative/PrologueShell.gd`). The shell owns its runtime state — a per-run `NarrativeState`, a `DialoguePanel`, and a `SequenceRunner` whose `change_scene` op is allowlisted to `res://scenes/world/ForgottenShore.tscn` (the future N4.5 handoff channel) — and exposes `play_sequence` / `skip_sequence` / `cancel_sequence` as the presentation contract for the N4.2–N4.5 beats (no sequence data is authored or shipped; the nine beats and any completion marking remain future work). Runtime initialization is idempotent per scene instance, and every exit/handoff passes a single-transition guard (`_begin_exit` / `is_exit_started`), so duplicate exit or duplicate sequence scene-change requests are safely ignored. The one exit available today is a clearly labelled **development-only** "Return to Main Menu (Development Exit)" button: it never touches `PlayerProfile`, never writes the profile or any world save, and the per-run narrative state is discarded with the scene (the Prologue stays non-resumable per the technical design). Entering, running, or exiting the shell does not mark `prologue_completed_once`. `Main.gd` routing, the N4.0 entry gate, Continue behavior, and SaveManager schema v2 are unchanged.
+
+### Key Changes
+- **`scripts/narrative/PrologueShell.gd` (replaced placeholder):** functional shell — idempotent `_initialize_runtime()` (builds `NarrativeState` + `DialoguePanel` + `SequenceRunner` exactly once), `play_sequence` (fail-closed via `NarrativeData.validate_sequence`, exactly-once completion in the N3 runner), `skip_sequence` / `cancel_sequence` (N3 semantics), `set_exit_transition(Callable)` test-observability hook (same convention as `Main.set_route_transition`), guarded `request_main_menu_return()` / sequence-driven `_on_sequence_scene_transition()`, and the development-only exit button handler.
+- **`scenes/narrative/PrologueShell.tscn`:** status text stating the N4.1 shell is active and story sequences (N4.2–N4.5) are not implemented; `DevExitButton` ("Return to Main Menu (Development Exit)") replaces the N4.0 `ReturnToMenuButton` (the non-dead-end contract is unchanged; the N4.0 suite assertion was updated to the new control name).
+- **`tests/test_n41_prologue_shell.gd` (new, 74 checks):** scene load/instantiate + script identity; runtime ownership and idempotent init; allowlisted text-only sequence plumbing (play → dialogue presentation → advance → exactly-once completion; cancel → no completion, panel closed); enter/run/exit never creates or mutates profile fixtures (byte-exact); duplicate exit/handoff ignored (single transition); no stale runtime state after exit and a fresh instance starts clean; N4.0 routing contract preserved (first New Game → shell, Play Again → shell, Skip → fresh Forgotten Shore without touching the profile flag, Cancel stays in the menu and revokes the pending confirmation, Continue bypasses the Prologue and consumes the injected day-2 save). Fixtures under `user://n41_test/` via the Engine-meta injection contract; the developer's real `player_profile.json` / `save_slot_0.json` / sidecars are proven byte-unchanged; fixture sidecars are cleaned before/after the run.
+- **`tests/test_n40_profile_entry_gate.gd`:** stage-28 shell assertions updated from the removed `ReturnToMenuButton` to the renamed `DevExitButton` (same non-dead-end and no-completion claims; suite is 101 checks).
+- **`tests/run_all.sh` + `.github/workflows/godot-ci.yml`:** N4.1 suite registered after N4.0.
+- **Docs:** roadmap §5 (N4.0 + N4.1 implemented, N4.2–N4.6 not), `NARRATIVE_RUNTIME_TECHNICAL_DESIGN.md` §A (as-built shell lifecycle and contracts), `PROLOGUE_PRODUCTION_BREAKDOWN.md` §3/§5 (N4.1 slice marked implemented), audit snapshot note.
+
+---
+
 ## [2026-11-17] N4.0 Player Profile & Entry Gate (Prologue content NOT included)
 
 **Type:** New narrative infrastructure + entry-flow change (no Prologue content, no canon dialogue, no SaveManager/schema change)

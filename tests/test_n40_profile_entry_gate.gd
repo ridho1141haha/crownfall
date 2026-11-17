@@ -562,15 +562,17 @@ func _process(_delta: float) -> bool:
 		28:
 			if current_scene == null or current_scene.name != "PrologueShell":
 				return false
-			_check(current_scene.name == "PrologueShell" and current_scene.get_script() == PROLOGUE_SHELL_SCRIPT, "Prologue route target is the labelled N4.0 placeholder shell")
-			var ret_btn: Button = current_scene.find_child("ReturnToMenuButton", true, false) as Button
-			_check(ret_btn != null, "placeholder shell cannot dead-end (Return to Main Menu exists)")
+			_check(current_scene.name == "PrologueShell" and current_scene.get_script() == PROLOGUE_SHELL_SCRIPT, "Prologue route target is the labelled N4.1 Prologue shell")
+			# N4.1 renamed the shell's only exit control (ReturnToMenuButton ->
+			# DevExitButton); the non-dead-end contract it proves is unchanged.
+			var ret_btn: Button = current_scene.find_child("DevExitButton", true, false) as Button
+			_check(ret_btn != null, "shell cannot dead-end (development exit to the main menu exists)")
 			var shell_prof: PlayerProfile = PlayerProfile.new()
 			shell_prof.load_profile(PROFILE_FALSE)
-			_check(not shell_prof.is_prologue_completed_once(), "placeholder shell does not mark Prologue completion")
+			_check(not shell_prof.is_prologue_completed_once(), "shell does not mark Prologue completion")
 			var false_text: String = FileAccess.get_file_as_string(PROFILE_FALSE)
-			_check(false_text.contains("false"), "placeholder shell leaves the profile file untouched")
-			if not _check(ret_btn != null, "return button available before press"):
+			_check(false_text.contains("false"), "shell leaves the profile file untouched")
+			if not _check(ret_btn != null, "development exit button available before press"):
 				return true
 			ret_btn.pressed.emit()
 			_stage = 29
