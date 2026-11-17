@@ -155,3 +155,10 @@ jobs:
           godot --headless --script res://tests/test_n42_prologue_beats.gd 2>&1 | tee /tmp/godot_n42.log
           ! grep -E "(SCRIPT ERROR:|Parser Error:|TEST FAILURE:)" /tmp/godot_n42.log
           grep -q "PASS: All .* N4.2 Prologue Beats" /tmp/godot_n42.log
+
+      - name: Run N43A Exploration Stage Tests
+        run: |
+          set -o pipefail
+          godot --headless --script res://tests/test_n43a_exploration_stage.gd 2>&1 | tee /tmp/godot_n43a.log
+          ! grep -E "(SCRIPT ERROR:|Parser Error:|TEST FAILURE:)" /tmp/godot_n43a.log
+          grep -q "PASS: All .* N43A Exploration Stage" /tmp/godot_n43a.log

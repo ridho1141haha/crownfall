@@ -7,6 +7,51 @@ This changelog records repository changes that actually occurred. Planned featur
 
 ---
 
+## [2026-11-17] N4.3-A review fixes (camera visible-area containment, Skip-UI wording, direct-unload regression)
+
+**Type:** Review-fix pass on the N4.3-A slice (three review findings; no scope change — still N4.3-A only, no N4.3-B/C)
+**Engine Verified:** `Godot 4.7.2.stable` (headless; full `tests/run_all.sh` ALL SUITES PASSED; static verifier 243 checks)
+
+### Summary
+1. **Camera visible-area containment (P1).** A diagnostic probe on 4.7.2 showed `Camera2D.limit_left/right` does clamp the visible viewport edges (at the road start the visible left edge rests exactly on `-800`; the reported "camera sees x = -1126" scenario does not occur), **but `Camera2D.offset` is applied AFTER limit clamping** — the previous `offset = (0, -80)` pushed the actually visible band to `y ∈ [-320, 160]` against authored limits `[-240, 240]`, an 80-px empty strip above the backdrop for the whole segment. The explorer camera now uses **no offset** (the authored vertical band is exactly the reference viewport's world height, so framing is fixed without it), the movement-bounds vs camera-limit seams are authored as **separate parameters**, the backdrop and road art extend **4096 px past the limit band on every side** so no viewport configuration can expose empty space, and the regression suite now **measures the actual visible rect** (`get_screen_center_position()` ± viewport/zoom) at the road start, the west bound, and the east bound and asserts containment (measured values are printed in the PASS lines; all three rest exactly inside the band).
+2. **Skip-UI wording (P2).** The pl_04 detail text claimed "The per-beat skip ... remain[s] available", but N4.3-A ships no Skip button/input binding (the per-beat skip is a scripted/API path only, same as the N4.2 `skip_sequence`). The text now names only the development exit; no new UI was added.
+3. **Direct scene-unload regression (P3).** New suite stages: with the exploration intro dialogue open and the actor locked, the shell is unloaded via a direct scene change (no `cancel_sequence`, no dev-exit path) — asserts the shell is freed, the `NarrativeState` (kept alive by the suite) recorded nothing, and no coroutine/invalid-access errors occur (a SCRIPT ERROR anywhere still fails the suite through the run_all log trap). Coverage now matches the claimed contract.
+
+### Key Changes
+- `scripts/narrative/PrologueExplorer.gd`: camera offset removed (documented why), `_init` takes separate movement bounds and camera-limit parameters.
+- `scripts/narrative/PrologueExplorationStage.gd`: `BACKDROP_MARGIN = 4096` — backdrop + road band/edge extend past the limit band on every side; explorer constructed with the separated seams.
+- `scripts/narrative/PrologueShell.gd`: pl_04 detail text no longer claims player-facing Skip availability.
+- `tests/test_n43a_exploration_stage.gd`: `_visible_rect()` measurement helper; containment checks at the road start (in-motion), west bound, and east bound; direct scene-unload stages 32-35; suite now **106 checks** (was 95).
+
+### Verified
+- `tests/test_n43a_exploration_stage.gd`: **PASS: All 106 N43A Exploration Stage checks … 0 failures** (exit 0).
+- Full `tests/run_all.sh`: **ALL SUITES PASSED** (exit 0, 17 entries); static verifier **243/243**; `--import` clean; real profile byte-exact unchanged.
+
+---
+
+## [2026-11-17] N4.3-A Technical Spike & Exploration Stage (pl_03/pl_04 orchestration; no mark props)
+
+**Type:** Prologue interactive milestone slice A (dedicated exploration stage + actor + Prologue-specific beat-state/completion handshake; no SaveManager/schema change, no PlayerProfile writes, no new runner ops, no mark objects — N4.3-B is intentionally NOT included)
+**Engine Verified:** `Godot 4.7.2.stable.official.ed1daf0bf` (local headless run of the full `tests/run_all.sh`: all 17 suites passed, 0 failure markers; repository static verifier 243 checks)
+
+### Summary
+Implements **N4.3-A only** per `N4_3_PLANNING.md` §7: the structural chain end after pl_02 becomes the exploration handoff. `scripts/narrative/PrologueExplorationStage.gd` (new) owns the small bounded ancient-road environment (labelled placeholder ColorRect geometry), the stage bounds, the east-end exploration handoff area, and the narrow presentation path for pl_03's approved Story Design internal line through the existing `DialoguePanel`; `scripts/narrative/PrologueExplorer.gd` (new) owns only movement (existing `move_left`/`move_right` actions, bounds-clamped every frame), the idle/walk sprite animation of the existing `player_monarch_sheet.png`, and a gameplay-pattern `Camera2D` (zoom 1.5, smoothing, limits == authored bounds). `PrologueShell` remains the sole owner of authoritative `NarrativeState.mark_completed()` calls for the exploration beats `pl_03_wanderer` / `pl_04_repeated_mark` (new id constants in `PrologueBeats`; deliberately NOT in `BEAT_IDS`, so `SequenceRunner` can never chain or record them): the stage emits one validated handoff-area completion request for pl_03, the shell validates the ACTIVE beat, records it exactly once, and immediately activates pl_04. The stage owns a dedicated `PlayerControlLock` for its dialogue (the runner keeps the shell as control target for pl_01/pl_02 — their no-control behavior is unchanged); dialogue movement gating is proven by tests (the panel alone would not stop `_physics_process`). `skip_current_exploration_beat()` is the narrow per-beat Skip path (pl_03 skip starts pl_04 normally; pl_04 skip ends the N4.3 segment at a defined idle boundary without fabricating pl_05). Cancellation, the development exit, scene unload, and failed setup are NOT skip: nothing is recorded, owned locks are released (freed-safe), exploration input is disabled, and the shell falls back to defined idle states. No quest marker, objective HUD, interact usage, combat, inventory, economy, or lore additions; the recurring mark stays unrepresented (N4.3-B).
+
+### Key Changes
+- **`scripts/narrative/PrologueExplorationStage.gd` (new):** bounded road stage (1600x480 authored world band, ground line, labelled placeholder remnants + handoff-area marker), fail-closed atomic `setup()` (no actor/lock on failure), `begin_beat(PL_03)` intro-line presentation with a generation-guarded coroutine, `set_active_beat(PL_04)`, `close_active_dialogue()`, `end_segment()`, freed-safe `teardown()`, and the exactly-once `exploration_handoff_reached` request (fires only while pl_03 is active with movement enabled and the actor crosses the handoff area).
+- **`scripts/narrative/PrologueExplorer.gd` (new):** dedicated Node2D actor — no gravity/physics body (flat authored road), bounds-clamped movement, frames 0-3 idle / 4-7 walk with flip (same convention as the gameplay `Player.gd`), `Camera2D` with limits matching the stage bounds, `set_input_enabled` / `freeze()` lifecycle gates. Deliberately does NOT reuse the gameplay `PlayerController` (which carries world commands).
+- **`scripts/narrative/PrologueShell.gd`:** N4.3-A exploration segment — Engine metas `crownfall_prologue_exploration` (default ON; the N4.2 suite sets it false to keep its terminal-boundary contract) and `crownfall_prologue_stage_texture` (failed-setup injection), structural-chain-end handoff into exploration, `in_exploration()` / `active_exploration_beat()` / `n43_segment_complete()` / `exploration_stage()` accessors, validated exactly-once completion recording, `skip_current_exploration_beat()`, cancellation/exit aborts, beat-aware status texts (exploration, N4.3 boundary, cancelled, N4.2 fallback).
+- **`scripts/narrative/PrologueBeats.gd`:** `pl_03_wanderer` / `pl_04_repeated_mark` exploration beat ids (outside `BEAT_IDS`), the `Monarch` speaker, `exploration_beat_title()`, and pl_03's approved candidate internal line (`exploration_intro_lines()`); pl_04's recognition line intentionally absent (N4.3-B).
+- **`tests/test_n43a_exploration_stage.gd` (new, 95 checks):** pl_01→pl_02 flow intact; pl_02→pl_03 exploration entry; actor presentation + movement gated by dialogue (frozen while locked, responsive after close, stopped on release); west/east bound clamps incl. hold-at-bound; camera/geometry validity; handoff-area completion recorded exactly once; duplicate requests ignored; pl_04 activation; pl_03 Skip (including while the intro dialogue is open) activating pl_04 without skipping it; pl_04 Skip ending at the N4.3 boundary with profile fixture byte-exact unchanged; cancellation/dev-exit/freed-actor/failed-setup semantics; real files byte-exact untouched.
+- **`tests/test_n42_prologue_beats.gd`:** one Engine-meta line (`crownfall_prologue_exploration = false`) so the N4.2 terminal-boundary contract keeps its dedicated coverage; 113 checks unchanged.
+- **`tests/run_all.sh` + `.github/workflows/godot-ci.yml`:** N43A suite registered after N4.2 (suite label "N43A" — the CI workflow forbids a literal "4.3" substring).
+- **Docs:** roadmap §5, `NARRATIVE_RUNTIME_TECHNICAL_DESIGN.md` (§A shell paragraph, §E control-lock note, N0 implemented-beats note), `PROLOGUE_PRODUCTION_BREAKDOWN.md` (§3 N4.3 row), `N4_3_PLANNING.md` status header.
+
+### Isolation note (pre-existing, unchanged)
+The full-suite regression creates `user://save_slot_0.json` (+`.bak`) via the M8 integration slice's simulated session autosave (`tests/test_integration_m8_slice.gd` "Sunrise Day 2 autosave" through ContinueButton) — behavior byte-identical to the branch base `539f856` (no diff in the M8 test, `SaveManager`, or `ForgottenShoreSession`). It is not caused by N4.3-A; every narrative suite still proves non-mutation of the developer's real files via start-of-suite byte snapshots (all green).
+
+---
+
 ## [2026-11-17] N4.2 The Lost World + A Faint Resonance (beats pl_01 + pl_02)
 
 **Type:** Prologue story content (two authored beats + shell auto-start/chaining; no SaveManager/schema change, no PlayerProfile writes, no new runner ops, no art/audio assets)
