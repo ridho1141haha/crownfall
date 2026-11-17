@@ -111,18 +111,28 @@ The exact scene tree and script boundaries must be confirmed against the current
 
 N4.2 currently chains authored sequences automatically when `SequenceRunner.sequence_completed` fires. pl_03/pl_04 introduce a player-driven interval, so they cannot simply be authored as ordinary short sequences and allowed to auto-chain immediately.
 
-Before implementation, inspect the actual `NarrativeState`, `PrologueBeats`, and `PrologueShell` contracts and choose the smallest Prologue-specific orchestration that:
+The N4.3 orchestration contract is DECIDED:
 
-1. starts the exploration stage after pl_02;
-2. keeps player control available during the exploration interval;
-3. prevents the shell from auto-advancing past pl_03/pl_04 before the required observations;
-4. records each beat completion exactly once;
-5. routes the post-inspection dialogue through the existing dialogue panel;
-6. restores control after dialogue, cancellation, scene exit, or failure.
+1. After pl_02 completes, the shell enters a Prologue-specific exploration state and presents the dedicated actor on the ancient road. This begins pl_03; movement is enabled only after the handoff is ready.
+2. pl_03 completes when the actor reaches the authored exploration handoff area. The stage emits one completion request; the shell validates the active beat, records `pl_03` in `NarrativeState` exactly once, and immediately activates pl_04. Reaching the handoff area is the sole normal completion trigger; do not add a timer, quest marker, or extra confirmation dialog.
+3. pl_04 becomes active at the same stage. The three inspectables are available along the road. Inspecting two distinct object IDs triggers the recognition line exactly once and completes pl_04. The third object is optional.
+4. The stage owns exploration conditions and distinct-object tracking. `PrologueShell` is the sole owner of authoritative `NarrativeState.mark_completed()` calls for pl_03/pl_04. `SequenceRunner` remains responsible for its own authored cinematic/dialogue sequences and must not also record these exploration beats. All completion requests are validated against the active beat and ignored after the first accepted completion.
+5. After pl_04 completes, the current milestone ends in a defined idle/boundary state. Do not fabricate pl_05 or auto-advance into content that has not been implemented.
 
-Do not solve this by adding a generic `wait_for_interaction`, `move_player`, or `inspect_object` operation to `NarrativeData` / `SequenceRunner` unless a separate architecture review proves a reusable operation is necessary. A Prologue-specific controller/state transition is preferred.
+**Skip and cancellation policy**
 
-The current `PrologueShell._initialize_runtime()` configures `SequenceRunner` with the shell itself as `control_target`, because N4.1/N4.2 have no gameplay Monarch actor. `PlayerControlLock` disables the target's physics processing and unhandled-input processing. The N4.3 implementation must configure the runner against the dedicated exploration actor (or use an equally narrow, explicitly tested Prologue-specific lock path) before actor-controlled dialogue begins. Ensure the dialogue sequence actually invokes the lock operation; `DialoguePanel` consuming unhandled input alone does not stop `_physics_process` movement. Preserve the no-control behavior of pl_01/pl_02. Do not leave the actor movable during dialogue.
+- Exploration beats are not active `SequenceRunner` runs, so `SequenceRunner.skip()` is not their skip mechanism.
+- Provide a narrow Prologue-specific `skip_current_exploration_beat()` path for the existing/future per-beat Skip affordance; do not add a new global shortcut, generic skip framework, or UI redesign as part of N4.3-A.
+- Skipping pl_03 records pl_03 once and starts pl_04 normally. It does not skip pl_04.
+- Skipping pl_04 records pl_04 once and ends the N4.3 segment at its defined boundary. It does not start pl_05.
+- Skip never marks `prologue_completed_once`, changes a world save, or skips the entire Prologue. The full-Prologue menu Skip remains a separate N4.0 returning-player choice.
+- Cancel, development exit, scene unload, or failed setup are not Skip: they do not record the active exploration beat as completed. The Prologue remains non-resumable, so a later New Game starts again from pl_01.
+
+**Control-lock contract**
+
+The current `PrologueShell._initialize_runtime()` configures `SequenceRunner` with the shell itself as `control_target`, because N4.1/N4.2 have no gameplay Monarch actor. Before any actor-controlled dialogue, N4.3 must bind the runner/lock path to the dedicated exploration actor (or use an equally narrow, explicitly tested Prologue-specific lock path). A dialogue sequence must actually lock that actor; `DialoguePanel` consuming unhandled input alone does not stop `_physics_process` movement. Exploration input is enabled only in the exploration state and disabled during dialogue, transitions, cancellation, exit, and teardown. Cleanup must restore the actor's original processing state even if the actor is freed or setup fails. Preserve the no-control behavior of pl_01/pl_02.
+
+Do not add generic `wait_for_interaction`, `move_player`, or `inspect_object` operations to `NarrativeData` / `SequenceRunner`. Keep the state machine and completion handshake Prologue-specific.
 
 ## 5. Acceptance criteria
 
@@ -130,12 +140,16 @@ The current `PrologueShell._initialize_runtime()` configures `SequenceRunner` wi
 - [ ] pl_01 and pl_02 still play in order and retain their current content.
 - [ ] Adult Monarch appears after pl_02 in the ancient-road stage.
 - [ ] The player receives movement control at the intended point in pl_03.
-- [ ] pl_03 does not auto-complete into pl_04 before the exploration handoff is ready.
+- [ ] pl_03 completes only when the actor reaches the authored exploration handoff area, or when its explicit per-beat Skip path is invoked.
+- [ ] The pl_03 completion request is accepted and recorded exactly once by PrologueShell/NarrativeState before pl_04 becomes active.
+- [ ] pl_04 becomes active after pl_03; it does not depend on SequenceRunner auto-chaining an exploration interval.
 - [ ] The three inspectables use one consistent placeholder mark.
 - [ ] Inspecting the same object repeatedly counts only once.
-- [ ] Inspecting two distinct objects triggers the pl_04 recognition line exactly once.
+- [ ] Inspecting two distinct objects triggers the pl_04 recognition line exactly once and requests pl_04 completion.
+- [ ] Repeated inspection of one object never satisfies the two-object requirement.
 - [ ] The third object is optional.
-- [ ] pl_04 completes once; no pl_05 content is fabricated or pulled into N4.3.
+- [ ] Explicitly skipping pl_04 completes it once without requiring inspections; no pl_05 content is fabricated or pulled into N4.3.
+- [ ] Cancel, exit, teardown, or failed setup does not mark pl_03/pl_04 complete.
 - [ ] All dialogue uses the existing DialoguePanel and approved candidate lines unless separately approved.
 
 ### Controls and presentation
@@ -144,7 +158,8 @@ The current `PrologueShell._initialize_runtime()` configures `SequenceRunner` wi
 - [ ] Interaction prompt appears only within range and identifies only the eligible target.
 - [ ] Movement and inspection input are blocked during dialogue.
 - [ ] Control is restored after normal dialogue completion.
-- [ ] Skip, cancel, exit, and failed playback leave no stuck input lock or stale prompt.
+- [ ] Per-beat Skip follows the pl_03/pl_04 rules above; it is separate from full-Prologue menu Skip.
+- [ ] Cancel, exit, teardown, and failed setup leave no stuck input lock or stale prompt and do not complete the active exploration beat.
 - [ ] No duplicate completion or duplicate inspection progress occurs.
 
 ### Isolation and regression
@@ -171,15 +186,16 @@ Keep N4.3 reviewable and avoid one oversized PR.
 
 ### N4.3-A — Technical spike and exploration stage
 - Inspect actor art, current player input bindings, camera pattern, shell scene layering, NarrativeState API, and beat chaining.
-- Implement the smallest isolated exploration stage and dedicated actor.
-- Prove movement bounds, camera, input isolation, and clean handoff from pl_02.
-- Do not add the three final mark objects or complete pl_04 progression until the orchestration contract is verified.
+- Implement the isolated exploration stage, dedicated actor, and the smallest Prologue-specific beat-state/completion handshake.
+- Prove the pl_02 → pl_03 handoff, bounded movement, camera, actor control lock/unlock, pl_03 handoff-area completion, and pl_03 → pl_04 activation.
+- Prove per-beat Skip and cancellation semantics with headless tests, without adding final mark props.
+- Do not begin mark inspection progression until this orchestration contract is verified.
 
 ### N4.3-B — Repeated Mark interaction
 - Add the three authored mark props and simple proximity inspection.
 - Track distinct object IDs in per-run stage state only.
-- Complete the observation after two unique objects.
-- Trigger pl_04 dialogue exactly once and hand off cleanly.
+- Complete pl_04 after two unique objects and route the recognition line through the existing DialoguePanel with the actor locked.
+- Verify explicit pl_04 Skip, cancel/exit behavior, and exactly-once completion.
 
 ### N4.3-C — Integration and regression
 - Verify full pl_01 → pl_02 → pl_03 → pl_04 flow.
@@ -197,4 +213,4 @@ The following remain intentionally OPEN:
 - Final visual suitability/scale of the existing Monarch sprite sheet in the Prologue composition.
 - Exact actor scene tree and camera framing, pending the N4.3-A spike and windowed inspection.
 
-These open details must not block the planning document, but must be resolved or explicitly left as labelled placeholders before implementation.
+The beat transition, Skip, cancellation, and completion-ownership rules above are DECIDED and are not open for the implementation agent to reinterpret. Visual details may remain labelled placeholders; they must not block the technical spike.
