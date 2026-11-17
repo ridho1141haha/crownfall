@@ -175,6 +175,94 @@ func _process(_delta: float) -> bool:
 				return false
 			_check(not is_instance_valid(_panel), "panel freed cleanly while open")
 			_check(not paused, "tree not paused at end")
+			_stage = 11
+			_frames = 0
+			return false
+		11:
+			# --- NEW (PR #11 review): left mouse button must advance dialogue ---
+			_panel = DialoguePanel.new()
+			get_root().add_child(_panel)
+			_panel.open_lines([
+				{"speaker": "Mouse Speaker", "text": "mouse advance line one"},
+				{"speaker": "Mouse Speaker", "text": "mouse advance line two"},
+			])
+			if not _panel.is_open():
+				_check(false, "fresh panel opened for mouse advance test")
+				return true
+			var mouse_ev: InputEventMouseButton = InputEventMouseButton.new()
+			mouse_ev.button_index = MOUSE_BUTTON_LEFT
+			mouse_ev.pressed = true
+			mouse_ev.position = Vector2(640.0, 360.0)
+			Input.parse_input_event(mouse_ev)
+			_stage = 12
+			_frames = 0
+			return false
+		12:
+			if _frames < 3:
+				return false
+			_check(_panel.get_body_text() == "mouse advance line two", "left mouse click advances dialogue")
+			var mouse_ev_second: InputEventMouseButton = InputEventMouseButton.new()
+			mouse_ev_second.button_index = MOUSE_BUTTON_LEFT
+			mouse_ev_second.pressed = true
+			mouse_ev_second.position = Vector2(640.0, 360.0)
+			Input.parse_input_event(mouse_ev_second)
+			var mouse_ev_release: InputEventMouseButton = InputEventMouseButton.new()
+			mouse_ev_release.button_index = MOUSE_BUTTON_LEFT
+			mouse_ev_release.pressed = false
+			mouse_ev_release.position = Vector2(640.0, 360.0)
+			Input.parse_input_event(mouse_ev_release)
+			_stage = 13
+			_frames = 0
+			return false
+		13:
+			if _frames < 3:
+				return false
+			_check(not _panel.is_open(), "mouse-advanced panel closed after last line")
+			_panel.queue_free()
+			_stage = 14
+			_frames = 0
+			return false
+		14:
+			if _frames < 3:
+				return false
+			_check(not is_instance_valid(_panel), "mouse panel freed cleanly while open")
+			_check(not paused, "tree not paused at end")
+			_stage = 15
+			_frames = 0
+			return false
+		15:
+			# --- NEW (PR #11 review): lock restores the original processing state ---
+			_check(_lock.lock(_session.player), "lock engages on player")
+			_check(_lock.is_locked(), "control lock engaged (player)")
+			_check(not _session.player.is_physics_processing(), "lock disables player physics")
+			_check(not _session.player.is_processing_unhandled_input(), "lock disables player unhandled input")
+			_check(_lock.is_locked(), "repeat lock keeps control lock engaged")
+			_check(not _session.player.is_physics_processing(), "repeat lock keeps player locked")
+			_lock.unlock()
+			_check(not _lock.is_locked(), "unlock releases the control lock")
+			_check(_session.player.is_physics_processing(), "unlock restores original player physics state")
+			_check(_session.player.is_processing_unhandled_input(), "unlock restores original player unhandled input state")
+			_lock.unlock()
+			_check(not _lock.is_locked(), "repeat unlock is safe")
+			var idle_target: Node = Node.new()
+			idle_target.set_physics_process(false)
+			_check(_lock.lock(idle_target), "lock engages on idle target")
+			_check(_lock.is_locked(), "control lock engaged (idle target)")
+			_lock.unlock()
+			_check(not _lock.is_locked(), "unlock releases idle target lock")
+			idle_target.queue_free()
+			_check(_lock.lock(_session.player), "lock can re-engage player after release")
+			_check(_lock.is_locked(), "control lock re-engaged")
+			_lock.unlock()
+			_check(_session.player.is_physics_processing(), "control restored after re-lock cycle")
+			_stage = 16
+			_frames = 0
+			return false
+		16:
+			if _frames < 3:
+				return false
+			_check(not is_instance_valid(_panel), "panel still freed cleanly at end")
+			_check(not paused, "tree not paused at end")
 			print("PASS: All %d Dialogue Panel checks completed with 0 failures." % _checks)
 			quit(0)
 			return true
