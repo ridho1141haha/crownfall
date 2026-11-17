@@ -146,23 +146,38 @@ func _on_dev_exit_button_pressed() -> void:
 ## can never fire (single-transition guard, same convention as the menu
 ## _route_started guard).
 func request_main_menu_return() -> bool:
-	return _begin_exit(MAIN_MENU_SCENE)
+	# Development exit: a running sequence is cancelled with deterministic
+	# cleanup and completes nothing (N3 cancel semantics).
+	return _begin_exit(MAIN_MENU_SCENE, true)
 
 
 ## SequenceRunner scene_transition callable (allowlisted by configure()). This
 ## is the future N4.5 completion handoff channel into a fresh Forgotten Shore
 ## session; the shell adds no completion marking here.
 func _on_sequence_scene_transition(scene_path: String) -> void:
-	_begin_exit(scene_path)
+	# Sequence-driven handoff: the runner is INSIDE its change_scene op right
+	# now, so the sequence must NOT be cancelled — cancelling here would make
+	# _execute() bail out before _finalize_completion(), losing the
+	# exactly-once sequence_completed signal and the NarrativeState record.
+	# The runner finishes its own step, restores control, and closes the panel
+	# via its normal cleanup; this path only arms the transition guard and
+	# performs the scene change.
+	_begin_exit(scene_path, false)
 
 
-func _begin_exit(scene_path: String) -> bool:
+## Single-transition exit/handoff core. cancel_running_sequence is true only
+## for the development exit (stop + clean up any running sequence, completing
+## nothing); false for sequence-driven handoffs, which leave the finishing
+## sequence untouched.
+func _begin_exit(scene_path: String, cancel_running_sequence: bool) -> bool:
 	if _exit_started:
 		return false
 	_exit_started = true
-	# Deterministic cleanup of any running sequence (restores control, closes
-	# the panel, completes nothing). cancel() is a safe no-op when idle.
-	cancel_sequence()
+	if cancel_running_sequence:
+		# Deterministic cleanup of any running sequence (restores control,
+		# closes the panel, completes nothing). cancel() is a safe no-op when
+		# idle; a finishing handoff sequence is never routed through here.
+		cancel_sequence()
 	if _exit_transition.is_valid():
 		_exit_transition.call(scene_path)
 		return true

@@ -12,8 +12,9 @@ extends SceneTree
 ## end of the run; fixture sidecars (.tmp/.old/.bak/.bak.tmp) are cleaned
 ## before and after the run so re-runs stay idempotent.
 ##
-## The test sequences below (n41_shell_smoke / n41_shell_cancel_check) are
-## explicit non-canon plumbing fixtures — they are NOT Prologue story content.
+## The test sequences below (n41_shell_smoke / n41_shell_cancel_check /
+## n41_shell_handoff / n41_shell_dev_exit_check) are explicit non-canon
+## plumbing fixtures — they are NOT Prologue story content.
 
 const MAIN_SCRIPT: GDScript = preload("res://scripts/core/Main.gd")
 const PROLOGUE_SHELL_SCRIPT: GDScript = preload("res://scripts/narrative/PrologueShell.gd")
@@ -35,6 +36,8 @@ var _stage: int = 0
 var _wait_frames: int = 0
 var _routes: Array[String] = []
 var _shell_exits: Array[String] = []
+## sequence_completed observations for the handoff regression (P1 proof).
+var _handoff_completions: Array[String] = []
 var _real_profile_snapshot: String = ""
 var _real_profile_existed: bool = false
 var _real_save_snapshot: String = ""
@@ -183,6 +186,31 @@ func _shell_cancel_sequence() -> Dictionary:
 	}
 
 
+func _shell_handoff_sequence() -> Dictionary:
+	# Non-canon plumbing fixture (NOT a Prologue beat): mimics the future N4.5
+	# handoff — a sequence whose change_scene op transitions through the
+	# shell's own scene-transition callback into the allowlisted shore scene.
+	return {
+		"id": "n41_shell_handoff",
+		"steps": [
+			{"op": "change_scene", "scene_path": FORGOTTEN_SHORE_SCENE},
+			{"op": "finish"},
+		],
+	}
+
+
+func _shell_dev_exit_sequence() -> Dictionary:
+	# Non-canon plumbing fixture (NOT a Prologue beat): left un-advanced so the
+	# development exit fires while a sequence is still running.
+	return {
+		"id": "n41_shell_dev_exit_check",
+		"steps": [
+			{"op": "dialogue", "lines": [{"speaker": "Development Shell", "text": "N4.1 shell development-exit plumbing check."}]},
+			{"op": "finish"},
+		],
+	}
+
+
 func _fixture_completions_untouched() -> void:
 	# Entering/exiting/running the shell must never create or change a profile
 	# file: the missing fixture stays missing, and PROFILE_FALSE stays false
@@ -285,21 +313,67 @@ func _process(_delta: float) -> bool:
 		5:
 			if not _on_shell():
 				return false
-			# --- Tests 8 + 9: entering/running/exiting never touches completion ---
-			_fixture_completions_untouched()
-			# --- Test 10: duplicate exit/handoff requests are safely ignored ---
+			# --- P1 regression: sequence-driven handoff must complete exactly once ---
+			# A sequence whose change_scene op transitions through the shell's own
+			# callback (PrologueShell._on_sequence_scene_transition) must NOT be
+			# cancelled: the runner is inside its change_scene step and must still
+			# run _finalize_completion (sequence_completed + NarrativeState).
 			var shell: Control = _shell()
+			_shell_exits.clear()
+			_handoff_completions.clear()
 			shell.call("set_exit_transition", func(scene_path: String) -> void: _shell_exits.append(scene_path))
-			_check(shell.call("request_main_menu_return"), "first controlled exit request is accepted")
-			_check(_shell_exits.size() == 1 and String(_shell_exits[0]) == "res://scenes/main/Main.tscn", "exit transition resolves to the main menu exactly once")
+			var runner: SequenceRunner = shell.call("sequence_runner")
+			runner.sequence_completed.connect(func(sequence_id: String) -> void: _handoff_completions.append(sequence_id))
+			_check(shell.call("play_sequence", _shell_handoff_sequence()), "shell accepts a sequence whose change_scene targets the allowlisted Forgotten Shore")
+			_check(_shell_exits.size() == 1 and String(_shell_exits[0]) == FORGOTTEN_SHORE_SCENE, "sequence change_scene invokes the shell handoff exactly once with the allowlisted scene")
+			_check(_handoff_completions.size() == 1 and String(_handoff_completions[0]) == "n41_shell_handoff", "sequence_completed is emitted exactly once for the handoff sequence")
+			_check(bool((shell.call("narrative_state") as NarrativeState).is_completed("n41_shell_handoff")) and shell.call("completed_sequence_count") == 2, "NarrativeState records the handoff sequence completion (smoke + handoff; cancel and dev exit never add)")
+			_check(not shell.call("is_sequence_running") and not (shell.call("dialogue_panel") as DialoguePanel).is_open(), "after handoff: runner idle, panel closed, control restored")
+			# --- Duplicate handoff must not produce a second transition ---
+			shell.call("_on_sequence_scene_transition", FORGOTTEN_SHORE_SCENE)
+			_check(_shell_exits.size() == 1, "duplicate sequence handoff request is ignored (no second transition)")
+			_fixture_completions_untouched()
+			# The handoff armed this instance's exit guard, so the dev-exit-while-
+			# running scenario runs on a FRESH shell instance (next stage).
+			change_scene_to_file(PROLOGUE_SHELL_SCENE)
+			_stage = 6
+			_wait_frames = 0
+			return false
+		6:
+			if not _on_shell():
+				return false
+			# --- Development exit while a sequence runs: cancel WITHOUT completion ---
+			var shell: Control = _shell()
+			_shell_exits.clear()
+			_handoff_completions.clear()
+			# A fresh instance starts with no injected transition — install the
+			# exit recorder on THIS shell so the dev exit stays observable.
+			shell.call("set_exit_transition", func(scene_path: String) -> void: _shell_exits.append(scene_path))
+			var runner2: SequenceRunner = shell.call("sequence_runner")
+			runner2.sequence_completed.connect(func(sequence_id: String) -> void: _handoff_completions.append(sequence_id))
+			_check(shell.call("play_sequence", _shell_dev_exit_sequence()), "shell starts a dialogue sequence before the development exit")
+			_check(shell.call("is_sequence_running"), "sequence is still running when the development exit fires")
+			_check(shell.call("request_main_menu_return"), "development exit is accepted while a sequence runs")
+			_check(not shell.call("is_sequence_running"), "development exit stops the running sequence")
+			_check(_handoff_completions.is_empty(), "development exit completes nothing (sequence_completed never emitted)")
+			_check(_shell_exits.size() == 1 and String(_shell_exits[0]) == "res://scenes/main/Main.tscn", "development exit transitions to the main menu exactly once")
+			_check(not (shell.call("dialogue_panel") as DialoguePanel).is_open(), "development exit closes the dialogue panel")
+			_fixture_completions_untouched()
+			_stage = 7
+			_wait_frames = 0
+			return false
+		7:
+			if not _on_shell():
+				return false
+			# --- Duplicate exit guard + no stale runtime state + fresh instance ---
+			var shell: Control = _shell()
 			_check(shell.call("is_exit_started"), "shell records that its exit has started")
 			_check(shell.call("request_main_menu_return") == false and _shell_exits.size() == 1, "duplicate exit request is ignored (no second transition)")
 			# The development-only button routes through the same guarded path.
 			var dev_btn: Button = shell.find_child("DevExitButton", true, false) as Button
 			_check(dev_btn != null and dev_btn.text.contains("Development"), "development-only exit button exists and is labelled as such")
 			dev_btn.pressed.emit()
-			_check(_shell_exits.size() == 1, "development exit after an started exit is also ignored")
-			# --- Test 11: no stale runtime state after the exit path ---
+			_check(_shell_exits.size() == 1, "development exit after a started exit is also ignored")
 			_check(not shell.call("is_sequence_running") and not (shell.call("dialogue_panel") as DialoguePanel).is_open(), "after exit: no running sequence and closed panel")
 			var runner: SequenceRunner = shell.call("sequence_runner")
 			_check(runner != null and not runner.is_running(), "sequence runner is idle after exit")
@@ -310,10 +384,10 @@ func _process(_delta: float) -> bool:
 			get_root().remove_child(second)
 			second.free()
 			change_scene_to_file(MAIN_SCENE)
-			_stage = 6
+			_stage = 8
 			_wait_frames = 0
 			return false
-		6:
+		8:
 			if not _on_main():
 				return false
 			# --- Returning-player routing (N4.0 contract preserved) ---
@@ -334,10 +408,10 @@ func _process(_delta: float) -> bool:
 			_check(_routes.size() == 1 and String(_routes[0]) == String(MAIN_SCRIPT.PROLOGUE_ROUTE_SCENE), "Play Prologue Again routes to the Prologue shell")
 			_set_metas(PROFILE_TRUE, SAVE_PREV)
 			change_scene_to_file(MAIN_SCENE)
-			_stage = 7
+			_stage = 9
 			_wait_frames = 0
 			return false
-		7:
+		9:
 			if not _on_main():
 				return false
 			_attach_route_recorder()
@@ -360,10 +434,10 @@ func _process(_delta: float) -> bool:
 			_check(FileAccess.get_file_as_string(PROFILE_TRUE) == JSON.stringify({"schema_version": 1, "prologue_completed_once": true}, "\t"), "profile fixture is byte-exact unchanged after Skip")
 			_set_metas(PROFILE_TRUE, SAVE_PREV)
 			change_scene_to_file(MAIN_SCENE)
-			_stage = 8
+			_stage = 10
 			_wait_frames = 0
 			return false
-		8:
+		10:
 			if not _on_main():
 				return false
 			_attach_route_recorder()
@@ -385,10 +459,10 @@ func _process(_delta: float) -> bool:
 			_check(confirm_again != null and confirm_again.is_visible_in_tree(), "next Play press re-runs the overwrite confirmation (Cancel revokes the pending confirmation)")
 			_set_metas(PROFILE_TRUE, SAVE_PREV)
 			change_scene_to_file(MAIN_SCENE)
-			_stage = 9
+			_stage = 11
 			_wait_frames = 0
 			return false
-		9:
+		11:
 			if not _on_main():
 				return false
 			_attach_route_recorder()
@@ -397,10 +471,10 @@ func _process(_delta: float) -> bool:
 			_check(_routes.size() == 1 and String(_routes[0]) == FORGOTTEN_SHORE_SCENE, "Continue routes straight to Forgotten Shore (never to the Prologue)")
 			_check(bool(Engine.get_meta("crownfall_load_on_start", false)), "Continue sets the load-on-start flag")
 			change_scene_to_file(FORGOTTEN_SHORE_SCENE)
-			_stage = 10
+			_stage = 12
 			_wait_frames = 0
 			return false
-		10:
+		12:
 			if not _on_shore_ready():
 				return false
 			var session: ForgottenShoreSession = current_scene as ForgottenShoreSession
@@ -410,10 +484,10 @@ func _process(_delta: float) -> bool:
 			# byte-exact and the missing fixture stays missing.
 			_check(FileAccess.get_file_as_string(PROFILE_TRUE) == JSON.stringify({"schema_version": 1, "prologue_completed_once": true}, "\t"), "profile fixture is byte-exact unchanged after Continue")
 			_check(not FileAccess.file_exists(PROFILE_MISSING), "missing profile fixture stays missing after Continue")
-			_stage = 11
+			_stage = 13
 			_wait_frames = 0
 			return false
-		11:
+		13:
 			# --- Hygiene: prove the real files untouched, then clean fixtures ---
 			if _real_profile_existed:
 				_check(FileAccess.get_file_as_string(REAL_PROFILE_PATH) == _real_profile_snapshot, "developer's real user://player_profile.json was never mutated")
