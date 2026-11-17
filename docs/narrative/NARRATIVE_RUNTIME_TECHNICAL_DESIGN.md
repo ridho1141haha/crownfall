@@ -21,8 +21,9 @@
 
 1. **Continue:** unchanged. Directly loads the existing world save. Existing saves are never forced to replay anything narrative.
 2. **Start New Game:** for the foundation, still routes to Forgotten Shore (no Prologue wiring yet — Prologue entry is an N4 task). **New safety behavior:** if a valid world save exists, Start New Game shows a confirmation (“starting a new game replaces the saved reign on the next save”) before proceeding. This prevents silently destroying a valid save via a later autosave.
-3. **Prologue routing (N4):** Start New Game will run the Prologue scenes first and enter a *fresh* Forgotten Shore session after landing. Continue bypasses the Prologue entirely. **PROPOSED — owner approval required before wiring.**
-4. **Prologue resumability:** linear, **non-resumable** — no mid-Prologue world save; exiting mid-Prologue restarts it on the next Start New Game. **PROPOSED — owner approval required.**
+3. **Prologue routing (N4):** Start New Game runs the Prologue unless the player profile records a previously completed Prologue and the player chooses Skip. Continue bypasses the Prologue entirely and loads the existing world save. After completion or an eligible skip, enter a *fresh* Forgotten Shore session. **DECIDED — owner approval, 2026-11-17.**
+4. **Prologue resumability:** linear, **non-resumable** — no mid-Prologue world save; exiting mid-Prologue restarts it on the next Start New Game. **DECIDED — owner approval, 2026-11-17.**
+5. **Skip eligibility:** Skip is unavailable on the first-ever playthrough. It becomes available only after the player completes the Prologue once. Skipping does not itself grant or revoke eligibility. **DECIDED — owner approval, 2026-11-17.**
 
 ---
 
@@ -30,17 +31,19 @@
 
 ### Analysis
 
-- The first Prologue is linear and non-resumable. The only durable fact it needs (“Prologue completed / landed on Forgotten Shore”) is implicitly expressed by the **world save existing** — Continue only reaches a saved world, and a saved world only exists after landing.
-- Per-run concerns (never run a one-shot sequence twice, skip exactly once, guard duplicate completion) are **in-memory** concerns.
-- `ProgressionState` owns durable gameplay milestones/unlocks. The Prologue creates no gameplay unlock, so no new fact is needed.
-- `SaveManager` schema v2 therefore needs **no new fields, no migration, no version bump**.
+- The Prologue is linear and non-resumable, but the player must be allowed to start a fresh world without replaying it after completing it once.
+- The durable fact “this installation/profile has completed the Prologue at least once” must survive New Game replacing the world save. It cannot be inferred from the existence of `save_slot_0.json`.
+- Per-run sequence completion remains in-memory in `NarrativeState`; the cross-run eligibility fact belongs to a small global player profile, separate from any world save.
+- `SaveManager` schema v2 remains unchanged; no narrative fields are added to world-save data.
 
 ### Decision — DECIDED
 
-1. **No persisted narrative state in the foundation.** No `SaveManager`, `ProgressionState`, or schema changes.
-2. A minimal in-memory `NarrativeState` records completed sequence IDs for the current run (idempotent completion, duplicate-run guards, skip bookkeeping). It is explicitly **not serialized**.
-3. Trade-off accepted: quitting mid-Prologue loses per-run progression (acceptable for a linear non-resumable Prologue; PROPOSED policy above).
-4. Revisit only if a resumable Prologue is approved: then design a versioned narrative save object with strict validation and migration — not a silent schema bump.
+1. Keep `SaveManager`, `ProgressionState`, and world-save schema v2 unchanged.
+2. `NarrativeState` remains in-memory and records per-run sequence completion only; it is not serialized.
+3. Add a minimal persistent **player-profile** flag (separate from world saves), e.g. `prologue_completed_once`, stored under `user://` with a small versioned/validated format and safe atomic writes. This is global first-playthrough metadata, not world progression.
+4. Set the flag only after the full Prologue reaches its successful completion/handoff path. A skip must never set it.
+5. If the profile file is missing, invalid, or unreadable, fail safely by treating the Prologue as not yet completed (Skip remains locked); do not block New Game or corrupt/overwrite a world save.
+6. Exiting mid-Prologue loses only per-run progress; the next New Game starts the Prologue from the beginning. No resume checkpoint is stored.
 
 ---
 
@@ -53,6 +56,7 @@
 | `Main` / menu | Entry routing + overwrite confirmation | Owns no dialogue or gameplay rules |
 | `NarrativeData` (new) | Sequence/step schema validation, JSON loading, fail-closed data | Executes nothing |
 | `NarrativeState` (new) | In-memory, per-run completed-sequence set | Persists nothing |
+| `PlayerProfile` (new, minimal) | Global first-playthrough metadata; stores `prologue_completed_once` independently of world saves | Stores no kingdom/gameplay progress; does not replace `SaveManager` |
 | `DialoguePanel` (new) | Speaker/body/advance presentation, input consumption, cleanup | Grants resources/unlocks; never touches gameplay state |
 | `PlayerControlLock` (new) | Lock/unlock a character's physics + unhandled input | Owns world state |
 | `SequenceRunner` (new) | Orchestrates typed, allowlisted steps; completion exactly once; skip/cancel cleanup | Implements gameplay rules |
@@ -134,9 +138,10 @@ Source: `PROLOGUE_STORY_DESIGN.md` §4/§6. All content is PROPOSED until owner 
 
 Additional contract rows (DECIDED unless marked):
 
-- **New Game behavior:** confirmation when a valid save exists; later routes through the Prologue (PROPOSED wiring, N4).
+- **New Game behavior:** confirmation when a valid world save exists; run Prologue if `PlayerProfile.prologue_completed_once` is false. If true, offer Skip or Play Prologue; Skip is never shown on the first playthrough.
 - **Continue behavior:** direct world-save load; never replays the Prologue.
-- **Exit/restart:** exiting mid-Prologue discards per-run progress (non-resumable); no partial save.
+- **Exit/restart:** exiting mid-Prologue discards per-run progress (non-resumable); next New Game restarts it from pl_01.
+- **Completion marker:** set `PlayerProfile.prologue_completed_once = true` only on successful completion/handoff. Preserve it across world-save deletion/replacement and New Game.
 - **Pause:** allowed; dialogue panel stays interactive; sequence waits freeze with the tree.
 - **Scene transition:** explicit, allowlisted `change_scene` op; handoff to Forgotten Shore creates a fresh session and starts world saves only then.
 - **Input ownership:** dialogue consumes all unhandled input while open; control lock disables movement/commands; both restored on close/cancel/skip/unload.
@@ -146,12 +151,15 @@ Additional contract rows (DECIDED unless marked):
 
 | # | Decision | Status | Rationale |
 |---|---|---|---|
-| D1 | No persisted narrative state; in-memory `NarrativeState` only | DECIDED | Linear non-resumable Prologue; world save = completion marker |
-| D2 | SaveManager/ProgressionState/schema v2 unchanged | DECIDED | No durable narrative need; avoids migration risk |
+| D1 | Per-run `NarrativeState` remains in-memory; one global profile completion flag persists separately | DECIDED | Skip eligibility must survive New Game replacing world saves |
+| D2 | SaveManager/ProgressionState/world schema v2 unchanged | DECIDED | Prologue completion is profile metadata, not kingdom progression |
 | D3 | New Game overwrite confirmation | DECIDED | Protects existing saves before Prologue wiring exists |
 | D4 | `dialogue_advance` action (Enter/LMB); panel consumes input; control lock | DECIDED | Input isolation without touching gameplay handlers |
 | D5 | Typed allowlisted sequence ops; frame-counted waits; injected cue/transition callables | DECIDED | Deterministic, testable, no eval/scripting, no leaked timers |
 | D6 | Skip completes exactly once; change_scene at most once; cancel without completion | DECIDED | Idempotence + cleanup safety |
-| D7 | Prologue routing/resumability/skip policy | PROPOSED | Owner approval required before N4 wiring |
+| D7 | New Game → Prologue; Continue bypasses; non-resumable Prologue | DECIDED | Owner approval, 2026-11-17 |
+| D8 | Skip locked until one successful Prologue completion; completion flag stored in separate player profile | DECIDED | Owner approval, 2026-11-17; flag survives New Game and is not set by skipping |
+| D9 | Camera-focus op and pause_world op | PROPOSED | Deferred; not needed by foundation tests |
+| D10 | All Prologue content/staging details | PROPOSED/OPEN | Per `PROLOGUE_STORY_DESIGN.md` §10 OPEN table |
 | D8 | Camera-focus op and pause_world op | PROPOSED | Deferred; not needed by foundation tests |
 | D9 | All Prologue content/staging details | PROPOSED/OPEN | Per `PROLOGUE_STORY_DESIGN.md` §10 OPEN table |

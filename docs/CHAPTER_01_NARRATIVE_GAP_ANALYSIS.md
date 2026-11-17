@@ -88,7 +88,7 @@ Status: **EXISTS** = implemented and reachable; **PARTIAL** = gameplay/system ex
 - The approved New Game / Continue routing (roadmap §6: New Game → Prologue → fresh shore; Continue → direct load; policy still approval-required).
 
 **Dependencies / decisions**
-- Entry-flow policy sign-off (roadmap §6); skip behavior (OPEN); landing staging details (N0).
+- Entry-flow and skip policies are approved (roadmap §6); landing staging details remain part of N0.
 
 **Status:** **DESIGNED, not implemented.**
 
@@ -267,7 +267,7 @@ Status: **EXISTS** = implemented and reachable; **PARTIAL** = gameplay/system ex
 
 ### 5.3 Process / technical decisions
 
-- New Game / Continue entry-flow policy and legacy-save behavior (roadmap §6 — policy is documented, but remaining PROPOSED/OPEN items still require owner approval before N4 wiring).
+- New Game / Continue, non-resumable Prologue, and first-playthrough Skip gate are owner-approved (roadmap §6). N4 still requires an implementation proposal and production-detail sign-off before code work.
 - N0 production details: repeated-symbol visual design, childhood staging, vision visual language, ship-to-island transition.
 - N4 Prologue production/implementation and the fresh Forgotten Shore handoff.
 - N5 Chapter I core progression decisions were approved by the owner on 2026-11-17: mandatory first night with recoverable breach path; optional Scientist recruitment with research/specialist-upgrade gates; Chapter I ends on Eldergrove arrival. Dialogue presentation/voice, remaining NPC roles, and transition presentation remain open; English is the approved default/source language.
@@ -292,7 +292,7 @@ The runtime foundation is already implemented. Content implementation remains ga
 ## 7. Acceptance criteria (aligned with the official roadmap and Prologue design)
 
 1. New Game starts the Prologue per the approved entry-flow policy; Continue bypasses the Prologue and loads existing/legacy saves (roadmap §6, §8).
-2. The Prologue completes or skips exactly once and hands off to a fresh Forgotten Shore session; control returns promptly (`PROLOGUE_STORY_DESIGN.md` §8–9).
+2. First-ever New Game cannot skip; after one successful full Prologue completion, later New Game may skip or replay. Completion/eligible skip hands off exactly once to a fresh Forgotten Shore session (`PROLOGUE_STORY_DESIGN.md` §8–9; roadmap §6).
 3. Dialogue/sequence data is data-driven, schema-validated, and fails closed on malformed content (implemented N1 foundation).
 4. Narrative triggers are idempotent and silent during load; one-time events do not replay after restore, skip, or scene re-entry (N1, §8).
 5. Dialogue input cannot trigger movement, construction, recruitment, or world commands (implemented N2 foundation; content-level integration must retain this guarantee).

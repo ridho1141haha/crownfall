@@ -179,15 +179,16 @@ Tasks:
 
 The current menu sends both Start New Game and Continue directly to Forgotten Shore. Adding the Prologue changes that entry flow and requires an explicit policy.
 
-### Recommended initial policy — approval required
-- **Start New Game:** start the Prologue, then create/enter a fresh Forgotten Shore session after landing.
-- **Continue:** bypass the Prologue and load the existing Forgotten Shore save, including legacy saves with no narrative metadata.
-- **Legacy save:** missing narrative metadata must never force an existing player to replay the Prologue or invalidate the save.
-- **Prologue interruption:** for the first linear version, prefer no in-progress world save/resume during the Prologue. Exiting mid-Prologue restarts it on the next Start New Game. Confirm this UX before implementation.
-- **After landing:** let the existing world session and SaveManager own the kingdom save. Do not create a parallel save system.
-- **Skip:** if offered, skipping follows the same handoff to a fresh Forgotten Shore session; it must not load or overwrite an unrelated old save accidentally.
+### Approved policy (owner decision, 2026-11-17)
+- **First-ever Start New Game:** always play the Prologue. Do not display a Skip option.
+- **Later Start New Game:** if and only if the player profile records one successful full Prologue completion, offer the choice to Skip or Play Prologue again.
+- **Continue:** bypass the Prologue and load the existing Forgotten Shore world save, including legacy saves with no narrative metadata.
+- **Completion marker:** persist `prologue_completed_once` in a minimal global player profile separate from world saves. Set it only after the complete Prologue reaches its successful completion/handoff path; skipping never sets the flag.
+- **Profile safety:** missing, invalid, or unreadable profile data defaults to first-playthrough behavior (Skip locked), without blocking New Game or invalidating world saves.
+- **Prologue interruption:** no mid-Prologue save/resume. Exiting mid-Prologue restarts at pl_01 on the next New Game.
+- **After landing or eligible skip:** enter a fresh Forgotten Shore session; the existing world session and SaveManager own kingdom progress. Do not load or overwrite an unrelated old save accidentally.
 
-This is a recommendation, not an approved implementation contract until the project owner confirms it. If resumable Prologue playback is required, design and test the save representation first.
+This policy is approved for N4 planning. It does not authorize implementation until the N4 task plan is reviewed.
 
 ## 7. Ownership boundaries
 
@@ -203,9 +204,12 @@ This is a recommendation, not an approved implementation contract until the proj
 
 ### Automated/headless
 - Existing `bash tests/run_all.sh` remains green.
-- New Game routing starts the Prologue according to policy.
+- First-ever New Game starts the Prologue and offers no Skip.
+- After one successful full Prologue completion, a later New Game offers Skip or Play Again.
+- The completion flag survives New Game/world-save replacement and is not set by skipping.
+- Missing/corrupt profile data safely locks Skip without blocking New Game.
 - Continue bypasses the Prologue and loads a valid old save.
-- Prologue completion/skip transfers control exactly once to a fresh Forgotten Shore session.
+- Prologue completion/eligible skip transfers control exactly once to a fresh Forgotten Shore session.
 - Invalid narrative definitions fail closed without partial state mutation.
 - One-time events do not duplicate after restore, repeated triggers, skip, or scene re-entry.
 - Dialogue/cinematic input does not leak into player/world commands.
@@ -244,7 +248,7 @@ This is a recommendation, not an approved implementation contract until the proj
 **No gameplay or narrative runtime code is authorized by this documentation milestone.** N1–N3 are already merged into `main` through PR #11. Next:
 
 1. Review N0/entry-flow decisions still marked PROPOSED or OPEN in the technical design and Prologue Story Design.
-2. Prepare the N4 implementation proposal from `narrative/PROLOGUE_PRODUCTION_BREAKDOWN.md`; do not wire New Game to Prologue until routing, interruption, and skip policies are approved.
+2. Prepare the N4 implementation proposal from `narrative/PROLOGUE_PRODUCTION_BREAKDOWN.md`; New Game routing, interruption, and first-playthrough skip policy are now approved. The proposal must include a separate global profile flag, validation/failure behavior, and tests before implementation.
 3. Review [`CHAPTER_01_BEAT_SHEET.md`](CHAPTER_01_BEAT_SHEET.md) and resolve its owner questions. Chapter I implementation remains downstream of the Prologue handoff.
 4. Keep subsequent code work in separate PRs with tests and windowed inspection.
 

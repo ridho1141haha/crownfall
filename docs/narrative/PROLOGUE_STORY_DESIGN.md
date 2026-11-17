@@ -260,7 +260,7 @@ Monarch should not immediately announce an intention to establish a kingdom. The
 | Crown's post-wreck appearance | Draft | It remains with Monarch; show it briefly |
 | Dialogue language | **DECIDED** | English is the default/source language for authored in-game dialogue. Additional language localization is future scope and must not change the English source text. |
 | Dialogue voice/audio | OPEN | Voice acting is not required for the initial implementation; presentation may remain text-only |
-| Prologue skip behavior | OPEN | Must be decided before sequence implementation |
+| Prologue skip eligibility | **DECIDED** | No Skip on first-ever playthrough. Unlock only after one successful Prologue completion; persist eligibility in a player profile separate from world saves. Continue always bypasses Prologue. |
 
 ---
 

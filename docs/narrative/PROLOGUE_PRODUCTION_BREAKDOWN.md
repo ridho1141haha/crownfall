@@ -23,7 +23,7 @@ Legend for asset status: **E** = Existing, **R** = Reusable with modification, *
 | 08 | The Shipwreck | Cinematic (storm → fade) | pl_07 | M |
 | 09 | Forgotten Shore | Interactive handoff → existing gameplay scene | pl_08 | M |
 
-Entry/exit contract: New Game → pl_01…pl_09 → `scenes/world/ForgottenShore.tscn` (fresh session). Continue bypasses everything (technical design §A). No mid-Prologue save.
+Entry/exit contract: New Game → Prologue (unless previously completed and player chooses Skip) → pl_01…pl_09 → `scenes/world/ForgottenShore.tscn` (fresh session). Continue bypasses everything and loads the existing world save. Skip is unavailable on the first-ever playthrough; after one successful completion, it is offered on later New Game starts. Completion eligibility is stored in a small global player profile, separate from world saves. No mid-Prologue save.
 
 ## 2. Per-beat production needs
 
@@ -33,7 +33,7 @@ Entry/exit contract: New Game → pl_01…pl_09 → `scenes/world/ForgottenShore
 - **Audio:** opening music prosperity→loss; ambient. **N**.
 - **Camera:** slow pan / static framing with fades. **N** (framing data; runner `change_scene`/wait already exist).
 - **Animation:** none. **—**.
-- **Test criteria:** plays once on New Game; skippable per policy; reveals no Great Eclipse cause.
+- **Test criteria:** first-ever New Game cannot skip; later New Game may skip only after one successful Prologue completion; Continue bypasses; profile eligibility survives New Game/world-save replacement; invalid/missing profile safely locks Skip; reveals no Great Eclipse cause.
 
 ### pl_02 — A Faint Resonance
 - **Environment:** old stone wall/ruin fragment. **N** (simple backdrop) or **P**.
@@ -115,6 +115,7 @@ Entry/exit contract: New Game → pl_01…pl_09 → `scenes/world/ForgottenShore
 | Audio pipeline | **R** | `assets/audio/*.wav` + SFX player exist; music/ambience channels TBD |
 | Dialogue source language | **DECIDED** | English is the default/source language for all authored in-game dialogue. Keep dialogue data ready for future localization without building a localization framework now |
 | Localization pipeline | **FUTURE** | Additional languages are out of current N4 scope; do not block Prologue implementation |
+| First-playthrough completion flag | **DECIDED** | Store `prologue_completed_once` in a minimal global player profile separate from world-save schema v2; only successful full completion unlocks Skip |
 | Voice acting | **FUTURE / OPTIONAL** | Initial implementation may use text-only dialogue; no voice recording is required |
 
 ## 4. Suggested implementation order (post-foundation)
@@ -124,7 +125,8 @@ Entry/exit contract: New Game → pl_01…pl_09 → `scenes/world/ForgottenShore
 3. pl_03 + pl_04 interactive pass (movement, inspect, dialogue panel).
 4. pl_05 + pl_06 (chamber, altar, crown interaction, vision) — highest risk; do last in art but first in design review.
 5. pl_07 + pl_08 + pl_09 handoff; wire fresh Forgotten Shore session and save policy.
-6. Polish, skip policy, windowed inspection.
+6. Implement the approved first-playthrough gate and persistent profile flag; test first run, completed run, skip, Continue, and corrupted/missing profile.
+7. Polish, windowed inspection.
 
 No step above may ship an OPEN detail as canon. All placeholder assets must be visibly labelled/removable.
 
