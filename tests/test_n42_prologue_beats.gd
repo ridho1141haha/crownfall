@@ -51,6 +51,10 @@ const SAVE_NONE: String = "user://n42_test/save_none.json"
 const SAVE_PREV: String = "user://n42_test/save_prev.json"
 const REAL_PROFILE_PATH: String = "user://player_profile.json"
 const AUTOSTART_META: String = "crownfall_prologue_autostart"
+## N4.3-A: this suite owns the N4.2 terminal-boundary contract, so it disables
+## the exploration segment (one Engine-meta line, same injection convention as
+## AUTOSTART_META). Production defaults to exploration enabled.
+const EXPLORATION_META: String = "crownfall_prologue_exploration"
 const BEAT_01: String = "pl_01_lost_world"
 const BEAT_02: String = "pl_02_faint_resonance"
 const MAX_WAIT_FRAMES: int = 900
@@ -225,6 +229,9 @@ func _initialize() -> void:
 	# Explicit-flow first (stages 2-7); the auto-start default is exercised in
 	# stages 9-10 (same Engine-meta injection convention as the suites above).
 	Engine.set_meta(AUTOSTART_META, false)
+	# N4.3-A keeps this suite's post-pl_02 contract unchanged: the chain ends
+	# at the N4.2 terminal boundary instead of entering the exploration stage.
+	Engine.set_meta(EXPLORATION_META, false)
 	_stage = 1
 	change_scene_to_file(MAIN_SCENE)
 
@@ -529,6 +536,7 @@ func _process(_delta: float) -> bool:
 			if DirAccess.dir_exists_absolute(TEST_DIR):
 				DirAccess.remove_absolute(ProjectSettings.globalize_path(TEST_DIR))
 			Engine.remove_meta(AUTOSTART_META)
+			Engine.remove_meta(EXPLORATION_META)
 			if _failures == 0:
 				print("PASS: All %d N4.2 Prologue Beats checks completed with 0 failures." % _checks)
 				quit(0)

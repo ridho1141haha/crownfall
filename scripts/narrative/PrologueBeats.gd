@@ -24,11 +24,27 @@ extends RefCounted
 ##    are shipped in N4.2 (assets stay PROPOSED in the story design), and no
 ##    caption converts an OPEN lore detail into canon.
 ##  - Dialogue is authored in English (DECIDED language, Story Design §10).
+##
+## N4.3-A: pl_03/pl_04 are EXPLORATION beats orchestrated by the shell and its
+## dedicated stage/actor — they are deliberately NOT in BEAT_IDS and have no
+## authored SequenceRunner sequence, so the runner chain still ends after
+## pl_02 and can never auto-chain past the player-driven exploration interval.
+## Only their narrative TEXT lives here (Story Design authority): pl_03's
+## approved candidate internal line is presented through the existing
+## DialoguePanel at the start of exploration; pl_04's recognition line arrives
+## with N4.3-B and is intentionally absent here.
 
 const BEAT_IDS: Array[String] = [
 	"pl_01_lost_world",
 	"pl_02_faint_resonance",
 ]
+
+## N4.3 exploration beat ids (shell-orchestrated, never runner sequences).
+const PL_03_WANDERER: String = "pl_03_wanderer"
+const PL_04_REPEATED_MARK: String = "pl_04_repeated_mark"
+
+## Presentation speaker for adult Monarch (exploration internal lines).
+const MONARCH: String = "Monarch"
 
 ## Presentation speakers (schema requires a non-empty speaker; narration uses
 ## a presentation label, not a character).
@@ -53,6 +69,37 @@ static func get_beat(beat_id: String) -> Dictionary:
 ## True when the id is one of the authored prologue beats.
 static func is_beat(sequence_id: String) -> bool:
 	return BEAT_IDS.has(sequence_id)
+
+
+## True when the id is one of the shell-orchestrated exploration beats
+## (pl_03/pl_04). These never enter BEAT_IDS: SequenceRunner must not chain
+## or validate them as sequences.
+static func is_exploration_beat(sequence_id: String) -> bool:
+	return sequence_id == PL_03_WANDERER or sequence_id == PL_04_REPEATED_MARK
+
+
+## Human-readable exploration beat title (status presentation only).
+static func exploration_beat_title(beat_id: String) -> String:
+	match beat_id:
+		PL_03_WANDERER:
+			return "The Wanderer"
+		PL_04_REPEATED_MARK:
+			return "The Repeated Mark"
+		_:
+			return "Prologue exploration"
+
+
+## The approved Story Design candidate internal line for an exploration beat,
+## presented through the existing DialoguePanel (not a SequenceRunner
+## sequence). pl_03 uses the Beat 03 candidate text verbatim. pl_04 returns no
+## lines in N4.3-A: its recognition line is the N4.3-B two-object trigger.
+static func exploration_intro_lines(beat_id: String) -> Array[Dictionary]:
+	if beat_id == PL_03_WANDERER:
+		return [
+			{"speaker": MONARCH, "text": "Some things are difficult to forget."},
+			{"speaker": MONARCH, "text": "Especially the things you cannot explain."},
+		]
+	return []
 
 
 ## Placeholder caption for a stage cue id (labelled placeholder; unknown ids

@@ -35,6 +35,7 @@ run_godot "Sequence runner" "--script res://tests/test_sequence_runner.gd" "PASS
 run_godot "N4.0 profile & entry gate" "--script res://tests/test_n40_profile_entry_gate.gd" "PASS: All .* N4.0 Profile & Entry Gate"
 run_godot "N4.1 prologue shell" "--script res://tests/test_n41_prologue_shell.gd" "PASS: All .* N4.1 Prologue Shell"
 run_godot "N4.2 prologue beats" "--script res://tests/test_n42_prologue_beats.gd" "PASS: All .* N4.2 Prologue Beats"
+run_godot "N43A exploration stage" "--script res://tests/test_n43a_exploration_stage.gd" "PASS: All .* N43A Exploration Stage"
 if [ "${failed}" -ne 0 ]; then
   echo "SOME SUITES FAILED (logs in ${LOG_DIR})"
   exit 1
