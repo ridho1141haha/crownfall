@@ -82,6 +82,16 @@ static func validate_sequences_payload(data: Variant) -> Dictionary:
 	return {"ok": true, "errors": errors, "sequences": sequences}
 
 
+## Validates a single sequence dictionary against the full schema (fail-closed).
+## Returns true only for a fully valid sequence; malformed or unknown-op payloads
+## return false without executing anything.
+static func validate_sequence(sequence: Variant) -> bool:
+	var errors: Array[String] = []
+	if typeof(sequence) != TYPE_DICTIONARY:
+		return false
+	return _validate_sequence(sequence as Dictionary, "sequence", errors)
+
+
 static func _validate_sequence(seq: Dictionary, where: String, errors: Array[String]) -> bool:
 	for key: Variant in seq.keys():
 		if String(key) not in ["id", "skip_allowed", "steps"]:
