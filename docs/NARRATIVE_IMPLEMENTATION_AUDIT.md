@@ -192,7 +192,7 @@ No intentional mystery is resolved here; the audit only flags where decisions ar
 ### 6.3 Missing content and optional systems
 
 - Prologue scenes, art/audio, and New Game routing (N4).
-- Chapter I canon dialogue, beat triggers, and chapter-end presentation (after N5 design approval and N4 handoff).
+- Chapter I canon dialogue and beat triggers remain unimplemented; core progression decisions are approved (mandatory recoverable first night, optional Scientist with specialist gates, chapter end on Eldergrove arrival). Chapter-end presentation and voyage/arrival content remain future work after N4 handoff.
 - A chapter/quest framework is absent, but should not be built by default. First prove that a small number of authored sequences and existing progression facts can deliver the approved beats.
 - Portraits, choices, voice, localization, and a full journal are optional future scope, not current requirements.
 
