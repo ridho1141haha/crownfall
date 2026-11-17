@@ -85,6 +85,7 @@ func _show_new_game_confirm() -> void:
 	row.add_theme_constant_override("separation", 12)
 	vbox.add_child(row)
 	var confirm_btn: Button = Button.new()
+	confirm_btn.name = "ConfirmNewGameButton"
 	confirm_btn.text = "Start New Game"
 	confirm_btn.pressed.connect(_on_confirm_new_game)
 	row.add_child(confirm_btn)
