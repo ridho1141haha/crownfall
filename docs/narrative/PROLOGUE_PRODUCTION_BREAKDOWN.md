@@ -3,7 +3,7 @@
 **Status:** N4.0 (entry + profile gate), N4.1 (functional Prologue shell), and N4.2 (beats pl_01 + pl_02 with shell auto-start/chaining) are IMPLEMENTED and verified. The remaining Prologue beats (N4.3–N4.6) remain production-readiness inventory ONLY — nothing else here is implemented, and nothing here converts an OPEN story detail into canon.  
 **Story source:** [`PROLOGUE_STORY_DESIGN.md`](PROLOGUE_STORY_DESIGN.md) — beats, character direction, and lore boundaries.  
 **Runtime source:** [`NARRATIVE_RUNTIME_TECHNICAL_DESIGN.md`](NARRATIVE_RUNTIME_TECHNICAL_DESIGN.md) — N1–N3 foundation (dialogue panel, sequence runner, control lock).  
-**Baseline:** N4.0 verified against `main` @ `a34e5b3` (PR #12 merge; N1–N3 runtime implemented).
+**Baseline (updated 2026-11-17):** `main` @ `539f8564` (after PR #15 merge; N4.0–N4.2 implemented). Earlier references to `a34e5b3` are historical and do not describe the current source baseline.
 
 Legend for asset status: **E** = Existing, **R** = Reusable with modification, **M** = Missing, **P** = Placeholder acceptable (labelled, non-canon), **N** = Requires new production. Complexity: **S** / **M** / **L**.
 
