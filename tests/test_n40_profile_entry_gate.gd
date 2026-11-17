@@ -10,7 +10,9 @@ extends SceneTree
 ## Engine metas — including the ForgottenShoreSession pending-load consumption.
 ## The developer's real user://player_profile.json, user://save_slot_0.json and
 ## their sidecar files are NEVER written, deleted, or staged; they are only
-## READ once for byte-exact non-mutation proof at the end of the run.
+## READ once for byte-exact non-mutation proof at the end of the run. Fixture
+## sidecars (.tmp/.old/.bak/.bak.tmp) ARE cleaned before and after every run,
+## so re-runs stay idempotent even after a previously killed run.
 
 const MAIN_SCRIPT: GDScript = preload("res://scripts/core/Main.gd")
 const PROLOGUE_SHELL_SCRIPT: GDScript = preload("res://scripts/narrative/PrologueShell.gd")
@@ -91,11 +93,24 @@ func _rm(path: String) -> void:
 		DirAccess.remove_absolute(ProjectSettings.globalize_path(path))
 
 
+## Sidecar cleanup for fixture paths only (.tmp/.old = PlayerProfile staged
+## write convention; .bak/.bak.tmp = SaveManager convention). A previously
+## killed run can leave stale sidecars behind, which would make the leftover
+## checks fail on re-run even though the implementation works — so they are
+## cleaned before fixtures are (re)created and again after the run finishes.
+## The real save/profile and THEIR sidecars are never touched here.
+func _clean_fixture_sidecars() -> void:
+	for path: String in [PROFILE_FALSE, PROFILE_TRUE, PROFILE_MALFORMED, PROFILE_NO_FIELD, PROFILE_SCHEMA2, PROFILE_WRITE_TARGET, SAVE_NONE, SAVE_PREV, SAVE_LEGACY]:
+		for suffix: String in [".tmp", ".old", ".bak", ".bak.tmp"]:
+			_rm(path + suffix)
+
+
 func _prepare_fixtures() -> void:
 	# Fresh isolation dir on every run (idempotent, never touches real files).
 	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(TEST_DIR))
 	for path: String in [PROFILE_FALSE, PROFILE_TRUE, PROFILE_MALFORMED, PROFILE_NO_FIELD, PROFILE_SCHEMA2, PROFILE_WRITE_TARGET, SAVE_NONE, SAVE_PREV, SAVE_LEGACY]:
 		_rm(path)
+	_clean_fixture_sidecars()
 	_rm(PROFILE_UNREADABLE)
 	_rm(PROFILE_WRITE_BLOCKED)
 	if DirAccess.dir_exists_absolute(PROFILE_UNREADABLE):
@@ -130,12 +145,17 @@ func _valid_v2_save_payload() -> Dictionary:
 
 ## SAFETY ASSERTION (review fix): every injection point is audited — the test
 ## must never resolve its save/profile target to the developer's real default
-## paths. Runs before every scenario hand-off.
-func _set_metas(profile_path: String, save_path: String) -> void:
-	_check(save_path != SaveManager.DEFAULT_SAVE_PATH and save_path.begins_with(TEST_DIR + "/"), "injected save path is isolated from the real player save (%s)" % save_path)
-	_check(profile_path != PlayerProfile.DEFAULT_PROFILE_PATH and profile_path.begins_with(TEST_DIR + "/"), "injected profile path is isolated from the real player profile (%s)" % profile_path)
+## paths. FAIL-CLOSED: if any assertion fails, the metas are NOT installed and
+## the caller aborts without proceeding (the failed _check has already queued
+## quit(1), so the run ends with exit code 1).
+func _set_metas(profile_path: String, save_path: String) -> bool:
+	if not _check(save_path != SaveManager.DEFAULT_SAVE_PATH and save_path.begins_with(TEST_DIR + "/"), "injected save path is isolated from the real player save (%s)" % save_path):
+		return false
+	if not _check(profile_path != PlayerProfile.DEFAULT_PROFILE_PATH and profile_path.begins_with(TEST_DIR + "/"), "injected profile path is isolated from the real player profile (%s)" % profile_path):
+		return false
 	Engine.set_meta("crownfall_profile_path", profile_path)
 	Engine.set_meta("crownfall_menu_save_path", save_path)
+	return true
 
 
 func _attach_route_recorder() -> void:
@@ -174,7 +194,10 @@ func _shore_session() -> ForgottenShoreSession:
 
 
 func _goto_main_next_stage(next_stage: int, profile_path: String, save_path: String) -> void:
-	_set_metas(profile_path, save_path)
+	# Fail-closed: on a failed isolation assertion the metas are not installed
+	# and the scene change never happens (quit(1) is already queued).
+	if not _set_metas(profile_path, save_path):
+		return
 	_stage = next_stage
 	_wait_frames = 0
 	change_scene_to_file(MAIN_SCENE)
@@ -193,7 +216,10 @@ func _initialize() -> void:
 	for suffix: String in [".tmp", ".bak", ".old"]:
 		_real_save_sidecars[suffix] = _snapshot_sidecar(SaveManager.DEFAULT_SAVE_PATH + suffix)
 		_real_profile_sidecars[suffix] = _snapshot_sidecar("user://player_profile.json" + suffix)
-	_set_metas(PROFILE_MISSING, SAVE_NONE)
+	# Fail-closed: if the first isolation assertion fails, no metas are
+	# installed, no scene loads, and the run ends with exit code 1.
+	if not _set_metas(PROFILE_MISSING, SAVE_NONE):
+		return
 	_stage = 1
 	change_scene_to_file(MAIN_SCENE)
 
@@ -522,7 +548,9 @@ func _process(_delta: float) -> bool:
 			var session4: ForgottenShoreSession = _shore_session()
 			_check(session4.time_manager.current_day == 2, "Continue works despite corrupted profile (loads day 2)")
 			# --- Prologue route placeholder sanity (entry contract target) ---
-			_set_metas(PROFILE_FALSE, SAVE_NONE)
+			# Fail-closed: stop processing entirely if the assertion fails.
+			if not _set_metas(PROFILE_FALSE, SAVE_NONE):
+				return true
 			_stage = 28
 			_wait_frames = 0
 			change_scene_to_file(String(MAIN_SCRIPT.PROLOGUE_ROUTE_SCENE))
@@ -548,9 +576,10 @@ func _process(_delta: float) -> bool:
 			if not _on_main():
 				return false
 			_check(_on_main(), "placeholder shell returns to the main menu")
-			# --- Hygiene: remove fixtures, then prove the real files untouched ---
+			# --- Hygiene: remove fixtures + their sidecars, then prove the real files untouched ---
 			for path: String in [PROFILE_FALSE, PROFILE_TRUE, PROFILE_MALFORMED, PROFILE_NO_FIELD, PROFILE_SCHEMA2, PROFILE_WRITE_TARGET, SAVE_NONE, SAVE_PREV, SAVE_LEGACY]:
 				_rm(path)
+			_clean_fixture_sidecars()
 			if DirAccess.dir_exists_absolute(PROFILE_UNREADABLE):
 				DirAccess.remove_absolute(ProjectSettings.globalize_path(PROFILE_UNREADABLE))
 			_rm(TEST_DIR + "/blocker_file")
