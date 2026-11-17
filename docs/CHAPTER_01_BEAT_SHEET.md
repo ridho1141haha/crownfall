@@ -16,8 +16,8 @@ Chapter I should turn the Monarch's immediate situation into a small, believable
 1. Establish the immediate need to survive on an unfamiliar shore.
 2. Let the player build a foothold through the existing collection, recruitment, construction, and first-night loop.
 3. Introduce the Scientist and research as a way to deepen exploration and preparation, not as a lore exposition dump.
-4. Give the player a concrete reason to repair the vessel and leave Forgotten Shore.
-5. Preserve the Monarch's unanswered questions from the Prologue without revealing protected mysteries.
+4. Give the player a concrete reason to repair the vessel, depart, and discover Eldergrove Forest.
+5. End Chapter I on arrival at Eldergrove, giving the next chapter a natural launch point while preserving the Monarch's unanswered questions.
 
 The Monarch is not seeking a throne at the start. Leadership should emerge from practical decisions and the community's reliance on those decisions. The chapter should not instantly turn the Monarch into a confident ruler or trained mage.
 
@@ -28,7 +28,7 @@ The Monarch is not seeking a throne at the start. Leadership should emerge from 
 - **Short, purposeful dialogue:** use dialogue only when it adds character, context, or a clear objective. Avoid explaining systems the HUD already explains.
 - **No forced exposition:** Greedling origins, the Greed Portal, Ancient Relic identity, and shrine identities remain unresolved.
 - **Earned leadership:** the Monarch helps establish a settlement through actions; no self-coronation or instant claim of authority.
-- **Preserve the existing loop:** first-night breach remains recoverable; narrative must not punish or soft-lock a player for a failed defense.
+- **Mandatory first-night milestone, recoverable outcome:** the first night must occur to complete Chapter I's opening survival arc. Both a successful defense and a breach-recovery outcome remain valid; narrative must never soft-lock the player.
 - **No new framework by default:** use the N1–N3 runtime and existing gameplay state. A quest journal, branching dialogue, chapter manager, or new save schema requires separate justification and approval.
 
 ## 3. Candidate beat sequence
@@ -41,19 +41,20 @@ The sequence below is a proposed narrative spine, not a locked linear quest chai
 | ch1_02_foothold | A Place to Survive | Turn immediate survival into the first practical settlement decisions. | Existing resource nodes, Town Center/Hearth, Vagrant Camp, recruitment, wall/building loop. | Player completes a small set of existing early-game milestones; exact set TBD. |
 | ch1_03_first_night | The First Night | Make the day/night loop feel consequential without explaining enemy origins. | Existing sunset warnings, Greedling encounter, wall/support defense, sunrise outcome. | First night resolves; both survived and breach-recovery paths remain valid. |
 | ch1_04_after_dawn | After the Night | Acknowledge the settlement's condition and let the player recover/continue. | Existing first_night_survived, settlement_breached, sunrise/autosave behavior. | Player regains normal control after sunrise; no narrative soft lock on breach. |
-| ch1_05_scientist | A Different Kind of Knowledge | Introduce the Scientist as a practical specialist who can support the settlement. | Scientist discovery at x=-1010, Scientist's Hut at x=-980, recruitment and research. | Scientist recruitment becomes available/completes through existing gameplay. |
-| ch1_06_research | Signs of the Past | Give research a restrained narrative frame without resolving shrine, crown, or relic lore. | Existing Inscription Studies / Improved Flares research and world-clock progress. | One existing research milestone completes; exact technology TBD. |
-| ch1_07_prepare_vessel | The Way Forward | Shift from settling in place to preparing to leave the island. | Existing three-stage Shipwreck repair and voyage-readiness state. | Vessel reaches the existing Stage 3 / ready-to-sail state. |
-| ch1_08_departure | Beyond the Shore | Provide a clean chapter-end handoff toward the next island without revealing what awaits there. | Existing set-sail / island-cleared presentation; future Eldergrove transition is not implemented. | Owner-approved chapter end and transition condition; currently OPEN. |
+| ch1_05_scientist | A Different Kind of Knowledge | Introduce the Scientist as an optional specialist whose expertise enables settlement upgrades and research. | Scientist discovery at x=-1010, Scientist's Hut at x=-980, recruitment and research. | Scientist can be discovered and recruited, but recruitment is not a Chapter I completion requirement. |
+| ch1_06_research | Signs of the Past | Show the practical value of specialist knowledge without resolving shrine, crown, or relic lore. | Existing Inscription Studies / Improved Flares research and world-clock progress; Scientist recruitment gate. | Research remains optional for chapter completion. Research and any upgrade that requires specialist knowledge stay unavailable until the Scientist is recruited. |
+| ch1_07_prepare_vessel | The Way Forward | Shift from settling in place to preparing to leave the island. | Existing three-stage Shipwreck repair and voyage-readiness state. | Vessel reaches Stage 3 / ready-to-sail; this is a departure prerequisite, not the chapter ending. |
+| ch1_08_departure | Beyond the Shore | Carry the player from Forgotten Shore to the first arrival in Eldergrove Forest, ending Chapter I on discovery rather than on a menu/state flag. | Existing set-sail / island-cleared presentation; future voyage and Eldergrove transition are not implemented. | Chapter I ends when the player arrives in Eldergrove and control is handed over there. The exact arrival scene and Chapter II opening remain to be designed. |
 
 ### Beat ordering notes
 
 - ch1_01_arrival is a boundary/handoff from Prologue beat 09, not a second shipwreck or a replacement landing sequence.
-- ch1_02_foothold and ch1_03_first_night should be driven by existing gameplay milestones. Do not add arbitrary mandatory tasks just to force dialogue.
+- ch1_02_foothold leads into a mandatory first-night milestone. The game may pace the approach through existing gameplay, but Chapter I cannot bypass the first night entirely.
 - ch1_04_after_dawn must support both first-night outcomes. A breach is a recoverable gameplay state, not a failed story branch.
-- ch1_05_scientist and ch1_06_research can be paced by player choice; do not require the player to recruit or research at a specific time unless approved.
-- ch1_07_prepare_vessel and ch1_08_departure must distinguish “vessel ready” from “actual voyage/next-island scene”. The latter is not currently implemented.
-- The order of Scientist/research and ship repair is a proposal; do not block ship progression on optional research without an explicit design decision.
+- Scientist discovery/recruitment is optional for Chapter I completion. However, research and specialist-dependent upgrades must remain gated until the Scientist is recruited; do not silently grant those capabilities without the specialist.
+- Research itself is optional and must not block ship repair or departure. The player may leave without recruiting the Scientist or completing research.
+- ch1_07_prepare_vessel marks readiness only. ch1_08_departure includes the actual voyage and arrival at Eldergrove; Chapter I ends on arrival, not at the departure prompt.
+- The Eldergrove voyage/arrival transition does not exist yet and must be separately scoped and implemented.
 
 ## 4. Dialogue and character scope (proposal)
 
@@ -79,30 +80,29 @@ Dialogue language, voice, speaker names, portrait style, and whether dialogue is
 
 ## 6. Explicitly unresolved owner decisions
 
-1. Is Chapter I's final beat “vessel ready”, the player explicitly choosing to set sail, or arrival at Eldergrove? These are different milestones and must not be conflated.
-2. Does Chapter I require a fixed first-night milestone, or should a player who delays/advances differently still progress naturally?
-3. Should the Scientist be a required Chapter I character, or an optional specialist whose research can be discovered at the player's pace?
-4. Which existing NPCs, if any, should have authored dialogue? Are Vagrant and Scientist sufficient?
-5. What is the intended Chapter I dialogue language and presentation style?
-6. Should the crown be visible during Chapter I gameplay, and if so, how is its visual continuity represented without adding an inventory system?
-7. Does any Chapter I beat mention the royal symbol or Monarch's unanswered questions, or should those remain subtle until later?
-8. What is the canonical relationship, if any, between Forgotten Shrine and Shrine of Growth? Keep separate until decided.
-9. What is the Ancient Relic at the Greed Portal: an artifact, a gameplay reward label, or something else? Keep undefined.
-10. What are the Greedlings and Greed Portal, and why do they attack? Keep undefined.
-11. What is the exact transition from Forgotten Shore to Eldergrove, and what is the Chapter II opening?
-12. Which beats are skippable, optional, or replayable? The current runtime supports sequence skip/cancel, but content policy is not yet approved.
+1. Which existing NPCs, if any, should have authored dialogue? Are Vagrant and Scientist sufficient?
+2. What is the intended Chapter I dialogue language and presentation style?
+3. Should the crown be visible during Chapter I gameplay, and if so, how is its visual continuity represented without adding an inventory system?
+4. Does any Chapter I beat mention the royal symbol or Monarch's unanswered questions, or should those remain subtle until later?
+5. What is the canonical relationship, if any, between Forgotten Shrine and Shrine of Growth? Keep separate until decided.
+6. What is the Ancient Relic at the Greed Portal: an artifact, a gameplay reward label, or something else? Keep undefined.
+7. What are the Greedlings and Greed Portal, and why do they attack? Keep undefined.
+8. What is the exact voyage/arrival presentation from Forgotten Shore to Eldergrove, and what is the Chapter II opening? Chapter I's endpoint is fixed as arrival at Eldergrove, but the transition details remain open.
+9. Which beats are skippable, optional, or replayable? The current runtime supports sequence skip/cancel, but content policy is not yet approved.
 
 ## 7. Proposed acceptance criteria
 
 A Chapter I design is ready for implementation only when:
 
-- The owner approves the chapter purpose, beat order, and chapter-end condition.
+- The owner-approved chapter boundary is arrival at Eldergrove; vessel readiness, departure, and arrival are distinct milestones.
+- The first night is mandatory, with both success and breach-recovery outcomes supported.
+- Scientist recruitment is optional for Chapter I completion; research and specialist-dependent upgrades remain gated until recruitment.
 - Every beat has an explicit trigger, gameplay anchor, player-control policy, expected outcome, and failure/recovery behavior.
 - Both first-night success and breach recovery remain valid.
 - No beat requires a gameplay feature that does not exist unless that feature is separately approved and scoped.
 - Dialogue has a defined purpose and speaker; no filler/tutorial duplication.
 - All OPEN lore stays OPEN; protected Prologue mysteries remain protected.
-- The design distinguishes vessel readiness, departure, and next-island arrival.
+- The design distinguishes vessel readiness, departure, and Eldergrove arrival, with Chapter I ending on arrival.
 - Existing save/load, progression, and first-night gameplay contracts are preserved.
 - The implementation can be split into small PRs with automated tests and windowed verification.
 
