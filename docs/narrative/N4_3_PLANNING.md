@@ -72,7 +72,7 @@ These are staging suggestions, not fixed canon props. The mark must remain visua
 ## 3. Interaction rules
 
 - Movement is limited to the authored road area; the player cannot wander into an unbuilt chapter or leave the stage bounds.
-- Use one simple inspect input (prefer the existing project interaction convention only after confirming its current binding).
+- Use the existing `interact` input action for inspection. It is already defined in `project.godot` and mapped to physical E; do not introduce a second action unless a concrete input conflict is found.
 - Show a small contextual prompt only when an inspectable is in range.
 - One inspect action inspects the nearest eligible object; do not inspect multiple objects at once.
 - An object's inspection is idempotent. Repeating the same object does not increase progress.
@@ -101,8 +101,8 @@ The exact scene tree and script boundaries must be confirmed against the current
 
 ### Reuse policy
 
-- Reuse the existing Monarch walk/idle art if the actual asset is present and suitable; verify the asset path and animation frames first.
-- Reuse the established camera-follow approach if it can be isolated cleanly.
+- The Monarch sprite sheet already exists at `assets/characters/player/player_monarch_sheet.png`. `scenes/player/Player.tscn` uses it as an 8-frame horizontal `Sprite2D`; `scripts/player/Player.gd` treats frames 0–3 as idle and 4–7 as walking. Verify the rendered appearance and scale in the Prologue stage before deciding whether the asset needs modification.
+- `scenes/player/Player.tscn` also provides an existing `CharacterBody2D` + `Camera2D` reference (zoom 1.5, vertical offset, smoothing). Reuse the camera approach selectively; do not instance the full gameplay player scene unchanged.
 - Reuse `DialoguePanel`, `SequenceRunner`, `PlayerControlLock`, and `NarrativeState` where their existing contracts fit.
 - Do **not** attach `ForgottenShoreSession`, `InteractionResolver`, economy, resource, building, NPC, research, time, or save systems to the Prologue stage.
 - Do not use the full gameplay `PlayerController` unchanged if it carries world commands or gameplay input actions. Extract no broad abstraction merely for this slice; a small dedicated actor is preferred.
@@ -122,7 +122,7 @@ Before implementation, inspect the actual `NarrativeState`, `PrologueBeats`, and
 
 Do not solve this by adding a generic `wait_for_interaction`, `move_player`, or `inspect_object` operation to `NarrativeData` / `SequenceRunner` unless a separate architecture review proves a reusable operation is necessary. A Prologue-specific controller/state transition is preferred.
 
-The current shell configures `SequenceRunner` with the shell as control target. The implementation must deliberately choose the exploration actor as the control target for interactive dialogue, while preserving the no-control behavior of pl_01/pl_02. Do not leave the actor movable during dialogue.
+The current `PrologueShell._initialize_runtime()` configures `SequenceRunner` with the shell itself as `control_target`, because N4.1/N4.2 have no gameplay Monarch actor. `PlayerControlLock` disables the target's physics processing and unhandled-input processing. The N4.3 implementation must configure the runner against the dedicated exploration actor (or use an equally narrow, explicitly tested Prologue-specific lock path) before actor-controlled dialogue begins. Ensure the dialogue sequence actually invokes the lock operation; `DialoguePanel` consuming unhandled input alone does not stop `_physics_process` movement. Preserve the no-control behavior of pl_01/pl_02. Do not leave the actor movable during dialogue.
 
 ## 5. Acceptance criteria
 
@@ -194,7 +194,7 @@ The following remain intentionally OPEN:
 - Final visual design of the recurring mark.
 - Exact road background, palette, prop art, and environment composition.
 - Whether travel-worn details use equipment, a note prop, or environmental clues.
-- Exact key binding for inspection, pending confirmation of current input map.
-- Exact actor scene node type and scene tree, pending inspection of reusable art and current shell layering.
+- Final visual suitability/scale of the existing Monarch sprite sheet in the Prologue composition.
+- Exact actor scene tree and camera framing, pending the N4.3-A spike and windowed inspection.
 
 These open details must not block the planning document, but must be resolved or explicitly left as labelled placeholders before implementation.
