@@ -21,10 +21,17 @@ extends Node2D
 ## on every completion, skip, cancellation, exit, and teardown path, and
 ## unlock() is freed-safe, so a freed actor can never crash cleanup.
 ##
+## INSPECTABLES CONTRACT (N4.3-B): the stage owns a PrologueMarkInspectables
+## child built fail-closed during setup — the three placeholder mark objects
+## render as pl_03 scenery and their shared prompt is driven per physics frame
+## during pl_04. The component owns the range query and the per-run inspection
+## state; interaction input, the recognition dialogue, and the completion
+## handshake arrive with the later N4.3-B slices through this same stage.
+##
 ## All environment art is labelled placeholder ColorRect geometry — no art
-## assets ship in N4.3-A and nothing here implies lore (no road name, no
-## kingdom/dynasty references, no royal-symbol design; the mark props belong
-## to N4.3-B).
+## assets ship in N4.3-A/N4.3-B and nothing here implies lore (no road name,
+## no kingdom/dynasty references, no royal-symbol design; the mark glyph is a
+## labelled placeholder whose design stays an OPEN owner decision).
 
 signal exploration_handoff_reached()
 
@@ -54,6 +61,7 @@ const BACKDROP_MARGIN: float = 4096.0
 
 var _panel: DialoguePanel = null
 var _explorer: PrologueExplorer = null
+var _inspectables: PrologueMarkInspectables = null
 var _dialogue_lock: PlayerControlLock = null
 var _active_beat: String = ""
 var _built: bool = false
@@ -82,6 +90,15 @@ func setup(panel: DialoguePanel, explorer_texture: Texture2D) -> bool:
 	_panel = panel
 	_dialogue_lock = PlayerControlLock.new()
 	_build_environment()
+	# N4.3-B (D6): the inspectable set is built fail-closed BEFORE the actor —
+	# a failed build fails the whole setup, so no partial inspection system is
+	# ever committed and the shell falls back to its idle boundary.
+	_inspectables = PrologueMarkInspectables.new()
+	if not _inspectables.build(ROAD_MIN_X, ROAD_MAX_X, GROUND_Y):
+		_inspectables.free()
+		_inspectables = null
+		return false
+	add_child(_inspectables)
 	# Movement bounds and camera limits are authored as SEPARATE seams (both
 	# currently the road band): the camera limits define what may be visible,
 	# the movement bounds where the actor can walk. The regression suite
@@ -153,6 +170,8 @@ func end_segment() -> void:
 		return
 	_segment_ended = true
 	close_active_dialogue()
+	if _inspectables != null and is_instance_valid(_inspectables):
+		_inspectables.set_prompt_target("")
 	if _explorer != null and is_instance_valid(_explorer):
 		_explorer.set_input_enabled(false)
 		_explorer.freeze()
@@ -169,6 +188,8 @@ func teardown() -> void:
 	# Invalidate the dialogue coroutine first so a resumed await observes the
 	# torn-down state and never re-enables input for a dead segment.
 	close_active_dialogue()
+	if _inspectables != null and is_instance_valid(_inspectables):
+		_inspectables.set_prompt_target("")
 	if _explorer != null and is_instance_valid(_explorer):
 		_explorer.set_input_enabled(false)
 		_explorer.freeze()
@@ -200,6 +221,10 @@ func handoff_emitted() -> bool:
 	return _handoff_emitted
 
 
+func inspectables() -> PrologueMarkInspectables:
+	return _inspectables
+
+
 func is_segment_ended() -> bool:
 	return _segment_ended
 
@@ -208,20 +233,48 @@ func is_torn_down() -> bool:
 	return _torn_down
 
 
+## Per-beat exploration conditions, dispatched on the active beat. Both
+## branches are gated on the torn-down/segment-ended flags first, so a
+## finished or cancelled segment can never process anything (the pl_04
+## prompt/inspection logic needs its own branch — the old single-purpose
+## early return on _handoff_emitted belonged to pl_03 only).
+func _physics_process(_delta: float) -> void:
+	if _torn_down or _segment_ended:
+		return
+	if _active_beat == PrologueBeats.PL_03_WANDERER:
+		_process_pl_03()
+	elif _active_beat == PrologueBeats.PL_04_REPEATED_MARK:
+		_process_pl_04()
+
+
 ## Exploration condition: the handoff area completes pl_03 when the actor
 ## reaches the east end of the road. The request fires exactly once and only
 ## while pl_03 is active with movement enabled (so a placed-but-not-yet-
 ## controllable actor can never complete the beat early).
-func _physics_process(_delta: float) -> void:
-	if _torn_down or _segment_ended or _handoff_emitted:
-		return
-	if _active_beat != PrologueBeats.PL_03_WANDERER:
+func _process_pl_03() -> void:
+	if _handoff_emitted:
 		return
 	if not is_input_enabled():
 		return
 	if _explorer.position.x >= HANDOFF_X:
 		_handoff_emitted = true
 		exploration_handoff_reached.emit()
+
+
+## pl_04 per-frame presentation (N4.3-B slice 1): prompt visibility follows
+## the nearest eligible inspectable while the beat is interactive. The D5
+## presentation gates (input enabled, no dialogue open, stage lock not held)
+## suppress the prompt while any of them fail — the interact polling that
+## completes the full D5 gate arrives with the interaction slice.
+func _process_pl_04() -> void:
+	if _inspectables == null or not _inspectables.is_valid():
+		return
+	if _explorer == null or not is_instance_valid(_explorer):
+		return
+	if not is_input_enabled() or is_dialogue_locked() or (_panel != null and is_instance_valid(_panel) and _panel.is_open()):
+		_inspectables.set_prompt_target("")
+		return
+	_inspectables.set_prompt_target(_inspectables.nearest_eligible_id(_explorer.position.x))
 
 
 ## Presents the approved intro line through the existing DialoguePanel with
