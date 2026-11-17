@@ -47,7 +47,9 @@ The Prologue is fully designed but has **no runtime implementation** (no scenes,
 
 **Remaining OPEN for the Prologue** (`PROLOGUE_STORY_DESIGN.md:248-265`): the royal symbol's exact design, the ruins' name, the exact childhood location, prior travel notes/artifacts, the ship's origin, the voyage destination, the cause of the storm, the crown's post-wreck appearance (draft), dialogue language/voice, and Prologue skip behavior.
 
-**Verdict:** crown discovery, awakening, and vision are **designed Prologue beats awaiting the N0 design-lock approvals and N1–N4 runtime**, not missing Chapter I beats. They are not implemented today.
+**Verdict:** crown discovery, awakening, and vision are **designed Prologue beats awaiting the N0 design-lock approvals and N4 content**, not missing Chapter I beats. They are not implemented today.
+
+**Runtime foundation note:** phases N1–N3 are implemented on `feat/narrative-runtime-foundation` — `DialoguePanel` + `PlayerControlLock` + `dialogue_advance` input (N2), `SequenceRunner` (N3), in-memory `NarrativeState` + `NarrativeData` validator (N1), and a Start New Game overwrite confirmation. All tests use non-canon fixtures; no Prologue or Chapter I content uses the foundation yet, and no save schema changed.
 
 ---
 
@@ -138,9 +140,10 @@ Status: **EXISTS** = implemented and reachable; **PARTIAL** = gameplay/system ex
 **Exists**
 - NPC agents with IDs/roles/states; tool stands; Scientist discovery/housing/recruitment/research handoff.
 - Interaction prompts and one-line feedback (`InteractionResolver.gd:146-198`; `ClockHUD.gd:11,125`).
+- The N2 dialogue runtime foundation (`DialoguePanel`, `dialogue_advance` input, `PlayerControlLock`) exists but is not wired to any NPC.
 
 **Missing**
-- Dialogue runtime/UI (roadmap N2), conversation data, speaker names/portraits, choices, voice.
+- Canon conversation data and NPC integration (the panel exists; no Chapter I script/speaker content exists), speaker names/portraits, choices, voice.
 - NPC names beyond role/display name; `description` fields are never displayed.
 - Any `talk` interaction that is not also a recruit/research action.
 

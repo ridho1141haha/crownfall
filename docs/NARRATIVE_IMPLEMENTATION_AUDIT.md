@@ -1,7 +1,7 @@
 # Crownfall — Narrative Implementation Readiness Audit
 
 **Audit date:** 2026-11-16 (revised)  
-**Repository snapshot:** `main` @ `b19d109dd48af5f174ef0f973cc9f4b8af664433` (PR #10 rebased onto it)  
+**Repository snapshot:** `main` @ `6d209970170a9f1fa21946385c79ad02d5fb437d` (PR #10 merged); foundation revision audited on `feat/narrative-runtime-foundation` (phases N1–N3 implemented, test fixtures only).  
 **Engine:** Godot `4.7.2.stable`  
 **Scope:** narrative implementation only. No gameplay code was modified, no features were added, no lore was invented.  
 **Companion documents:** [`CHAPTER_01_NARRATIVE_GAP_ANALYSIS.md`](CHAPTER_01_NARRATIVE_GAP_ANALYSIS.md), the official [`NARRATIVE_IMPLEMENTATION_ROADMAP.md`](NARRATIVE_IMPLEMENTATION_ROADMAP.md) (phases N0–N5), and [`narrative/PROLOGUE_STORY_DESIGN.md`](narrative/PROLOGUE_STORY_DESIGN.md)
@@ -31,7 +31,7 @@ Boundary note: since the first audit, the repository gained a **Prologue story d
 | Gameplay loop | **Implemented / tested** | Movement, economy, building, NPC builder/farmer/archer, night defense, save/load, specialists, research, shrine/structure foundation, buffs, era progression. The presentation refactor (`ShoreView`/`ShoreFX`, PR #8) is merged. |
 | Narrative design | **Prologue designed, Chapter I not yet** | “The Crown's Call” defines 9 Prologue beats, Monarch direction, vision content, and an OPEN-decision list. Chapter I has no approved beat sheet yet (roadmap N5). |
 | Narrative content (runtime) | **Near-zero** | No playable opening, crown, vision, dialogue, or chapter progression. Only functional prompts/status text and a few lore-flavoured names/descriptions. |
-| Narrative infrastructure | **Absent / minimal** | No dialogue system, quest/objective system, narrative event system, chapter state, cutscene/sequence runner, or narrative save fields. Roadmap N1–N3 plan the smallest needed foundation. |
+| Narrative infrastructure | **Foundation only (N1–N3)** | Dialogue panel, control lock, sequence runner, and in-memory state exist as a tested, test-fixture-only foundation. No quest/objective system, no chapter state, no cutscene content, no narrative save fields. |
 | Narrative data | **Fragments** | Narrative-flavoured `description` fields exist in data JSON but are validated only; no UI reads them. |
 | Narrative assets | **Absent** | No crown, portrait, dialogue box, cutscene, or vision assets. Asset guidelines defer narrative asset sets; the Prologue design lists the needed assets. |
 
@@ -68,7 +68,7 @@ Status legend: **Implemented** = reachable in runtime; **Partial** = functional 
 5. A 7-second victory banner on shipwreck escape.
 6. World labels (Town Center, wall/watchtower/farm status, shipwreck, Greed Portal, resource nodes).
 
-There is still no authored opening, no character introduction, no crown, no vision, no dialogue, and no chapter framing at runtime. The Prologue that would provide the first four is designed but not built.
+There is still no authored opening, no character introduction, no crown, no vision, no canon dialogue, and no chapter framing at runtime. A dialogue panel + sequence runner foundation now exists (N1–N3, test fixtures only) but is not wired into any gameplay content; the Prologue that would provide the opening is designed but not built.
 
 ---
 
@@ -76,18 +76,18 @@ There is still no authored opening, no character introduction, no crown, no visi
 
 | Capability | Status | Evidence | Reuse potential |
 |---|---|---|---|
-| Dialogue system | **Absent** | No dialogue/quest scripts or scenes; no dialogue input action in `project.godot`; no dialogue/portrait assets; no NPC conversation data. Only one-line `ClockHUD.FeedbackLabel` and world prompts. Roadmap N2 plans a minimal dialogue view. | None as-is; build new per N2. |
+| Dialogue system | **Foundation only** | `DialoguePanel` (speaker/body/advance, consumes input while open) exists with a 19-check suite; no canon content, portraits, choices, voice, or history. Roadmap N2. | None beyond the foundation; content authoring still needed. |
 | Quest / objective system | **Absent** | `ClockHUD` exposes status/resources/feedback/forecast/population/research/structures only; no objective/quest tracker. PRD defers a quest tracker; REVISED baseline shows “Quest Progress (later)”. | None as-is; only if a later approved milestone needs it. |
-| Narrative event system | **Absent (gameplay signals only)** | No EventBus/GameManager autoload or narrative trigger system. Gameplay emits signals: `feedback_message`, phase transitions (`daylight_started`, `sunset_started`, `night_started`, `sunrise_reached`), `night_encounter_resolved`, `enemy_defeated`, `building_attacked`, `specialist_discovered`, `specialist_recruited`, `research_started`, `research_completed`, `structure_activated`, `era_changed`, `fact_recorded`. See §3.1 for the exact transition-time semantics of the TimeManager signals. | Signals are useful hooks, but they are gameplay events, not a narrative event/trigger system with conditions, once-only state, and skip/replay semantics (roadmap N1). |
+| Narrative event system | **Partial foundation** | In-memory `NarrativeState` (per-run completed IDs) + `SequenceRunner` exactly-once completion. Gameplay signals remain the only world events; no persisted trigger/condition system. | Hooks exist; conditions/once-only/seen state beyond the runner are future work (N4/N5). |
 | Story progression state | **Partial** | `ProgressionState` stores durable, strictly validated facts (14 registered IDs). `EraProgressionManager` tracks era. Session stores `ReignState`, shipwreck stage, portal relic, shrine offering used. No narrative chapter/beat/seen state. | Strong foundation for milestone gates. Facts are idempotent and persisted. |
 | Narrative save/load | **Partial** | Schema v2 (`SaveManager.SCHEMA_VERSION = 2`). `build_save_payload` persists `progression_flags` including `progression_facts`, `era_id`, `reign_state`, `shipwreck_stage`, `portal_relic_looted`, `shrine_offering_used_today`, node/tree states, and optional `research`. No dialogue/cutscene/quest/chapter fields. | Reuse validation/migration patterns. Narrative state needs either registered facts or a new optional validated save key — the N1 save decision. |
-| Cutscene / scripted sequence support | **Absent (one overlay only)** | `ClockHUD.show_victory_banner` creates a full-screen `ColorRect` overlay, fades in, waits 7s, fades out, frees itself. No input gating, skip, camera control, movement lock, or sequence state. No `AnimationPlayer`/cutscene scene. Roadmap N3 plans a minimal typed sequence runner. | The banner is a visual seed, not a cutscene system. |
+| Cutscene / scripted sequence support | **Foundation only** | `SequenceRunner` executes typed allowlisted steps (dialogue/wait/lock_control/unlock_control/play_cue/change_scene/finish) with skip/cancel cleanup and a 31-check suite; no cinematic content or camera scripting yet. `ClockHUD.show_victory_banner` remains the only shipped in-game overlay. | The runner is the foundation; Prologue staging/camera work is N4. |
 | NPC interaction infrastructure | **Partial** | `InteractionResolver.resolve_nearest` returns `{kind, target_id, primary_command, upgrade_command, prompt_text, distance}`; `Player` emits input signals; session dispatches `execute_world_command`; specialist discovery/recruit, research start, structure activation, camps, shipwreck, portal, trees, buildings. No `talk` kind, no conversation state. | Extend, do not replace. Add a `talk` target/command or a dialogue trigger alongside existing prompts. |
 | Presentation layer (merged PR #8) | **Present, not narrative** | `ShoreView` (world visual setup/sync) and `ShoreFX` (transient feedback) are merged and wired from the session (`fx = ShoreFX.new(...)` `:86`, `view = ShoreView.new(...)` `:87`, `view.advance_and_sync(delta)` `:148`). They are world presentation helpers, not a dialogue, cutscene, or narrative runtime. | Keeps presentation separated; narrative UI should follow the same separation (own surface, no gameplay authority). |
 | Narrative text authoring | **Fragments** | Narrative-flavoured `description` fields exist in `data/specialists.json`, `data/structures.json`, `data/technologies.json`, `data/eras.json`. Catalogs validate/normalize them; no UI/query reads `description` (only `display_name` is surfaced). | Authoring seeds only; needs a dialogue/text data format and a UI consumer. |
 | Narrative assets | **Absent** | `assets/characters` has only `npc/` and `player/`; landmarks contain only `env_greed_portal.png` and `env_shrine_structure.png`; no crown, portrait, dialogue box, cutscene, or vision assets. Asset guidelines defer narrative sets; the Prologue design §7 lists the needed visuals/audio. | New assets required for Prologue. |
 | Localization | **Absent** | No translation resources, no locale keys; all text is inline GDScript/data strings. Prologue dialogue language/voice is marked OPEN. | New foundation required before large dialogue volume. |
-| Narrative test coverage | **Absent** | Existing suites cover gameplay systems; no dialogue/quest/cutscene/narrative-state tests. | Extend existing `SceneTree` + `_check` harness patterns. |
+| Narrative test coverage | **Foundation suites** | `tests/test_narrative_foundation.gd` (39 checks), `tests/test_dialogue_panel.gd` (19), `tests/test_sequence_runner.gd` (31); fixtures under `tests/fixtures/` are explicitly non-canon. No content-level narrative tests yet. | Extend the same `SceneTree` + `_check` harness patterns for N4 content. |
 
 ### 3.1 Key save/runtime facts for narrative integration
 
@@ -215,9 +215,9 @@ No intentional mystery is resolved here; the audit only flags where decisions ar
 
 ### 6.5 Readiness conclusion
 
-- **Ready now:** roadmap N1 (narrative state/event foundation) groundwork, using the existing interaction/save/fact/signal systems.
-- **Not ready:** implementing Prologue or Chapter I content until the N0 design-lock approvals and the N5 Chapter I beat sheet are in place.
-- **Recommended gate:** approve the N0 design-lock items and the New Game/Continue entry-flow policy, then implement N1 → N2 → N3 → N4, with Chapter I content only after N5.
+- **Implemented:** roadmap N1–N3 foundation (in-memory `NarrativeState`, `NarrativeData` validator, `DialoguePanel` + `PlayerControlLock`, `SequenceRunner`, `dialogue_advance` input, Start New Game overwrite confirmation) — test fixtures only, no canon content, no save-schema changes.
+- **Not ready:** Prologue and Chapter I content until the N0 design-lock approvals and the N5 Chapter I beat sheet.
+- **Recommended gate:** approve the N0 items and the New Game/Continue entry-flow policy, then proceed to N4 content using `docs/narrative/PROLOGUE_PRODUCTION_BREAKDOWN.md`.
 
 ---
 

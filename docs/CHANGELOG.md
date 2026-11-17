@@ -9,6 +9,30 @@ This changelog records repository changes that actually occurred. Planned featur
 
 ---
 
+## [2026-11-16] Narrative Runtime Foundation (N1–N3, test fixtures only)
+
+**Type:** New narrative systems (minimal foundation; no Prologue content, no canon dialogue, no save-schema change)
+**Engine Verified:** `Godot 4.7.2.stable` (local headless runs: repository verifier, full `tests/run_all.sh`, and the three new suites below)
+
+### Summary
+Implements the roadmap N1–N3 foundation decided in `docs/narrative/NARRATIVE_RUNTIME_TECHNICAL_DESIGN.md`: in-memory `NarrativeState`, fail-closed `NarrativeData` validator, `DialoguePanel` + `PlayerControlLock` input isolation, `SequenceRunner` with typed allowlisted operations, the `dialogue_advance` input action, and a Start New Game overwrite confirmation. **No narrative persistence was added** (linear non-resumable Prologue policy, decisions D1/D2): `SaveManager`, `ProgressionState`, and schema v2 are unchanged. All dialogue fixtures are explicitly non-canon.
+
+### Key Changes
+- **`scripts/narrative/NarrativeState.gd` (new):** per-run, in-memory completion set; idempotent `mark_completed`; never serialized.
+- **`scripts/narrative/NarrativeData.gd` (new):** fail-closed validator/loader for typed, allowlisted sequence steps (`dialogue`/`wait`/`lock_control`/`unlock_control`/`play_cue`/`change_scene`/`finish`) with strict bounds; unknown fields/ops rejected.
+- **`scripts/narrative/DialoguePanel.gd` (new):** separate CanvasLayer (speaker/body/advance hint); consumes all unhandled input while open; advances only via `dialogue_advance`; emits `dialogue_finished` exactly once per session.
+- **`scripts/narrative/PlayerControlLock.gd` (new):** disables/restores the control target's physics + unhandled-input processing (idempotent, freed-safe).
+- **`scripts/narrative/SequenceRunner.gd` (new):** deterministic linear playback; frame-counted waits (no `Timer` nodes); injected cue/transition callables with scene allowlist; completion emitted exactly once per run; `skip()` fast-forwards (pending `change_scene` at most once) and still completes once; `cancel()` and `_exit_tree` always restore control.
+- **`scripts/core/Main.gd`:** Start New Game asks for confirmation when a valid save exists (protects existing saves before Prologue wiring).
+- **`project.godot`:** added `dialogue_advance` input action (Enter / Left Mouse Button).
+- **Tests:** `tests/test_narrative_foundation.gd` (39 checks), `tests/test_dialogue_panel.gd` (19 checks), `tests/test_sequence_runner.gd` (31 checks); non-canon fixture `tests/fixtures/narrative_sequences.json`; all three registered in `tests/run_all.sh` and `.github/workflows/godot-ci.yml`.
+- **Docs:** `docs/narrative/NARRATIVE_RUNTIME_TECHNICAL_DESIGN.md` (ADR + N0 contract), `docs/narrative/PROLOGUE_PRODUCTION_BREAKDOWN.md` (N4 readiness), roadmap/audit/gap analysis synchronized.
+
+### Deliberately Deferred
+- Prologue content (N4), Chapter I content (N5), `camera_focus`/`pause_world` ops (PROPOSED), portraits/voice/localization, any narrative persistence, and all Prologue skip/staging decisions (OPEN).
+
+---
+
 ## [2026-11-16] Shrine, Statue, Temple, Resource Access & Buff Foundation (Phase 5)
 
 **Type:** New Gameplay Systems (structure domain + explicit resource access + buff foundation; save schema stays version 2 with zero new save keys)
