@@ -480,7 +480,10 @@ func _set_exploration_status(beat_id: String) -> void:
 		if beat_id == PrologueBeats.PL_03_WANDERER:
 			detail.text = "Walk the road (A/D or arrow keys) and reach the far end to continue. Nothing records Prologue completion."
 		else:
-			detail.text = "Mark inspection is not implemented yet (N4.3-B). The per-beat skip and the development exit remain available."
+			# No Skip-UI claim: the per-beat skip is a scripted/API path only
+			# in N4.3-A (no button or input binding is planned or shipped
+			# here), so the UI names only what the player actually has.
+			detail.text = "Mark inspection is not implemented yet (N4.3-B). The development exit remains available."
 
 
 ## Defined N4.3 boundary presentation (pl_04 skip): mirrors the N4.2 boundary.

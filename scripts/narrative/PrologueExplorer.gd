@@ -25,7 +25,12 @@ const WALK_FRAMES_PER_SECOND: float = 10.0
 const WALK_FRAME_BASE: int = 4
 const FRAME_COUNT: int = 4
 const CAMERA_ZOOM: float = 1.5
-const CAMERA_OFFSET: Vector2 = Vector2(0.0, -80.0)
+## NO Camera2D.offset by design: Godot applies Camera2D.offset AFTER limit
+## clamping (verified empirically on 4.7.2 — an offset of -80 produced a
+## visible band of [-320, 160] against limits of [-240, 240]), so any offset
+## would push the visible area outside the authored band. The vertical band
+## is authored at exactly the reference viewport's world height, so the
+## framing is fixed without an offset.
 const CAMERA_SMOOTHING: float = 6.0
 const FACING_THRESHOLD: float = 0.05
 
@@ -40,12 +45,16 @@ var _frozen: bool = false
 
 
 ## Builds the actor. texture must be a valid Texture2D (the caller fails
-## closed on load errors before construction); bounds are the authored road
-## extent and camera_limit_top/bottom the authored vertical view band.
-func _init(texture: Texture2D, min_x: float, max_x: float, ground_y: float, camera_limit_top: float, camera_limit_bottom: float) -> void:
-	_min_x = min_x
-	_max_x = max_x
-	position = Vector2(min_x, ground_y)
+## closed on load errors before construction). Movement bounds (move_min_x /
+## move_max_x) and camera limits (camera_limit_left/right/top/bottom) are
+## AUTHORED SEPARATELY: they usually match, but the camera band constrains
+## what is VISIBLE while the movement bounds constrain where the actor can
+## walk — keeping the seams explicit lets either be tuned without touching
+## the other (the regression suite measures the actual visible viewport rect).
+func _init(texture: Texture2D, move_min_x: float, move_max_x: float, ground_y: float, camera_limit_left: float, camera_limit_right: float, camera_limit_top: float, camera_limit_bottom: float) -> void:
+	_min_x = move_min_x
+	_max_x = move_max_x
+	position = Vector2(move_min_x, ground_y)
 	_sprite = Sprite2D.new()
 	_sprite.texture = texture
 	_sprite.hframes = 8
@@ -53,10 +62,9 @@ func _init(texture: Texture2D, min_x: float, max_x: float, ground_y: float, came
 	_sprite.offset = Vector2(-16, -32)
 	add_child(_sprite)
 	_camera = Camera2D.new()
-	_camera.position = CAMERA_OFFSET
 	_camera.zoom = Vector2(CAMERA_ZOOM, CAMERA_ZOOM)
-	_camera.limit_left = int(min_x)
-	_camera.limit_right = int(max_x)
+	_camera.limit_left = int(camera_limit_left)
+	_camera.limit_right = int(camera_limit_right)
 	_camera.limit_top = int(camera_limit_top)
 	_camera.limit_bottom = int(camera_limit_bottom)
 	_camera.position_smoothing_enabled = true

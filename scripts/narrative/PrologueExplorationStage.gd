@@ -47,6 +47,10 @@ const REMNANT_COLOR: Color = Color(0.42, 0.41, 0.44, 1.0)
 const HANDOFF_MARKER_COLOR: Color = Color(0.85, 0.78, 0.45, 0.22)
 const ROAD_THICKNESS: float = 44.0
 const REMNANT_COUNT: int = 4
+## How far the backdrop and road art extend past the camera-limit band on
+## every side, so no viewport configuration can ever expose empty space
+## beyond the authored band (see _build_environment coverage contract).
+const BACKDROP_MARGIN: float = 4096.0
 
 var _panel: DialoguePanel = null
 var _explorer: PrologueExplorer = null
@@ -78,11 +82,17 @@ func setup(panel: DialoguePanel, explorer_texture: Texture2D) -> bool:
 	_panel = panel
 	_dialogue_lock = PlayerControlLock.new()
 	_build_environment()
+	# Movement bounds and camera limits are authored as SEPARATE seams (both
+	# currently the road band): the camera limits define what may be visible,
+	# the movement bounds where the actor can walk. The regression suite
+	# measures the actual visible viewport rect at the extremes.
 	_explorer = PrologueExplorer.new(
 		explorer_texture,
 		ROAD_MIN_X,
 		ROAD_MAX_X,
 		GROUND_Y,
+		ROAD_MIN_X,
+		ROAD_MAX_X,
 		VIEW_TOP,
 		VIEW_BOTTOM
 	)
@@ -244,26 +254,36 @@ func _present_intro_dialogue(beat_id: String) -> void:
 ## Labelled placeholder environment: dark backdrop, packed-earth road band,
 ## a few weathered remnant stones (environmental storytelling placeholders —
 ## no lore), and a translucent marker for the handoff area.
+##
+## COVERAGE CONTRACT (review fix): the backdrop and the road band extend far
+## BEYOND the camera-limit band (BACKDROP_MARGIN on every side) so no viewport
+## configuration can ever expose empty space past the authored band —
+## Camera2D clamps the viewport edges inside the limits only while the limit
+## band is larger than the view, and larger windows (the canvas_items stretch
+## keeps logical size fixed, but the camera centers within smaller limit
+## spans) would otherwise show past it. Everything the camera can possibly
+## see is authored art, and the road reads as continuing past the walkable
+## bounds (it leads east toward the handoff/ruins).
 func _build_environment() -> void:
 	var backdrop: ColorRect = ColorRect.new()
 	backdrop.name = "RoadBackdrop"
 	backdrop.color = BACKDROP_COLOR
-	backdrop.position = Vector2(ROAD_MIN_X, VIEW_TOP)
-	backdrop.size = Vector2(ROAD_MAX_X - ROAD_MIN_X, VIEW_BOTTOM - VIEW_TOP)
+	backdrop.position = Vector2(ROAD_MIN_X - BACKDROP_MARGIN, VIEW_TOP - BACKDROP_MARGIN)
+	backdrop.size = Vector2((ROAD_MAX_X - ROAD_MIN_X) + BACKDROP_MARGIN * 2.0, (VIEW_BOTTOM - VIEW_TOP) + BACKDROP_MARGIN * 2.0)
 	add_child(backdrop)
 
 	var road: ColorRect = ColorRect.new()
 	road.name = "RoadBand"
 	road.color = ROAD_COLOR
-	road.position = Vector2(ROAD_MIN_X, GROUND_Y)
-	road.size = Vector2(ROAD_MAX_X - ROAD_MIN_X, ROAD_THICKNESS)
+	road.position = Vector2(ROAD_MIN_X - BACKDROP_MARGIN, GROUND_Y)
+	road.size = Vector2((ROAD_MAX_X - ROAD_MIN_X) + BACKDROP_MARGIN * 2.0, ROAD_THICKNESS)
 	add_child(road)
 
 	var road_edge: ColorRect = ColorRect.new()
 	road_edge.name = "RoadEdge"
 	road_edge.color = ROAD_EDGE_COLOR
-	road_edge.position = Vector2(ROAD_MIN_X, GROUND_Y + ROAD_THICKNESS)
-	road_edge.size = Vector2(ROAD_MAX_X - ROAD_MIN_X, 6.0)
+	road_edge.position = Vector2(ROAD_MIN_X - BACKDROP_MARGIN, GROUND_Y + ROAD_THICKNESS)
+	road_edge.size = Vector2((ROAD_MAX_X - ROAD_MIN_X) + BACKDROP_MARGIN * 2.0, 6.0)
 	add_child(road_edge)
 
 	for i: int in range(REMNANT_COUNT):

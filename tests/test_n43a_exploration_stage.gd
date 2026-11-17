@@ -11,6 +11,12 @@ extends SceneTree
 ##   4. movement cannot escape the authored road bounds (both clamps),
 ##   5. camera/stage setup is valid (limits == bounds, road wider than the
 ##      viewport, handoff area inside bounds, actor on the authored ground),
+##   5b. the camera's ACTUAL visible viewport rect (get_screen_center_position
+##      +/- viewport/zoom) stays inside the authored band at the road start,
+##      the west bound, and the east bound — limit values alone prove nothing
+##      (review fix: Camera2D.offset is applied AFTER limit clamping, so an
+##      offset view escaped the band; the camera now uses no offset and the
+##      backdrop art extends 4096 px past the band on every side),
 ##   6. the handoff area completes pl_03 via ONE stage completion request,
 ##   7. pl_03 is recorded exactly once in NarrativeState (by the shell — the
 ##      stage and the runner never record exploration beats),
@@ -28,6 +34,9 @@ extends SceneTree
 ##  17. dialogue locks actor movement (the panel alone would not),
 ##  18. normal dialogue completion restores actor movement,
 ##  19. a freed actor never crashes cleanup (freed-safe lock release),
+##  19b. a DIRECT scene unload while the exploration dialogue is open (no
+##      cancel/dev-exit path) releases the lock, records nothing, and produces
+##      no coroutine or invalid-access errors (review-fix coverage),
 ##  20. real user profile/save files remain byte-exact untouched.
 ##
 ## ISOLATION CONTRACT (same style as test_n40/test_n41/test_n42): fixtures
@@ -73,6 +82,13 @@ var _real_profile_sidecars: Dictionary = {}
 var _settle_x: float = 0.0
 ## One-shot guard for the east-bound hold check inside stage 15.
 var _east_hold_checked: bool = false
+## One-shot guard for the in-motion viewport containment check (stage 7).
+var _motion_view_checked: bool = false
+## Shell/state captured before the direct scene-unload test (stage 34):
+## the NarrativeState RefCounted outlives the freed shell, so its record
+## contents remain observable after unload.
+var _unloaded_shell: Control = null
+var _unloaded_state: NarrativeState = null
 
 
 func _check(cond: bool, msg: String) -> bool:
@@ -189,6 +205,17 @@ func _drive_left(shell: Control) -> void:
 func _stop_driving() -> void:
 	Input.action_release("move_right")
 	Input.action_release("move_left")
+
+
+## The camera's ACTUAL visible world rect: get_screen_center_position()
+## returns the limit-clamped, offset-adjusted center, and the viewport's
+## logical size divided by the zoom gives the world-space view size. Tests
+## assert this rect (not the raw limit values) stays inside the authored band.
+func _visible_rect(explorer: PrologueExplorer) -> Rect2:
+	var camera: Camera2D = explorer.camera()
+	var center: Vector2 = camera.get_screen_center_position()
+	var view: Vector2 = current_scene.get_viewport().get_visible_rect().size / camera.zoom
+	return Rect2(center - view / 2.0, view)
 
 
 func _initialize() -> void:
@@ -315,6 +342,15 @@ func _process(_delta: float) -> bool:
 			var explorer := _explorer_of(shell)
 			if explorer == null:
 				return false
+			if not _motion_view_checked:
+				# One-shot containment check at the reviewer's worst-case
+				# scenario: the actor stands at the road start while the
+				# camera converges — the visible rect must already be inside
+				# the authored band (not showing empty space past it).
+				_motion_view_checked = true
+				var start_rect: Rect2 = _visible_rect(explorer)
+				_check(start_rect.position.x >= PrologueExplorationStage.ROAD_MIN_X and start_rect.end.x <= PrologueExplorationStage.ROAD_MAX_X, "at the road start the camera's visible horizontal edges stay inside the road band (measured %s)" % [start_rect])
+				_check(start_rect.position.y >= PrologueExplorationStage.VIEW_TOP and start_rect.end.y <= PrologueExplorationStage.VIEW_BOTTOM, "at the road start the camera's visible vertical edges stay inside the authored band (measured %s)" % [start_rect])
 			# Position-based wait (idle/physics ratios are not 1:1 headless).
 			if explorer.position.x <= PrologueExplorationStage.EXPLORER_START_X and _wait_frames < MAX_WAIT_FRAMES - 60:
 				return false
@@ -397,6 +433,13 @@ func _process(_delta: float) -> bool:
 			_check(camera != null and camera.zoom == Vector2(1.5, 1.5) and camera.position_smoothing_enabled, "the camera reuses the gameplay zoom/smoothing pattern")
 			var view_width: float = float(current_scene.get_viewport().get_visible_rect().size.x) / camera.zoom.x
 			_check(PrologueExplorationStage.ROAD_MAX_X - PrologueExplorationStage.ROAD_MIN_X > view_width, "the road is wider than the visible world width so the camera actually follows")
+			# Measured viewport containment at the west extreme: limit VALUES
+			# alone prove nothing — get_screen_center_position() returns the
+			# camera's actual (limit-clamped, offset-adjusted) center, so the
+			# visible rect edges must rest inside the authored band.
+			var west_rect: Rect2 = _visible_rect(explorer)
+			_check(west_rect.position.x >= PrologueExplorationStage.ROAD_MIN_X - 0.5 and west_rect.end.x <= PrologueExplorationStage.ROAD_MAX_X + 0.5, "at the west bound the visible horizontal edges rest inside the road band (measured %s)" % [west_rect])
+			_check(west_rect.position.y >= PrologueExplorationStage.VIEW_TOP - 0.5 and west_rect.end.y <= PrologueExplorationStage.VIEW_BOTTOM + 0.5, "at the west bound the visible vertical edges rest inside the authored band (measured %s)" % [west_rect])
 			_check(PrologueExplorationStage.HANDOFF_X > PrologueExplorationStage.ROAD_MIN_X and PrologueExplorationStage.HANDOFF_X < PrologueExplorationStage.ROAD_MAX_X, "the handoff area sits inside the authored bounds")
 			var sprite: Sprite2D = explorer.sprite()
 			_check(sprite != null and sprite.hframes == 8, "the existing Monarch sheet is used with its 8-frame layout")
@@ -457,6 +500,10 @@ func _process(_delta: float) -> bool:
 					return false
 				_stop_driving()
 				_check(explorer.position.x == PrologueExplorationStage.ROAD_MAX_X, "holding the key at the east bound never escapes the authored bounds")
+				# Measured viewport containment at the east extreme.
+				var east_rect: Rect2 = _visible_rect(explorer)
+				_check(east_rect.position.x >= PrologueExplorationStage.ROAD_MIN_X - 0.5 and east_rect.end.x <= PrologueExplorationStage.ROAD_MAX_X + 0.5, "at the east bound the visible horizontal edges rest inside the road band (measured %s)" % [east_rect])
+				_check(east_rect.position.y >= PrologueExplorationStage.VIEW_TOP - 0.5 and east_rect.end.y <= PrologueExplorationStage.VIEW_BOTTOM + 0.5, "at the east bound the visible vertical edges rest inside the authored band (measured %s)" % [east_rect])
 				_east_hold_checked = true
 			var state: NarrativeState = shell.call("narrative_state")
 			# --- Duplicate completion requests are ignored ---
@@ -700,6 +747,54 @@ func _process(_delta: float) -> bool:
 			_skip_runner_beat(shell)
 			return false
 		32:
+			if not _on_main():
+				return false
+			# --- Shell F: DIRECT scene unload while the exploration dialogue
+			# is open — no cancel_sequence, no dev-exit path (unload coverage) ---
+			change_scene_to_file(PROLOGUE_SHELL_SCENE)
+			_stage = 33
+			_wait_frames = 0
+			return false
+		33:
+			if not _on_shell():
+				return false
+			var shell: Control = _shell()
+			_wire_shell_observers(shell)
+			_check(shell.call("start_prologue"), "shell F starts the chain explicitly")
+			_stage = 34
+			_wait_frames = 0
+			return false
+		34:
+			if not _on_shell():
+				return false
+			var shell: Control = _shell()
+			if bool(shell.call("in_exploration")):
+				var panel: DialoguePanel = shell.call("dialogue_panel")
+				var stage := _stage_node(shell)
+				_check(panel.is_open(), "shell F reaches the exploration intro dialogue with the panel open")
+				_check(stage != null and stage.is_dialogue_locked(), "the actor is held by the stage-owned lock at unload time")
+				_unloaded_shell = shell
+				_unloaded_state = shell.call("narrative_state")
+				# Unload the shell directly: the stage's _exit_tree teardown
+				# must release the lock and close the presentation without
+				# coroutine errors or invalid access, and without recording.
+				change_scene_to_file(MAIN_SCENE)
+				_stage = 35
+				_wait_frames = 0
+				return false
+			_skip_runner_beat(shell)
+			return false
+		35:
+			if not _on_main():
+				return false
+			_check(not is_instance_valid(_unloaded_shell), "the PrologueShell is freed after the direct scene unload")
+			_check(_unloaded_state.completed_count() == 2 and not bool(_unloaded_state.is_completed(BEAT_03)), "the direct unload records nothing (unload is not a skip; no stale completion)")
+			_unloaded_shell = null
+			_unloaded_state = null
+			_stage = 36
+			_wait_frames = 0
+			return false
+		36:
 			# --- Hygiene: real files untouched, fixtures cleaned, metas removed ---
 			if _real_profile_existed:
 				_check(FileAccess.get_file_as_string(REAL_PROFILE_PATH) == _real_profile_snapshot, "developer's real user://player_profile.json was never mutated")

@@ -7,6 +7,28 @@ This changelog records repository changes that actually occurred. Planned featur
 
 ---
 
+## [2026-11-17] N4.3-A review fixes (camera visible-area containment, Skip-UI wording, direct-unload regression)
+
+**Type:** Review-fix pass on the N4.3-A slice (three review findings; no scope change — still N4.3-A only, no N4.3-B/C)
+**Engine Verified:** `Godot 4.7.2.stable` (headless; full `tests/run_all.sh` ALL SUITES PASSED; static verifier 243 checks)
+
+### Summary
+1. **Camera visible-area containment (P1).** A diagnostic probe on 4.7.2 showed `Camera2D.limit_left/right` does clamp the visible viewport edges (at the road start the visible left edge rests exactly on `-800`; the reported "camera sees x = -1126" scenario does not occur), **but `Camera2D.offset` is applied AFTER limit clamping** — the previous `offset = (0, -80)` pushed the actually visible band to `y ∈ [-320, 160]` against authored limits `[-240, 240]`, an 80-px empty strip above the backdrop for the whole segment. The explorer camera now uses **no offset** (the authored vertical band is exactly the reference viewport's world height, so framing is fixed without it), the movement-bounds vs camera-limit seams are authored as **separate parameters**, the backdrop and road art extend **4096 px past the limit band on every side** so no viewport configuration can expose empty space, and the regression suite now **measures the actual visible rect** (`get_screen_center_position()` ± viewport/zoom) at the road start, the west bound, and the east bound and asserts containment (measured values are printed in the PASS lines; all three rest exactly inside the band).
+2. **Skip-UI wording (P2).** The pl_04 detail text claimed "The per-beat skip ... remain[s] available", but N4.3-A ships no Skip button/input binding (the per-beat skip is a scripted/API path only, same as the N4.2 `skip_sequence`). The text now names only the development exit; no new UI was added.
+3. **Direct scene-unload regression (P3).** New suite stages: with the exploration intro dialogue open and the actor locked, the shell is unloaded via a direct scene change (no `cancel_sequence`, no dev-exit path) — asserts the shell is freed, the `NarrativeState` (kept alive by the suite) recorded nothing, and no coroutine/invalid-access errors occur (a SCRIPT ERROR anywhere still fails the suite through the run_all log trap). Coverage now matches the claimed contract.
+
+### Key Changes
+- `scripts/narrative/PrologueExplorer.gd`: camera offset removed (documented why), `_init` takes separate movement bounds and camera-limit parameters.
+- `scripts/narrative/PrologueExplorationStage.gd`: `BACKDROP_MARGIN = 4096` — backdrop + road band/edge extend past the limit band on every side; explorer constructed with the separated seams.
+- `scripts/narrative/PrologueShell.gd`: pl_04 detail text no longer claims player-facing Skip availability.
+- `tests/test_n43a_exploration_stage.gd`: `_visible_rect()` measurement helper; containment checks at the road start (in-motion), west bound, and east bound; direct scene-unload stages 32-35; suite now **106 checks** (was 95).
+
+### Verified
+- `tests/test_n43a_exploration_stage.gd`: **PASS: All 106 N43A Exploration Stage checks … 0 failures** (exit 0).
+- Full `tests/run_all.sh`: **ALL SUITES PASSED** (exit 0, 17 entries); static verifier **243/243**; `--import` clean; real profile byte-exact unchanged.
+
+---
+
 ## [2026-11-17] N4.3-A Technical Spike & Exploration Stage (pl_03/pl_04 orchestration; no mark props)
 
 **Type:** Prologue interactive milestone slice A (dedicated exploration stage + actor + Prologue-specific beat-state/completion handshake; no SaveManager/schema change, no PlayerProfile writes, no new runner ops, no mark objects — N4.3-B is intentionally NOT included)
