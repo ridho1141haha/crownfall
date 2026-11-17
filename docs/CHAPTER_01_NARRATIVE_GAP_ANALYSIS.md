@@ -223,7 +223,7 @@ Status: **EXISTS** = implemented and reachable; **PARTIAL** = gameplay/system ex
 - A chapter-completion model separate from `ISLAND_CLEARED`.
 
 **Dependencies / decisions**
-- Chapter I end condition and Chapter II handoff (N5; approval required).
+- Chapter I end condition is owner-approved: arrival at Eldergrove Forest. The precise voyage/arrival presentation and Chapter II opening remain open.
 
 **Status:** **PARTIAL** — preparation and a banner exist; the journey/chapter transition does not.
 
@@ -270,7 +270,7 @@ Status: **EXISTS** = implemented and reachable; **PARTIAL** = gameplay/system ex
 - New Game / Continue entry-flow policy and legacy-save behavior (roadmap §6 — policy is documented, but remaining PROPOSED/OPEN items still require owner approval before N4 wiring).
 - N0 production details: repeated-symbol visual design, childhood staging, vision visual language, ship-to-island transition.
 - N4 Prologue production/implementation and the fresh Forgotten Shore handoff.
-- N5 Chapter I beat sheet approval, dialogue language/voice, proposed first-night and Scientist beats, and chapter-end condition.
+- N5 Chapter I core progression decisions were approved by the owner on 2026-11-17: mandatory first night with recoverable breach path; optional Scientist recruitment with research/specialist-upgrade gates; Chapter I ends on Eldergrove arrival. Dialogue language/voice, remaining NPC roles, and transition presentation remain open.
 - Whether any gameplay-embedded sequence needs explicit world pause; current technical design says world simulation continues during gameplay dialogue unless a future approved operation changes that policy.
 - Whether a narrow `talk` interaction is needed for approved NPC beats; do not add it pre-emptively.
 
