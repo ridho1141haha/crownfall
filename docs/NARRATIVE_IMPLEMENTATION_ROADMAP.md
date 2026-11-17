@@ -165,12 +165,12 @@ Tasks:
 
 This is a separate content milestone, not part of Prologue completion. Design preparation may proceed before N4 implementation, but Chapter I content implementation follows the Prologue-to-shore handoff contract.
 
-Current planning artifact: [`CHAPTER_01_BEAT_SHEET.md`](CHAPTER_01_BEAT_SHEET.md). It is a **draft proposal, not approved canon**. All proposed beats, triggers, and chapter-end conditions remain subject to owner review.
+Current planning artifact: [`CHAPTER_01_BEAT_SHEET.md`](CHAPTER_01_BEAT_SHEET.md). Its core progression decisions were approved by the project owner on 2026-11-17: Chapter I ends on arrival at Eldergrove; the first night is mandatory but recoverable; Scientist recruitment is optional, while research and specialist-dependent upgrades require recruitment. Remaining dialogue, transition staging, and lore details are still open.
 
 Tasks:
-- Review and approve the Chapter I beat sheet; do not implement candidate dialogue as canon before approval.
+- Refine the approved Chapter I beat sheet's remaining open details; do not implement candidate dialogue as canon before dialogue/content approval.
 - Integrate story beats with existing survival, settlement, Scientist, research, shipwreck, and exploration gameplay where appropriate.
-- Keep current island mechanics and the first-night recovery loop stable unless a separate design change is approved.
+- Keep the mandatory first-night milestone and both recovery outcomes stable. Preserve the optional Scientist path and specialist-dependent research/upgrade gates.
 - Keep the Forgotten Shrine and Shrine of Growth distinct until an explicit lore decision; leave Ancient Relic and Greedling/Greed Portal origins unresolved.
 
 **Exit criteria:** Chapter I has an owner-approved beat sheet, agreed chapter boundary/ending, and separately scoped implementation tasks.
@@ -263,7 +263,7 @@ The source audit and Chapter I gap analysis are refreshed against the PR #11 mer
 ### Existing gameplay constraints
 - `ShoreView` / `ShoreFX` remain presentation helpers; `ForgottenShoreSession` remains the world orchestrator.
 - `TimeManager` phase signals are transition-time events, not per-frame ticks. Narrative listeners must be connected once, idempotent, and silent during save restoration.
-- Chapter I should reuse existing settlement, first-night, Scientist/research, exploration, and ship-repair systems rather than create parallel mechanics.
+- Chapter I should reuse existing settlement, first-night, Scientist/research, exploration, and ship-repair systems rather than create parallel mechanics. The approved endpoint is arrival at Eldergrove; voyage/arrival content is future implementation.
 
 ### Lore boundaries that remain OPEN
 - Forgotten Shrine (x=-780) and Shrine of Growth (x=820) remain separate until an explicit lore decision.
