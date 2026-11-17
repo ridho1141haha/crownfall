@@ -101,6 +101,52 @@ func _sequence_c() -> Dictionary:
 	}
 
 
+func _sequence_d() -> Dictionary:
+	return {
+		"id": "probe_runner_cancel_during_wait",
+		"skip_allowed": false,
+		"steps": [
+			{"op": "lock_control"},
+			{"op": "dialogue", "lines": [
+				{"speaker": "Test Speaker", "text": "cancel wait line"},
+			]},
+			{"op": "wait", "seconds": 5.0},
+			{"op": "play_cue", "cue_id": "cue_should_not_run"},
+			{"op": "unlock_control"},
+			{"op": "finish"},
+		],
+	}
+
+
+func _sequence_e() -> Dictionary:
+	return {
+		"id": "probe_runner_after_cancel",
+		"skip_allowed": false,
+		"steps": [
+			{"op": "lock_control"},
+			{"op": "dialogue", "lines": [
+				{"speaker": "Test Speaker", "text": "post cancel line"},
+			]},
+			{"op": "unlock_control"},
+			{"op": "finish"},
+		],
+	}
+
+
+func _sequence_f() -> Dictionary:
+	return {
+		"id": "probe_runner_cancel_no_transition",
+		"skip_allowed": false,
+		"steps": [
+			{"op": "dialogue", "lines": [
+				{"speaker": "Test Speaker", "text": "cancel before transition"},
+			]},
+			{"op": "change_scene", "scene_path": FORGOTTEN_SHORE},
+			{"op": "finish"},
+		],
+	}
+
+
 func _process(_delta: float) -> bool:
 	_frames += 1
 	if _frames > 4000:
@@ -125,6 +171,9 @@ func _process(_delta: float) -> bool:
 			_runner.sequence_completed.connect(func(id: String) -> void: _completed_ids.append(id))
 			_runner.sequence_failed.connect(func(id: String, reason: String) -> void: _failed.append([id, reason]))
 			_runner.configure(_state, _panel, _session.player, Callable(self, "_record_cue"), Callable(self, "_record_transition"), [FORGOTTEN_SHORE])
+			_check(not _runner.play({"id": "probe_bad_op_seq", "steps": [{"op": "explode"}]}), "play rejects sequence with unknown op")
+			_check(not _runner.play({"steps": [{"op": "finish"}]}), "play rejects unvalidated sequence without id")
+			_check(not _runner.play({"id": "probe_bad_wait_seq", "steps": [{"op": "wait", "seconds": -1.0}]}), "play rejects unvalidated sequence with negative wait")
 			_check(_runner.play(_sequence_a()), "sequence A starts")
 			_check(not _runner.play(_sequence_a()), "concurrent play rejected while running")
 			_stage = 1
@@ -261,6 +310,82 @@ func _process(_delta: float) -> bool:
 				return true
 			_check(_transitions == [FORGOTTEN_SHORE], "scene transition executed exactly once despite duplicate step")
 			_check(_completed_ids.size() == 3 and _completed_ids[2] == "probe_runner_b", "sequence B completed exactly once")
+			# --- NEW (PR #11 review): cancel during dialogue stops the run safely ---
+			_check(_runner.play(_sequence_f()), "sequence F starts for cancel-during-dialogue")
+			_stage = 20
+			_frames = 0
+			return false
+		20:
+			if not _runner.is_running():
+				return false
+			if not _panel.is_open():
+				return false
+			_runner.cancel()
+			_stage = 21
+			_frames = 0
+			return false
+		21:
+			if _runner.is_running() or _frames < 3:
+				return false
+			_check(not _completed_ids.has("probe_runner_cancel_no_transition"), "cancel during dialogue adds no completion")
+			_check(_transitions.size() == 1, "cancel during dialogue prevents scene transition")
+			_check(not _cues.has("cue_should_not_run"), "cancel during dialogue prevents later cue")
+			_check(not _runner.is_running(), "cancel during dialogue stops runner")
+			_check(not _panel.is_open(), "cancel during dialogue closed panel")
+			_check(_session.player.is_physics_processing(), "cancel during dialogue restored physics")
+			_check(_session.player.is_processing_unhandled_input(), "cancel during dialogue restored unhandled input")
+			# --- NEW (PR #11 review): cancel during wait stops the run; stale
+			# coroutine cannot affect a run started afterwards ---
+			_check(_runner.play(_sequence_d()), "sequence D starts for cancel-during-wait")
+			_stage = 22
+			_frames = 0
+			return false
+		22:
+			if not _runner.is_running():
+				return false
+			if not _panel.is_open():
+				return false
+			_send_key(KEY_ENTER, true)
+			_stage = 23
+			_frames = 0
+			return false
+		23:
+			if _frames < 5:
+				return false
+			_runner.cancel()
+			_stage = 24
+			_frames = 0
+			return false
+		24:
+			if _runner.is_running() or _frames < 3:
+				return false
+			_check(not _completed_ids.has("probe_runner_cancel_during_wait"), "cancel during wait adds no completion")
+			_check(not _cues.has("cue_should_not_run"), "cancel during wait prevents cue")
+			_check(not _runner.is_running(), "cancel during wait stops runner")
+			_check(not _panel.is_open(), "cancel during wait closed panel")
+			_check(_session.player.is_physics_processing(), "cancel during wait restored physics")
+			_check(_session.player.is_processing_unhandled_input(), "cancel during wait restored unhandled input")
+			_check(_runner.play(_sequence_e()), "new run starts after cancel")
+			_stage = 25
+			_frames = 0
+			return false
+		25:
+			if not _runner.is_running():
+				return false
+			if not _panel.is_open():
+				return false
+			_send_key(KEY_ENTER, true)
+			_stage = 30
+			_frames = 0
+			return false
+		30:
+			if _runner.is_running():
+				if _frames < 120:
+					return false
+				_check(false, "post-cancel sequence did not finish")
+				return true
+			_check(_completed_ids.has("probe_runner_after_cancel"), "new run after cancel completes exactly once")
+			_check(_session.player.is_physics_processing(), "control restored after post-cancel run")
 			# unload cleanup: free the runner while a sequence is open
 			_check(_runner.play(_sequence_a()), "sequence A starts for unload test")
 			_stage = 15

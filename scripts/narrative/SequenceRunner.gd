@@ -12,7 +12,8 @@ extends Node
 ##  - NarrativeState records completion idempotently,
 ##  - skip() fast-forwards remaining steps (only a pending change_scene may
 ##    still execute, at most once) and still completes exactly once,
-##  - cancel() cleans up without completion,
+##  - cancel() halts the run (flags + generation token) without completion and
+##    safely stops any awaiting coroutine; late continuations become no-ops,
 ##  - _exit_tree always restores control and closes the panel.
 
 signal sequence_started(sequence_id: String)
@@ -34,6 +35,7 @@ var _scene_changed: bool = false
 var _completion_emitted: bool = false
 var _panel_open: bool = false
 var _current_id: String = ""
+var _generation: int = 0
 
 
 ## Binds the collaborators. cue_player receives cue_id strings; scene_transition
@@ -64,14 +66,17 @@ func current_sequence_id() -> String:
 	return _current_id
 
 
-## Starts playback. Returns false when already running or misconfigured.
+## Starts playback. Returns false when already running, misconfigured, or the
+## payload failed validation (fail-closed: nothing runs on an invalid sequence).
 func play(sequence: Dictionary) -> bool:
 	if _running:
 		return false
 	if _state == null or _panel == null or _lock == null:
 		return false
-	if not sequence.has("id") or not sequence.has("steps"):
+	if not NarrativeData.validate_sequence(sequence):
 		return false
+	_generation += 1
+	var gen: int = _generation
 	_current_id = String(sequence["id"])
 	_running = true
 	_skip_requested = false
@@ -80,7 +85,7 @@ func play(sequence: Dictionary) -> bool:
 	_completion_emitted = false
 	_panel_open = false
 	sequence_started.emit(_current_id)
-	_execute(sequence)
+	_execute(sequence, gen)
 	return true
 
 
@@ -95,18 +100,22 @@ func skip() -> void:
 		_panel.close()
 
 
-## Aborts without completion. Control and panel state are always restored.
+## Aborts without completion. Control and panel state are always restored, and
+## any coroutine still awaiting on the panel/frames halts before running the
+## next step (run generation token invalidates stale continuations).
 func cancel() -> void:
 	_cancel_requested = true
-	if _panel_open:
+	_running = false
+	if _panel_open and _panel != null and is_instance_valid(_panel):
 		_panel.close()
+	_panel_open = false
 	_cleanup()
 
 
-func _execute(sequence: Dictionary) -> void:
+func _execute(sequence: Dictionary, gen: int) -> void:
 	var steps: Array = sequence.get("steps", []) as Array
 	for i: int in range(steps.size()):
-		if _cancel_requested:
+		if _cancel_requested or not _running or gen != _generation:
 			_cleanup()
 			return
 		var step: Dictionary = steps[i] as Dictionary
@@ -117,10 +126,14 @@ func _execute(sequence: Dictionary) -> void:
 			continue
 		match op:
 			"dialogue":
-				if not await _run_dialogue(step):
+				if not await _run_dialogue(step, gen):
+					_cleanup()
 					return
 			"wait":
-				await _run_wait(step)
+				await _run_wait(step, gen)
+				if _cancel_requested or not _running or gen != _generation:
+					_cleanup()
+					return
 			"lock_control":
 				_lock.lock(_control_target)
 			"unlock_control":
@@ -128,22 +141,30 @@ func _execute(sequence: Dictionary) -> void:
 			"play_cue":
 				_run_cue(step)
 			"change_scene":
+				if _cancel_requested or not _running or gen != _generation:
+					_cleanup()
+					return
 				_perform_change_scene(step)
-				if not _cancel_requested and _running:
-					_finalize_completion()
+				if _cancel_requested or not _running or gen != _generation:
+					_cleanup()
+					return
+				_finalize_completion()
 				return
 			"finish":
 				break
-		if _cancel_requested:
+			_:
+				_fail("unknown sequence op: %s" % op)
+				return
+		if _cancel_requested or not _running or gen != _generation:
 			_cleanup()
 			return
-	if _cancel_requested:
+	if _cancel_requested or not _running or gen != _generation:
 		_cleanup()
 		return
 	_finalize_completion()
 
 
-func _run_dialogue(step: Dictionary) -> bool:
+func _run_dialogue(step: Dictionary, gen: int) -> bool:
 	if _panel == null or not is_instance_valid(_panel):
 		_fail("dialogue panel unavailable")
 		return false
@@ -155,14 +176,14 @@ func _run_dialogue(step: Dictionary) -> bool:
 	_panel_open = true
 	await _panel.dialogue_finished
 	_panel_open = false
-	if _cancel_requested:
+	if _cancel_requested or not _running or gen != _generation:
 		return false
 	return true
 
 
-func _run_wait(step: Dictionary) -> void:
+func _run_wait(step: Dictionary, gen: int) -> void:
 	var remaining: float = float(step.get("seconds", 0.0))
-	while remaining > 0.0 and not _cancel_requested and not _skip_requested:
+	while remaining > 0.0 and not _cancel_requested and not _skip_requested and _running and gen == _generation:
 		await get_tree().process_frame
 		remaining -= get_process_delta_time()
 
@@ -214,8 +235,10 @@ func _cleanup() -> void:
 
 
 func _exit_tree() -> void:
-	if _running:
+	if _running or _cancel_requested:
 		_cancel_requested = true
+		_running = false
 		if _panel_open and _panel != null and is_instance_valid(_panel):
 			_panel.close()
+		_panel_open = false
 		_cleanup()
