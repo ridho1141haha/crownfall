@@ -1,7 +1,7 @@
 # CROWNFALL — NARRATIVE IMPLEMENTATION ROADMAP
 
-**Status:** Planning + minimal foundation — Prologue content and Chapter I narrative are NOT implemented. Phases N1–N3 exist only as a tested, test-fixture-based runtime foundation (see §3).  
-**Baseline inspected:** `main` at `6d209970170a9f1fa21946385c79ad02d5fb437d` (2026-11-16, after PR #10 merge).  
+**Status:** N1–N3 narrative runtime foundation is implemented and merged. Prologue content (N4) is not implemented. Chapter I content (N5) is in design planning; the beat sheet is a non-canon proposal pending owner approval.  
+**Baseline inspected:** `main` at `eb82ae4d63a33a5c0fb9bb3f17f4bf832860c79a` (2026-11-17, after PR #11 merge).  
 **Story design:** [Prologue Story Design](narrative/PROLOGUE_STORY_DESIGN.md)
 
 > This roadmap defines implementation order and technical boundaries. The Prologue Story Design defines story beats. Neither document authorizes the coding agent to invent unresolved lore or change gameplay rules outside approved scope.
@@ -53,10 +53,10 @@ This is a static source inspection of `main` at the baseline SHA above. It is no
 ### Existing presentation and tests
 - The merged presentation split includes `ShoreView` and `ShoreFX`; these are world presentation helpers, not a narrative or cutscene runtime.
 - The merged gameplay harness covers new game, movement, resource collection, building, wall upgrade, Scientist, research, shrine, buff, and save/load scenarios.
-- **Narrative runtime foundation (implemented on `feat/narrative-runtime-foundation`):** phases N1–N3 below are shipped as a minimal, test-fixture-only foundation — `NarrativeState` (in-memory), `NarrativeData` (validator), `DialoguePanel` + `PlayerControlLock`, `SequenceRunner`, the `dialogue_advance` input action, and a Start New Game overwrite confirmation. No Prologue content, no canon dialogue, no save-schema change.
-- The inspected source tree previously contained no dedicated narrative state, dialogue, quest, chapter, or cutscene runtime; the foundation above is the only narrative runtime that now exists.
+- **Narrative runtime foundation (PR #11, merged as `eb82ae4`):** N1–N3 are implemented on `main`: `NarrativeState` (in-memory), `NarrativeData` validation, `DialoguePanel`, `PlayerControlLock`, `SequenceRunner`, `dialogue_advance`, and the New Game overwrite confirmation. Automated narrative suites and headless CI passed for the merge commit.
+- The runtime is not yet connected to canon Prologue or Chapter I content. There is no playable Prologue, NPC conversation integration, chapter progression system, quest/objective framework, or narrative save state. SaveManager remains schema v2.
 
-**Implication:** A dialogue panel, sequence runner, and in-memory state now exist as a foundation, but no narrative save object, cutscene controller, or Prologue scene exists. Reinspect latest `main` before each implementation phase.
+**Implication:** The technical foundation exists and can now be used by content work. N4 remains the next implementation milestone; N5 is being designed in parallel as a draft, but Chapter I implementation must respect the Prologue/Chapter I boundary and approved sequencing.
 
 ## 4. Prologue scope
 
@@ -89,7 +89,7 @@ Each phase should be a small, independently reviewable PR. Do not combine all ph
 
 Tasks:
 - Review and approve the Prologue beats and candidate text.
-- Finalize only production details needed to build it: visual design of the repeated symbol, staging of the childhood manifestation, visual language of the vision, and minimum ship-to-island transition.
+- Finalize only production details needed to build it: visual design of the repeated symbol, staging of the childhood manifestation, visual language of the vision, and minimum ship-to-island transition. Authored dialogue uses English as its default/source language; localization and voice acting are not N4 blockers.
 - Keep unnecessary lore explanations OPEN.
 - Decide New Game / Continue / legacy-save behavior (section 6).
 - Keep GDD and ROADMAP explicit that the Prologue is planned but not implemented.
@@ -136,7 +136,7 @@ Tasks:
 Tasks:
 - Support only typed operations needed by the Prologue: show/hide dialogue, play an animation/effect, change camera framing, wait for a bounded duration/event, lock/unlock player control, and transition to an approved scene/state.
 - Provide explicit cleanup paths so control is always restored.
-- Define skip behavior if skip is approved; required handoff/completion actions must execute exactly once.
+- Implement the approved New Game menu gate: first-ever Prologue cannot be skipped; after one successful completion, offer Skip or Play Again. Keep menu-level whole-Prologue Skip distinct from per-sequence `SequenceRunner.skip()`; required handoff actions must execute exactly once.
 - Ensure pause, exit, and scene changes cannot leave input locked or duplicate events.
 - Do not build a general-purpose cinematic editor or arbitrary scripting language.
 
@@ -163,29 +163,32 @@ Tasks:
 
 ### N5 — Chapter I narrative beats
 
-This is a separate content milestone, not part of Prologue completion.
+This is a separate content milestone, not part of Prologue completion. Design preparation may proceed before N4 implementation, but Chapter I content implementation follows the Prologue-to-shore handoff contract.
+
+Current planning artifact: [`CHAPTER_01_BEAT_SHEET.md`](CHAPTER_01_BEAT_SHEET.md). Its core progression decisions were approved by the project owner on 2026-11-17: Chapter I ends on arrival at Eldergrove; the first night is mandatory but recoverable; Scientist recruitment is optional, while research and specialist-dependent upgrades require recruitment. Remaining dialogue, transition staging, and lore details are still open.
 
 Tasks:
-- Write and approve a Chapter I beat sheet before implementing dialogue or quests.
+- Refine the approved Chapter I beat sheet's remaining open details; do not implement candidate dialogue as canon before dialogue/content approval.
 - Integrate story beats with existing survival, settlement, Scientist, research, shipwreck, and exploration gameplay where appropriate.
-- Keep the current island mechanics stable unless a separate design change is approved.
-- Do not conflate the existing Forgotten Shrine with the Shrine of Growth; preserve their separate identities until an explicit lore decision is made.
+- Keep the mandatory first-night milestone and both recovery outcomes stable. Preserve the optional Scientist path and specialist-dependent research/upgrade gates.
+- Keep the Forgotten Shrine and Shrine of Growth distinct until an explicit lore decision; leave Ancient Relic and Greedling/Greed Portal origins unresolved.
 
-**Exit criteria:** Chapter I has an approved beat sheet and separately scoped implementation tasks.
+**Exit criteria:** Chapter I has an owner-approved beat sheet, agreed chapter boundary/ending, and separately scoped implementation tasks.
 
 ## 6. New Game, Continue, and save compatibility
 
 The current menu sends both Start New Game and Continue directly to Forgotten Shore. Adding the Prologue changes that entry flow and requires an explicit policy.
 
-### Recommended initial policy — approval required
-- **Start New Game:** start the Prologue, then create/enter a fresh Forgotten Shore session after landing.
-- **Continue:** bypass the Prologue and load the existing Forgotten Shore save, including legacy saves with no narrative metadata.
-- **Legacy save:** missing narrative metadata must never force an existing player to replay the Prologue or invalidate the save.
-- **Prologue interruption:** for the first linear version, prefer no in-progress world save/resume during the Prologue. Exiting mid-Prologue restarts it on the next Start New Game. Confirm this UX before implementation.
-- **After landing:** let the existing world session and SaveManager own the kingdom save. Do not create a parallel save system.
-- **Skip:** if offered, skipping follows the same handoff to a fresh Forgotten Shore session; it must not load or overwrite an unrelated old save accidentally.
+### Approved policy (owner decision, 2026-11-17)
+- **First-ever Start New Game:** always play the Prologue. Do not display a Skip option.
+- **Later Start New Game:** if and only if the player profile records one successful full Prologue completion, offer the choice to Skip or Play Prologue again.
+- **Continue:** bypass the Prologue and load the existing Forgotten Shore world save, including legacy saves with no narrative metadata.
+- **Completion marker:** persist `prologue_completed_once` in a minimal global player profile separate from world saves. Set it only after the complete Prologue reaches its successful completion/handoff path; skipping never sets the flag.
+- **Profile safety:** missing, invalid, or unreadable profile data defaults to first-playthrough behavior (Skip locked), without blocking New Game or invalidating world saves.
+- **Prologue interruption:** no mid-Prologue save/resume. Exiting mid-Prologue restarts at pl_01 on the next New Game.
+- **After landing or eligible skip:** enter a fresh Forgotten Shore session; the existing world session and SaveManager own kingdom progress. Do not load or overwrite an unrelated old save accidentally.
 
-This is a recommendation, not an approved implementation contract until the project owner confirms it. If resumable Prologue playback is required, design and test the save representation first.
+This policy is approved for N4 planning. It does not authorize implementation until the N4 task plan is reviewed.
 
 ## 7. Ownership boundaries
 
@@ -201,9 +204,12 @@ This is a recommendation, not an approved implementation contract until the proj
 
 ### Automated/headless
 - Existing `bash tests/run_all.sh` remains green.
-- New Game routing starts the Prologue according to policy.
+- First-ever New Game starts the Prologue and offers no Skip.
+- After one successful full Prologue completion, a later New Game offers Skip or Play Again.
+- The completion flag survives New Game/world-save replacement and is not set by skipping.
+- Missing/corrupt profile data safely locks Skip without blocking New Game.
 - Continue bypasses the Prologue and loads a valid old save.
-- Prologue completion/skip transfers control exactly once to a fresh Forgotten Shore session.
+- Prologue completion/eligible skip transfers control exactly once to a fresh Forgotten Shore session.
 - Invalid narrative definitions fail closed without partial state mutation.
 - One-time events do not duplicate after restore, repeated triggers, skip, or scene re-entry.
 - Dialogue/cinematic input does not leak into player/world commands.
@@ -237,45 +243,41 @@ This is a recommendation, not an approved implementation contract until the proj
 | Prologue delays the game loop | Keep it short and return control promptly |
 | Narrative and progression facts are duplicated | One source of truth and explicit bridge only |
 
-## 10. First task for the coding agent
+## 10. Next tasks for the coding agent
 
-**Do not implement the Prologue yet.** Phases N1–N3 are implemented on `feat/narrative-runtime-foundation` (foundation only). The next tasks, in order:
+**No gameplay or narrative runtime code is authorized by this documentation milestone.** N1–N3 are already merged into `main` through PR #11. Next:
 
-1. Get owner approval for the N0 design-lock items and the New Game/Continue entry-flow policy (section 6).
-2. On approval, prepare the N4 content proposal from `docs/narrative/PROLOGUE_PRODUCTION_BREAKDOWN.md` (scene shells, placeholder assets, beat-by-beat tasks).
-3. Do not edit code until the N0 approvals and the N4 proposal are reviewed.
+1. Review N0/entry-flow decisions still marked PROPOSED or OPEN in the technical design and Prologue Story Design.
+2. Use the N4.0–N4.6 PR-sized implementation slices in `narrative/PROLOGUE_PRODUCTION_BREAKDOWN.md`. Start with N4.0 (global profile + entry/skip gate), then proceed in order. New Game routing, interruption, and first-playthrough skip policy are approved; each slice still needs its own code review, tests, and windowed verification before merge.
+3. Review [`CHAPTER_01_BEAT_SHEET.md`](CHAPTER_01_BEAT_SHEET.md) and resolve its owner questions. Chapter I implementation remains downstream of the Prologue handoff.
+4. Keep subsequent code work in separate PRs with tests and windowed inspection.
 
-The objective is a small, testable story foundation, not a speculative narrative framework.
+The objective remains a small, testable story experience, not a speculative narrative framework.
 
-## 11. Audit-aligned technical findings (PR #10 synchronization)
+## 11. Audit-aligned technical findings (refreshed after PR #11)
 
-Source audit of `main` @ `b19d109` (see [`NARRATIVE_IMPLEMENTATION_AUDIT.md`](NARRATIVE_IMPLEMENTATION_AUDIT.md) and [`CHAPTER_01_NARRATIVE_GAP_ANALYSIS.md`](CHAPTER_01_NARRATIVE_GAP_ANALYSIS.md)). These findings feed Phase N1 and do not change the N0–N5 phase structure.
+The source audit and Chapter I gap analysis are refreshed against the PR #11 merge commit (`eb82ae4`). They distinguish implemented runtime infrastructure from authored narrative content.
 
-### Confirmed absences (re-verified on latest main)
-- No dialogue runtime, no scripted-sequence/cutscene runner, no chapter progression runtime, no narrative save fields. `SaveManager` remains schema v2 (`scripts/save/SaveManager.gd:8-9`).
-- Save/load anchors: `build_save_payload` `scripts/world/ForgottenShoreSession.gd:1099`, `_apply_loaded_payload` `:1181`, `_consume_pending_load_if_requested` `:1252`.
+### Runtime facts
+- N1–N3 are implemented and merged: in-memory `NarrativeState`, `NarrativeData` validation, `DialoguePanel`, `PlayerControlLock`, and `SequenceRunner`.
+- The runtime is not connected to Prologue scenes, NPC conversations, or Chapter I beats. No quest/objective framework, chapter progression runtime, or narrative save fields exist.
+- `SaveManager` remains schema v2. Do not add narrative persistence without a separate design and migration decision.
+- `ClockHUD.FeedbackLabel` remains gameplay feedback only; dialogue uses its own panel.
 
-### TimeManager signal semantics (corrected)
-`daylight_started`, `sunset_started`, `night_started`, and `sunrise_reached` are **transition-time events, not per-frame ticks**: `_transition_to_next_phase` (`scripts/world/TimeManager.gd:137`) emits once per phase change, `_emit_initial_phase_if_needed` (`:130`) emits the initial daylight once, and `apply_save_dict` (`:99`) re-emits only on a non-silent restore (the session load path restores silently). Duplicate/trigger risk comes from connecting the same handler more than once and from triggers reacting during save-restore — use `is_connected` guards and idempotent, load-silent narrative events (N1).
+### Existing gameplay constraints
+- `ShoreView` / `ShoreFX` remain presentation helpers; `ForgottenShoreSession` remains the world orchestrator.
+- `TimeManager` phase signals are transition-time events, not per-frame ticks. Narrative listeners must be connected once, idempotent, and silent during save restoration.
+- Chapter I should reuse existing settlement, first-night, Scientist/research, exploration, and ship-repair systems rather than create parallel mechanics. The approved endpoint is arrival at Eldergrove; voyage/arrival content is future implementation.
 
-### Presentation ownership
-`ShoreView`/`ShoreFX` are merged (PR #8) and remain world presentation helpers, not narrative controllers (`ForgottenShoreSession.gd:86-87,148`). A dialogue/sequence presenter should follow the same separation.
+### Lore boundaries that remain OPEN
+- Forgotten Shrine (x=-780) and Shrine of Growth (x=820) remain separate until an explicit lore decision.
+- Ancient Relic artifact-vs-cache identity remains OPEN.
+- Greedlings and the Greed Portal origins/purpose remain OPEN and must not be invented in Chapter I dialogue.
+- Prologue protected mysteries remain protected: crown origin, power source, dynasty/ancestor, ancient kingdom name, and Great Eclipse cause.
 
-### UI and data constraints
-- `ClockHUD.FeedbackLabel` is a single overwritten line (`scripts/ui/ClockHUD.gd:11,125`); dialogue needs its own surface (N2).
-- Specialist/structure/technology/era `description` fields are validated but never displayed; do not treat them as live dialogue.
-
-### Lore identity items that stay unresolved
-- “Forgotten Shrine” (x=-780 cache/offering) vs “Shrine of Growth” (x=820 structure): keep separate until an explicit lore decision (N5).
-- “Ancient Relic” (Greed Portal loot) artifact-vs-cache: OPEN.
-- Greedlings / Greed Portal origins and purpose: out of scope until approved (§4).
-
-### Documentation drift to reconcile before authoring narrative text
-- Node count wording (`DECISIONS_M2_M8.md:17`, `PRD.md:335` vs 5 shipped nodes in `data/resource_nodes.json`).
-- East wall position (`x=360` in docs vs `380.0` in `data/buildings.json`/`BuildingManager`).
-- Watchtower position (`x=290` in `docs/GDD.md:134` vs `210.0` in data/code).
-- Save schema (`schema_version: 1` in `DECISIONS_M2_M8.md:25`/`PRD.md:342` vs v2 in `SaveManager.gd:9`).
-- GDD first-slice NPC/enemy scope table is stale vs shipped Farmer/Archer and Crawler/Brute/West Scouts.
+### Documentation hygiene
+- This roadmap's baseline and companion audit snapshots must be updated whenever source evidence changes.
+- Older first-slice values in other project documents (node counts, wall/watchtower positions, save schema, NPC/enemy scope) are outside this narrative-only PR unless directly needed for a story beat. Verify source data before authoring details.
 
 ---
 

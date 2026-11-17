@@ -171,6 +171,7 @@ The optional tagline “A new kingdom begins” should be reviewed against the C
 - **After shipwreck:** focuses on immediate survival.
 
 ### Dialogue rules
+- **Default dialogue language: English.** All authored in-game dialogue for the Prologue and later chapters uses English as the source/canonical text by default.
 - Keep lines short and natural.
 - Do not repeat information that the player can plainly see.
 - Avoid having Monarch declare himself a king, chosen one, or rightful heir.
@@ -257,8 +258,9 @@ Monarch should not immediately announce an intention to establish a kingdom. The
 | Voyage destination | OPEN | Monarch continues the search, but the destination is not fixed |
 | Cause of the storm | OPEN | Do not tie it to the crown without approval |
 | Crown's post-wreck appearance | Draft | It remains with Monarch; show it briefly |
-| Dialogue language/voice | OPEN | English text is only a candidate draft |
-| Prologue skip behavior | OPEN | Must be decided before sequence implementation |
+| Dialogue language | **DECIDED** | English is the default/source language for authored in-game dialogue. Additional language localization is future scope and must not change the English source text. |
+| Dialogue voice/audio | OPEN | Voice acting is not required for the initial implementation; presentation may remain text-only |
+| Prologue skip eligibility | **DECIDED** | No Skip on first-ever playthrough. Unlock only after one successful Prologue completion; persist eligibility in a player profile separate from world saves. Continue always bypasses Prologue. |
 
 ---
 

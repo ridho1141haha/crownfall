@@ -1,7 +1,7 @@
 # Crownfall — Narrative Implementation Readiness Audit
 
-**Audit date:** 2026-11-16 (revised)  
-**Repository snapshot:** `main` @ `6d209970170a9f1fa21946385c79ad02d5fb437d` (PR #10 merged); foundation revision audited on `feat/narrative-runtime-foundation` (phases N1–N3 implemented, test fixtures only).  
+**Audit date:** 2026-11-17 (refreshed after PR #11)  
+**Repository snapshot:** `main` @ `eb82ae4d63a33a5c0fb9bb3f17f4bf832860c79a` (PR #11 merged; N1–N3 runtime foundation is now on main).  
 **Engine:** Godot `4.7.2.stable`  
 **Scope:** narrative implementation only. No gameplay code was modified, no features were added, no lore was invented.  
 **Companion documents:** [`CHAPTER_01_NARRATIVE_GAP_ANALYSIS.md`](CHAPTER_01_NARRATIVE_GAP_ANALYSIS.md), the official [`NARRATIVE_IMPLEMENTATION_ROADMAP.md`](NARRATIVE_IMPLEMENTATION_ROADMAP.md) (phases N0–N5), and [`narrative/PROLOGUE_STORY_DESIGN.md`](narrative/PROLOGUE_STORY_DESIGN.md)
@@ -20,7 +20,7 @@ Inspected evidence classes:
 - Assets: `assets/**` (asset inventory and filename searches)
 - Documentation: `readme.md`, `docs/GDD.md`, `docs/PRD.md`, `docs/REVISED_PROJECT_BASELINE.md`, `docs/SYSTEMS.md`, `docs/TDD.md`, `docs/DECISIONS_M2_M8.md`, `docs/PROGRESSION_FOUNDATION_DESIGN.md`, `docs/ASSET_GUIDELINES.md`, `docs/ROADMAP.md`, `docs/CHANGELOG.md`, `docs/NARRATIVE_IMPLEMENTATION_ROADMAP.md`, `docs/narrative/PROLOGUE_STORY_DESIGN.md`
 
-Boundary note: since the first audit, the repository gained a **Prologue story design** (`docs/narrative/PROLOGUE_STORY_DESIGN.md`, “The Crown's Call”, 9 beats) and an **official implementation roadmap** (`docs/NARRATIVE_IMPLEMENTATION_ROADMAP.md`, phases N0–N5). Both are planning documents, not shipped features. A **Chapter I beat sheet and dialogue script still do not exist** — the roadmap phase N5 explicitly requires writing them before Chapter I content is implemented. No narrative runtime exists to execute; this is a static readiness audit.
+Boundary note: the repository now contains the Prologue story design, the N0–N5 roadmap, and the N1–N3 runtime foundation merged by PR #11. The runtime is implemented and tested but is not wired to canon content. The Chapter I beat sheet is being introduced in `docs/CHAPTER_01_BEAT_SHEET.md` as a **draft, non-canon proposal** pending owner approval; it does not authorize implementation.
 
 ---
 
@@ -31,13 +31,13 @@ Boundary note: since the first audit, the repository gained a **Prologue story d
 | Gameplay loop | **Implemented / tested** | Movement, economy, building, NPC builder/farmer/archer, night defense, save/load, specialists, research, shrine/structure foundation, buffs, era progression. The presentation refactor (`ShoreView`/`ShoreFX`, PR #8) is merged. |
 | Narrative design | **Prologue designed, Chapter I not yet** | “The Crown's Call” defines 9 Prologue beats, Monarch direction, vision content, and an OPEN-decision list. Chapter I has no approved beat sheet yet (roadmap N5). |
 | Narrative content (runtime) | **Near-zero** | No playable opening, crown, vision, dialogue, or chapter progression. Only functional prompts/status text and a few lore-flavoured names/descriptions. |
-| Narrative infrastructure | **Foundation only (N1–N3)** | Dialogue panel, control lock, sequence runner, and in-memory state exist as a tested, test-fixture-only foundation. No quest/objective system, no chapter state, no cutscene content, no narrative save fields. |
+| Narrative infrastructure | **Implemented foundation (N1–N3)** | Dialogue panel, control lock, sequence runner, validator, and in-memory state are merged and tested. They are not yet connected to authored content. No quest/objective system, chapter progression, cutscene content, or narrative save fields. |
 | Narrative data | **Fragments** | Narrative-flavoured `description` fields exist in data JSON but are validated only; no UI reads them. |
 | Narrative assets | **Absent** | No crown, portrait, dialogue box, cutscene, or vision assets. Asset guidelines defer narrative asset sets; the Prologue design lists the needed assets. |
 
-**Verdict:** the project remains a runnable **gameplay vertical slice**, not a narrative implementation. The Prologue design and N0–N5 roadmap remove the earlier “no narrative direction” blocker, but **nothing narrative is implemented**: the crown discovery, awakening, and vision are now *designed Prologue content*, not shipped features, and Chapter I still has no beat sheet. The project is ready to start the roadmap's **N1 narrative-state/event foundation** once the N0 design-lock approvals are granted.
+**Verdict:** the project remains a runnable **gameplay vertical slice with a merged narrative runtime foundation**, not a playable narrative implementation. N1–N3 are implemented and tested, but no canon Prologue or Chapter I content is wired into them. The Prologue remains designed, not playable. Chapter I now has a draft beat sheet proposal (`CHAPTER_01_BEAT_SHEET.md`) pending owner approval; N4 Prologue content remains the next narrative implementation milestone.
 
-The biggest gaps are: (1) no dialogue runtime/UI, (2) no narrative state/sequence/chapter infrastructure, (3) no implemented Prologue content (though designed), (4) no Chapter I beat sheet, and (5) still-unresolved lore identities: the two “shrines”, the “Ancient Relic”, and Greedling/Greed Portal origins.
+The biggest gaps are: (1) no Prologue scenes/content, (2) no integration of the runtime with NPCs or gameplay beats, (3) no chapter progression/quest system (and no evidence yet that one is needed), (4) no approved Chapter I beat sheet or dialogue script, and (5) unresolved lore identities: the two shrines, the Ancient Relic, and Greedling/Greed Portal origins.
 
 ---
 
@@ -52,7 +52,7 @@ Status legend: **Implemented** = reachable in runtime; **Partial** = functional 
 | Ancient Crown discovery / interaction | **Designed (Prologue beats 05–06), not implemented** | Design: clues lead to a forgotten royal ruin, a hidden chamber, a crown on an altar; the crown is a **trigger/key, not the source of Monarch's power**. No crown entity, data definition, interaction target, asset, or save flag exists in code. | `PROLOGUE_STORY_DESIGN.md:31,49-162` (beats 05–06); no crown asset under `assets/**`; repo-wide search finds only the project title and `crownfall_load_on_start` |
 | Crown awakening / vision | **Designed (Prologue beat 06), not implemented** | Design: touching the crown awakens inherited power and triggers a fragmented vision (ancient kingdom, ruler silhouette, recurring symbol, fading light, interrupted destruction); the vision must not reveal protected mysteries. No cutscene/sequence runtime exists; the only overlay is `ClockHUD.show_victory_banner`. | `PROLOGUE_STORY_DESIGN.md:33,44,beat 06`; `scripts/ui/ClockHUD.gd:61` |
 | Forgotten Shore arrival / settlement establishment | **Partial** | Prologue beat 09 designs the landing (wake on the beach, wreckage, crown continuity, prompt control handoff). The shipped build loads directly onto Forgotten Shore with the Monarch at `x=0`, a fixed Town Center/Hearth anchor, and the full settlement loop; no arrival scene exists. | `PROLOGUE_STORY_DESIGN.md:218-231`; `scenes/world/ForgottenShore.tscn` (Player at default position, Town Center anchor); `ForgottenShoreSession.gd:84-99` |
-| Existing NPCs and dialogue | **Partial (NPCs) / Missing (dialogue)** | NPCs exist as agents: Vagrant → Builder, Villager, Farmer, Archer; Scientist (discovery/recruitment). Interaction produces short prompts and one-line HUD feedback. No dialogue boxes, conversation trees, speaker portraits, choices, or NPC voice/text beyond data `display_name`/`description` (descriptions are not surfaced). | `scripts/npc/NPCBuilderAgent.gd:21-49`, `scripts/npc/NPCPopulationManager.gd:7-18,43-68`, `scripts/player/InteractionResolver.gd:146-198`, `scripts/ui/ClockHUD.gd:11,125` |
+| Existing NPCs and dialogue | **Partial (NPCs + runtime) / Missing (content integration)** | NPCs exist as agents: Vagrant → Builder, Villager, Farmer, Archer; Scientist (discovery/recruitment). Interaction produces short prompts and one-line HUD feedback. The dialogue panel exists but is not connected to NPCs; no canon conversations, portraits, choices, or voice are authored. | `scripts/npc/NPCBuilderAgent.gd:21-49`, `scripts/npc/NPCPopulationManager.gd:7-18,43-68`, `scripts/player/InteractionResolver.gd:146-198`, `scripts/ui/ClockHUD.gd:11,125` |
 | Greedling narrative context | **Partial (lore explicitly out of scope)** | Enemies are named Greedling Raider / Shadow Crawler / Gloom Brute; HUD forecast and phase feedback announce incoming raiders, west scouts, and night waves. The roadmap explicitly leaves “defining the origins or purpose of Greedlings, Greed Portal…” out of scope. | `data/enemies.json:3-17`, `scripts/survival/NightEncounterManager.gd:25-29,107-133`, `ForgottenShoreSession.gd:920-966`, `docs/NARRATIVE_IMPLEMENTATION_ROADMAP.md` §4 |
 | Forgotten Shrine | **Partial + Ambiguous** | Two distinct “shrine” features: (a) one-time `shrine_cache_far_west` at `x=-780` labelled “Forgotten Shrine” plus a daily offering (4W+2S → +2G, +5G with research); (b) the Phase 5 structure `shrine_of_growth` at `x=820` (“Shrine of Growth”), activated for 4G+2W+3S after the Stone Wall Tier 2 milestone, granting +1 Wood per wood acquisition. Roadmap N5 says not to conflate them until an explicit lore decision. | `data/resource_nodes.json:40-46`, `scripts/world/ResourceNodeManager.gd:13`, `InteractionResolver.gd:50-61`, `ForgottenShoreSession.gd:676-707`, `data/structures.json:3-20`, `docs/PROGRESSION_FOUNDATION_DESIGN.md:534-544`, roadmap N5 |
 | Ancient Relic | **Partial + Ambiguous** | One-time “Ancient Relic” loot at the Greed Portal (`x=1350`) grants +3 Gold and +2 Stone and sets `portal_relic_looted`. No inventory item, relic system, or lore text. GDD lists Ancient Relics as a deferred resource; the roadmap leaves defining the Ancient Relic out of scope. | `ForgottenShoreSession.gd:656-675,997-1001` (label), `data/resources.json`, `docs/GDD.md:107,125`, roadmap §4 |
@@ -68,7 +68,7 @@ Status legend: **Implemented** = reachable in runtime; **Partial** = functional 
 5. A 7-second victory banner on shipwreck escape.
 6. World labels (Town Center, wall/watchtower/farm status, shipwreck, Greed Portal, resource nodes).
 
-There is still no authored opening, no character introduction, no crown, no vision, no canon dialogue, and no chapter framing at runtime. A dialogue panel + sequence runner foundation now exists (N1–N3, test fixtures only) but is not wired into any gameplay content; the Prologue that would provide the opening is designed but not built.
+There is still no authored opening, no character introduction, no crown, no vision, no canon dialogue, and no chapter framing at runtime. The merged dialogue panel + sequence runner foundation (N1–N3) is not wired into any gameplay content; the Prologue that would provide the opening is designed but not built.
 
 ---
 
@@ -80,7 +80,7 @@ There is still no authored opening, no character introduction, no crown, no visi
 | Quest / objective system | **Absent** | `ClockHUD` exposes status/resources/feedback/forecast/population/research/structures only; no objective/quest tracker. PRD defers a quest tracker; REVISED baseline shows “Quest Progress (later)”. | None as-is; only if a later approved milestone needs it. |
 | Narrative event system | **Partial foundation** | In-memory `NarrativeState` (per-run completed IDs) + `SequenceRunner` exactly-once completion. Gameplay signals remain the only world events; no persisted trigger/condition system. | Hooks exist; conditions/once-only/seen state beyond the runner are future work (N4/N5). |
 | Story progression state | **Partial** | `ProgressionState` stores durable, strictly validated facts (14 registered IDs). `EraProgressionManager` tracks era. Session stores `ReignState`, shipwreck stage, portal relic, shrine offering used. No narrative chapter/beat/seen state. | Strong foundation for milestone gates. Facts are idempotent and persisted. |
-| Narrative save/load | **Partial** | Schema v2 (`SaveManager.SCHEMA_VERSION = 2`). `build_save_payload` persists `progression_flags` including `progression_facts`, `era_id`, `reign_state`, `shipwreck_stage`, `portal_relic_looted`, `shrine_offering_used_today`, node/tree states, and optional `research`. No dialogue/cutscene/quest/chapter fields. | Reuse validation/migration patterns. Narrative state needs either registered facts or a new optional validated save key — the N1 save decision. |
+| Narrative save/load | **Partial** | Schema v2 (`SaveManager.SCHEMA_VERSION = 2`). `build_save_payload` persists `progression_flags` including `progression_facts`, `era_id`, `reign_state`, `shipwreck_stage`, `portal_relic_looted`, `shrine_offering_used_today`, node/tree states, and optional `research`. No dialogue/cutscene/quest/chapter fields. | Reuse validation/migration patterns. NarrativeState is intentionally in-memory under the approved N1 decision; no narrative save fields are currently required. Revisit only if resumable/cross-session story requirements are approved. |
 | Cutscene / scripted sequence support | **Foundation only** | `SequenceRunner` executes typed allowlisted steps (dialogue/wait/lock_control/unlock_control/play_cue/change_scene/finish) with skip/cancel cleanup and a 31-check suite; no cinematic content or camera scripting yet. `ClockHUD.show_victory_banner` remains the only shipped in-game overlay. | The runner is the foundation; Prologue staging/camera work is N4. |
 | NPC interaction infrastructure | **Partial** | `InteractionResolver.resolve_nearest` returns `{kind, target_id, primary_command, upgrade_command, prompt_text, distance}`; `Player` emits input signals; session dispatches `execute_world_command`; specialist discovery/recruit, research start, structure activation, camps, shipwreck, portal, trees, buildings. No `talk` kind, no conversation state. | Extend, do not replace. Add a `talk` target/command or a dialogue trigger alongside existing prompts. |
 | Presentation layer (merged PR #8) | **Present, not narrative** | `ShoreView` (world visual setup/sync) and `ShoreFX` (transient feedback) are merged and wired from the session (`fx = ShoreFX.new(...)` `:86`, `view = ShoreView.new(...)` `:87`, `view.advance_and_sync(delta)` `:148`). They are world presentation helpers, not a dialogue, cutscene, or narrative runtime. | Keeps presentation separated; narrative UI should follow the same separation (own surface, no gameplay authority). |
@@ -110,7 +110,7 @@ Prologue and Chapter I are now separate scopes: the crown discovery, awakening, 
 | Opening / arrival handoff (Prologue beat 09) | **Designed, not implemented** |
 | Monarch identity / background establishment | **Designed (Prologue), not implemented in-game** |
 | Settlement establishment | **Partial** (gameplay exists; narrative framing missing) |
-| Existing NPCs / dialogue | **Partial NPCs; dialogue missing** |
+| Existing NPCs / dialogue | **Partial NPCs + runtime; content integration missing** |
 | Greedling narrative context | **Partial** (threat pressure; lore out of scope) |
 | Forgotten Shrine | **Partial + ambiguous identity** |
 | Ancient Relic | **Partial + ambiguous definition** |
@@ -129,7 +129,7 @@ These are **consistency observations**, not resolutions. Intentional mysteries/o
 
 - **Ancient Crown / awakening / vision.** Now designed in the Prologue (“The Crown's Call”, beats 05–06; crown is a trigger/key, power already exists in Monarch). Nothing is implemented yet — a planned-but-unshipped feature, not a contradiction.
 - **First Light / Great Eclipse / Aetherion.** Designed as Prologue beat 01 with candidate narration; the cause of the Great Eclipse must remain unexplained. Not implemented in-game.
-- **Chapter titles I–V.** GDD §2.2 lists them; only Chapter I’s location exists as gameplay. No chapter state/framework. The GDD scope clarification was updated to state that the build “does not yet contain a playable Prologue, dialogue runtime, quest chain, or cinematic story sequence” and points to the Prologue design and roadmap (`docs/GDD.md:66`), and the narrative scope row now lists the Prologue as planned (`docs/GDD.md:112`).
+- **Chapter titles I–V.** GDD §2.2 lists them; only Chapter I’s location exists as gameplay. No chapter state/framework. The GDD scope clarification now distinguishes the implemented N1–N3 runtime foundation from the still-unimplemented Prologue and Chapter I story content (`docs/GDD.md:66,112`).
 - **Narrative scope deferrals.** PRD/GDD/REVISED still defer full dialogue, quests, branching story, and chapter framework (`docs/PRD.md:418,505-521`; `docs/REVISED_PROJECT_BASELINE.md:85,286`). Implementation is consistent; the roadmap narrows the first delivery to the Prologue plus a minimal foundation (N0–N4).
 
 ### 5.2 Lore-identity ambiguities requiring a decision (still open)
@@ -172,7 +172,7 @@ No intentional mystery is resolved here; the audit only flags where decisions ar
 |---|---|---|
 | `InteractionResolver` + `Player` input + session command dispatch | Ready-made contextual target resolution and command routing; can add a `talk` target/command. | Do not replace; extend without breaking existing kinds. |
 | `ProgressionState` facts | Durable, idempotent, strictly validated milestone state; ideal for “beat seen/condition met”. | Registry is code-owned; new IDs require code + tests + save validation. Roadmap N1: keep narrative facts distinct from gameplay facts. |
-| `SaveManager` schema/validation/migration | Proven atomic save/load, strict validation, v1→v2 migration, rollback. | Schema is strict; narrative state needs the explicit N1 design (facts vs new optional key; non-resumable vs resumable Prologue). |
+| `SaveManager` schema/validation/migration | Proven atomic save/load, strict validation, v1→v2 migration, rollback. | Schema is strict; N1 intentionally keeps NarrativeState in-memory. Any future resumable story state needs a separate approved schema/migration design. |
 | Gameplay signals | Phase transitions, night resolution, specialist, research, structure, era, feedback events. | Transition-time events (§3.1); need once-only/seen state and load-silence, not raw signal use. |
 | `ClockHUD` feedback/forecast + label APIs | Minimal presentation channels for short text. | `FeedbackLabel` is a single overwritten line; cannot host dialogue. |
 | `ClockHUD.show_victory_banner` | A full-screen text overlay with fade in/out. | 7s timer, no input gating/skip/state; only a visual seed. |
@@ -181,24 +181,20 @@ No intentional mystery is resolved here; the audit only flags where decisions ar
 | `PauseMenu` + scene transitions | Existing pause/return-to-menu flow. | Narrative must integrate pause/input and avoid autosave mid-sequence. |
 | Tests + repo verifier | `SceneTree` harness patterns, headless suites, integrity checks. | Narrative tests must follow tab indentation, `_check`, no raw `assert`, no `root.add_child`. |
 
-### 6.2 Systems needing small extensions
+### 6.2 Systems needing content integration
 
-- **InteractionResolver**: add a `talk`/`converse` target kind and prompt; keep existing priorities. Session needs a dispatch path that starts dialogue without consuming gameplay resources.
-- **ClockHUD or a new CanvasLayer**: add a dialogue panel (speaker, body, advance/skip) rather than overloading `FeedbackLabel` (roadmap N2).
-- **Input map**: add `dialogue_advance` / `dialogue_skip` actions (currently absent from `project.godot`).
-- **Save payload**: add a validated narrative-state section (or register narrative facts) with migration and strict rejection — the N1 save decision must be made first.
-- **Trigger evaluation**: reuse `ProgressionUnlockEvaluator` semantics (all_of/any_of over registered facts) but do not pretend it is a narrative event system; add once-only/seen state.
+- **SequenceRunner / DialoguePanel:** author validated sequence data and connect it through a narrow scene/session entry point. Do not move narrative ownership into `ForgottenShoreSession`.
+- **NPC conversations:** if the approved beat sheet requires NPC dialogue, add a narrow talk interaction path to `InteractionResolver` and dispatch it to the narrative presenter. Preserve existing recruit/research interaction priorities.
+- **Gameplay beat triggers:** bind only to existing authoritative milestones/signals (first-night outcome, Scientist discovery/recruitment, research completion, ship readiness) and make triggers idempotent and load-silent.
+- **Camera/fade/world-pause support:** add an operation only when an approved beat requires it; these are not part of the current runner contract.
+- **Persistence:** keep `NarrativeState` in-memory unless a resumable/cross-session story requirement is approved. SaveManager schema v2 is unchanged.
 
-### 6.3 Missing foundations
+### 6.3 Missing content and optional systems
 
-- Dialogue data format, validation, and runtime (nodes, lines, conditions, localization keys).
-- Narrative state model (seen beats/lines, sequence completion) with save/load and transactional rejection.
-- Narrative event/trigger system with idempotence, load-silence, skip/replay semantics, and conditions beyond facts.
-- Scripted-sequence runner (movement/input lock, camera control, fades, waits, skip, pause integration) — typed operations only (roadmap N3).
-- Narrative UI (dialogue box, speaker/portrait, advance indicator, accessibility).
-- Narrative asset pipeline (crown, portraits, cutscene art, audio, fonts) per the Prologue design §7.
-- Localization pipeline.
-- Narrative test harness and acceptance criteria.
+- Prologue scenes, art/audio, and New Game routing (N4).
+- Chapter I canon dialogue and beat triggers remain unimplemented; core progression decisions are approved (mandatory recoverable first night, optional Scientist with specialist gates, chapter end on Eldergrove arrival). Chapter-end presentation and voyage/arrival content remain future work after N4 handoff.
+- A chapter/quest framework is absent, but should not be built by default. First prove that a small number of authored sequences and existing progression facts can deliver the approved beats.
+- Portraits, choices, voice, localization, and a full journal are optional future scope, not current requirements.
 
 ### 6.4 Architectural conflicts / risks
 
@@ -215,9 +211,10 @@ No intentional mystery is resolved here; the audit only flags where decisions ar
 
 ### 6.5 Readiness conclusion
 
-- **Implemented:** roadmap N1–N3 foundation (in-memory `NarrativeState`, `NarrativeData` validator, `DialoguePanel` + `PlayerControlLock`, `SequenceRunner`, `dialogue_advance` input, Start New Game overwrite confirmation) — test fixtures only, no canon content, no save-schema changes.
-- **Not ready:** Prologue and Chapter I content until the N0 design-lock approvals and the N5 Chapter I beat sheet.
-- **Recommended gate:** approve the N0 items and the New Game/Continue entry-flow policy, then proceed to N4 content using `docs/narrative/PROLOGUE_PRODUCTION_BREAKDOWN.md`.
+- **Implemented:** N1–N3 narrative runtime foundation merged on `main` by PR #11: `NarrativeState`, `NarrativeData` validation, `DialoguePanel`, `PlayerControlLock`, and `SequenceRunner`. Automated narrative suites and the merge-commit CI check passed.
+- **Not implemented:** playable Prologue scenes/content, NPC conversation integration, Chapter I canon dialogue/beats, chapter progression, and narrative save fields.
+- **Planning state:** Chapter I beat sheet exists as a non-canon draft proposal. Owner approval is required before proposed story details become canon or code tasks.
+- **Recommended sequence:** resolve N0/entry-flow approvals, prepare and implement N4 Prologue in a separate PR, then implement only the approved Chapter I beats in small N5 PRs.
 
 ---
 
@@ -258,6 +255,7 @@ No intentional mystery is resolved here; the audit only flags where decisions ar
 - `data/resources.json` — only gold/wood/stone.
 
 **Documentation**
+- `docs/CHAPTER_01_BEAT_SHEET.md` — draft, non-canon Chapter I proposal; owner approval pending.
 - `docs/narrative/PROLOGUE_STORY_DESIGN.md:24-38` (agreed direction), `:49-162` (beats 01–09), `:218-231` (Prologue/Chapter I boundary), `:233-246` (acceptance), `:248-265` (open decisions).
 - `docs/NARRATIVE_IMPLEMENTATION_ROADMAP.md` — official N0–N5 phases, §4 out-of-scope lore, §6 entry-flow policy, §7 ownership, §8 quality gates.
 - `docs/GDD.md:66,112` — updated narrative scope (Prologue planned, not shipped).

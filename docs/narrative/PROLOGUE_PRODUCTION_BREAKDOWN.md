@@ -3,7 +3,7 @@
 **Status:** Production readiness inventory ONLY. Nothing here is implemented, and nothing here converts an OPEN story detail into canon.  
 **Story source:** [`PROLOGUE_STORY_DESIGN.md`](PROLOGUE_STORY_DESIGN.md) — beats, character direction, and lore boundaries.  
 **Runtime source:** [`NARRATIVE_RUNTIME_TECHNICAL_DESIGN.md`](NARRATIVE_RUNTIME_TECHNICAL_DESIGN.md) — N1–N3 foundation (dialogue panel, sequence runner, control lock).  
-**Baseline:** `main` @ `6d209970170a9f1fa21946385c79ad02d5fb437d`.
+**Baseline:** `main` @ `eb82ae4d63a33a5c0fb9bb3f17f4bf832860c79a` (after PR #11 merge; N1–N3 runtime is implemented).
 
 Legend for asset status: **E** = Existing, **R** = Reusable with modification, **M** = Missing, **P** = Placeholder acceptable (labelled, non-canon), **N** = Requires new production. Complexity: **S** / **M** / **L**.
 
@@ -23,7 +23,7 @@ Legend for asset status: **E** = Existing, **R** = Reusable with modification, *
 | 08 | The Shipwreck | Cinematic (storm → fade) | pl_07 | M |
 | 09 | Forgotten Shore | Interactive handoff → existing gameplay scene | pl_08 | M |
 
-Entry/exit contract: New Game → pl_01…pl_09 → `scenes/world/ForgottenShore.tscn` (fresh session). Continue bypasses everything (technical design §A). No mid-Prologue save.
+Entry/exit contract: New Game → Prologue (unless previously completed and player chooses Skip) → pl_01…pl_09 → `scenes/world/ForgottenShore.tscn` (fresh session). Continue bypasses everything and loads the existing world save. Skip is unavailable on the first-ever playthrough; after one successful completion, it is offered on later New Game starts. Completion eligibility is stored in a small global player profile, separate from world saves. No mid-Prologue save.
 
 ## 2. Per-beat production needs
 
@@ -33,7 +33,7 @@ Entry/exit contract: New Game → pl_01…pl_09 → `scenes/world/ForgottenShore
 - **Audio:** opening music prosperity→loss; ambient. **N**.
 - **Camera:** slow pan / static framing with fades. **N** (framing data; runner `change_scene`/wait already exist).
 - **Animation:** none. **—**.
-- **Test criteria:** plays once on New Game; skippable per policy; reveals no Great Eclipse cause.
+- **Test criteria:** first-ever New Game cannot skip; later New Game may skip only after one successful Prologue completion; Continue bypasses; profile eligibility survives New Game/world-save replacement; invalid/missing profile safely locks Skip; reveals no Great Eclipse cause.
 
 ### pl_02 — A Faint Resonance
 - **Environment:** old stone wall/ruin fragment. **N** (simple backdrop) or **P**.
@@ -113,7 +113,10 @@ Entry/exit contract: New Game → pl_01…pl_09 → `scenes/world/ForgottenShore
 | Royal symbol design | **OPEN / P** | Use one labelled placeholder until approved |
 | Crown/altar props | **M/N** | Must not imply unapproved lore; placeholder first |
 | Audio pipeline | **R** | `assets/audio/*.wav` + SFX player exist; music/ambience channels TBD |
-| Localization | **M** | Candidate lines are English drafts; language/voice OPEN |
+| Dialogue source language | **DECIDED** | English is the default/source language for all authored in-game dialogue. Keep dialogue data ready for future localization without building a localization framework now |
+| Localization pipeline | **FUTURE** | Additional languages are out of current N4 scope; do not block Prologue implementation |
+| First-playthrough completion flag | **DECIDED** | Store `prologue_completed_once` in a minimal global player profile separate from world-save schema v2; only successful full completion unlocks Skip |
+| Voice acting | **FUTURE / OPTIONAL** | Initial implementation may use text-only dialogue; no voice recording is required |
 
 ## 4. Suggested implementation order (post-foundation)
 
@@ -122,10 +125,44 @@ Entry/exit contract: New Game → pl_01…pl_09 → `scenes/world/ForgottenShore
 3. pl_03 + pl_04 interactive pass (movement, inspect, dialogue panel).
 4. pl_05 + pl_06 (chamber, altar, crown interaction, vision) — highest risk; do last in art but first in design review.
 5. pl_07 + pl_08 + pl_09 handoff; wire fresh Forgotten Shore session and save policy.
-6. Polish, skip policy, windowed inspection.
+6. Implement the approved first-playthrough gate and persistent profile flag; test first run, completed run, skip, Continue, and corrupted/missing profile.
+7. Polish, windowed inspection.
 
 No step above may ship an OPEN detail as canon. All placeholder assets must be visibly labelled/removable.
 
-## 5. Test criteria per beat (summary)
+## 5. N4 implementation slices (proposed PR boundaries)
+
+Keep N4 incremental. Each slice is a separate PR with one coherent responsibility, focused tests, and no Chapter I runtime work.
+
+| Slice | Scope | Main deliverable | Must pass before next slice |
+|---|---|---|---|
+| N4.0 — Entry + profile gate | Minimal global `PlayerProfile`; New Game/Continue routing; first-playthrough Skip gate; overwrite confirmation compatibility | New Game enters Prologue entry route; Continue loads world save; Skip hidden until one successful full completion; profile survives New Game and world-save replacement | Profile missing/corrupt fallback, atomic-write failure, first-run/returning-run/Continue tests; existing v1/v2 world saves and full gameplay suite remain green |
+| N4.1 — Prologue shell | Prologue scene root, transition contract, reusable text-only sequence presentation, labelled placeholder visual treatment | A playable vertical shell that can load and run a sequence without yet authoring all nine beats | Scene transitions allowlisted; input isolation and cleanup; no runtime errors; no canon details invented |
+| N4.2 — Lost World + Faint Resonance | Beats pl_01 and pl_02 | Opening cinematic and childhood flashback using English dialogue/narration | First-playthrough flow; skip eligibility; visual continuity; Great Eclipse cause remains unknown |
+| N4.3 — Wanderer + Repeated Mark | Beats pl_03 and pl_04 | Short interactive exploration and repeated-symbol inspection | Movement/inspect controls isolated correctly; symbol consistency; no premature lore explanation |
+| N4.4 — Forgotten Ruins + Crown's Call | Beats pl_05 and pl_06 | Hidden chamber, altar interaction, awakening, fragmented vision | Protected mysteries remain hidden; crown is a persistent visual story object, not an inventory item |
+| N4.5 — Unfinished Journey → Shipwreck → Forgotten Shore | Beats pl_07–pl_09 and fresh-world handoff | Sea departure, shipwreck, landing, Chapter I title card, control handoff | Profile completion flag set exactly once only after successful full completion; fresh shore session; no old save loaded accidentally |
+| N4.6 — Integration + presentation QA | Whole Prologue, audio/polish, windowed testing, regression | Release-ready N4 Prologue experience | Full headless suite, first-time/returning-player matrix, windowed inspection, no input leaks or duplicate transitions |
+
+### N4.0 profile and entry-flow contract
+
+- Keep `SaveManager` and world-save schema v2 unchanged.
+- Store only `prologue_completed_once` in a small versioned global profile under `user://`; do not store kingdom progress there.
+- Treat missing, malformed, unsupported-version, or unreadable profile data as **not completed**. This locks Skip but must not block New Game or Continue.
+- Write the completion flag only after pl_09 completes successfully and the handoff to a fresh Forgotten Shore session is committed. Never set it when the player chooses Skip.
+- If the player skips on an eligible later New Game, hand off to a fresh Forgotten Shore session without replaying Prologue beats.
+- Continue always bypasses Prologue and uses the existing world save.
+- Preserve the existing Start New Game overwrite confirmation. The profile flag must not be deleted when the world save is replaced.
+- Do not add a general profile/settings framework. Keep this implementation narrowly scoped to the one durable eligibility fact.
+
+### Cross-slice guardrails
+
+- English is the authored source language for every dialogue line. No localization framework or voice acting is required in N4.
+- Use clearly labelled, replaceable placeholders until visual/audio assets are approved.
+- Do not implement Chapter I narrative beats as part of N4.
+- Do not add quest systems, branching dialogue, chapter managers, cinematic editors, or arbitrary script execution.
+- Every slice updates its tests and docs; no slice is merged with known parser/runtime errors or a failing gameplay regression suite.
+
+## 6. Test criteria per beat (summary)
 
 Every beat must pass: plays exactly once per run in order; skip/cancel per policy restores control; no dialogue/sequence input leaks into movement or world commands; completion is recorded exactly once; scene transitions happen at most once; no `SCRIPT ERROR`/`Parser Error` in logs; windowed inspection confirms framing, text readability, and control handoff (pl_09).
