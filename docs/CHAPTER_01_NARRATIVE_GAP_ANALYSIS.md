@@ -15,7 +15,7 @@ The repository now separates two narrative scopes:
 - **Prologue — “The Crown's Call”** (`docs/narrative/PROLOGUE_STORY_DESIGN.md`): happens **before** the sea voyage, the shipwreck, and the arrival on Forgotten Shore. **Crown Discovery (beats 05–06), Crown Awakening, and the Vision are Prologue content, not Chapter I beats.**
 - **Chapter I — Forgotten Shore** (`docs/GDD.md:58-66`): begins when the player regains control on Forgotten Shore and continues with survival, exploration, and the gradual establishment of a settlement (`PROLOGUE_STORY_DESIGN.md:218-231`).
 
-The GDD has been aligned with this split: the current build “does not yet contain a playable Prologue, dialogue runtime, quest chain, or cinematic story sequence” and the Prologue is explicitly in narrative planning (`docs/GDD.md:66,112`). The official roadmap adds the N0–N5 implementation phases, with N4 = Prologue content integration and N5 = the separate Chapter I content milestone.
+The GDD distinguishes the implemented N1–N3 runtime foundation from the still-unimplemented Prologue and Chapter I story content (`docs/GDD.md:66,112`). The official roadmap adds the N0–N5 phases, with N4 = Prologue content integration and N5 = the separate Chapter I content milestone.
 
 **Current planning state:** a first Chapter I beat sheet proposal now exists in [`CHAPTER_01_BEAT_SHEET.md`](CHAPTER_01_BEAT_SHEET.md). It is a **draft, non-canon proposal** pending owner approval; no dialogue script is approved and no Chapter I content is implemented.
 
@@ -309,7 +309,7 @@ The runtime foundation is already implemented. Content implementation remains ga
 
 - **Lore lock-in:** implementing Chapter I text before the N5 beat sheet and the shrine/relic/Greedling lore decisions risks rework.
 - **Overbuilding:** a quest/branching framework is not justified; the roadmap deliberately limits N1–N3 to what the Prologue needs.
-- **Save churn:** narrative state added without the N1 save decision can break existing saves/tests.
+- **Save churn:** adding persistent narrative state despite the approved in-memory N1 design could break existing saves/tests; any change requires a separate schema and migration review.
 - **Session coupling:** narrative triggers in `ForgottenShoreSession._process`/command handlers would deepen the orchestrator; keep a separate narrative domain/presenter with a narrow handoff contract.
 - **Transition-time signals:** phase signals fire once per transition (`TimeManager.gd:137`), once for the initial phase (`:130`), and are re-emitted only by a non-silent `apply_save_dict` (`:99`) — the session restores silently. The real risks are duplicate handler connections (guard with `is_connected`) and triggers reacting during save-restore; keep triggers idempotent and load-silent. They do **not** fire every frame.
 - **UI contention:** the single feedback label is overwritten by gameplay; dialogue needs its own surface.
