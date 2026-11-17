@@ -14,6 +14,8 @@ extends Node
 ##    still execute, at most once) and still completes exactly once,
 ##  - cancel() halts the run (flags + generation token) without completion and
 ##    safely stops any awaiting coroutine; late continuations become no-ops,
+##  - every cleanup is scoped to the run generation that owns it (_cleanup(gen)
+##    no-ops for stale runs), so a cancelled run can never touch a newer run,
 ##  - _exit_tree always restores control and closes the panel.
 
 signal sequence_started(sequence_id: String)
@@ -109,30 +111,30 @@ func cancel() -> void:
 	if _panel_open and _panel != null and is_instance_valid(_panel):
 		_panel.close()
 	_panel_open = false
-	_cleanup()
+	_cleanup(_generation)
 
 
 func _execute(sequence: Dictionary, gen: int) -> void:
 	var steps: Array = sequence.get("steps", []) as Array
 	for i: int in range(steps.size()):
 		if _cancel_requested or not _running or gen != _generation:
-			_cleanup()
+			_cleanup(gen)
 			return
 		var step: Dictionary = steps[i] as Dictionary
 		var op: String = String(step.get("op", ""))
 		if _skip_requested:
 			if op == "change_scene":
-				_perform_change_scene(step)
+				_perform_change_scene(step, gen)
 			continue
 		match op:
 			"dialogue":
 				if not await _run_dialogue(step, gen):
-					_cleanup()
+					_cleanup(gen)
 					return
 			"wait":
 				await _run_wait(step, gen)
 				if _cancel_requested or not _running or gen != _generation:
-					_cleanup()
+					_cleanup(gen)
 					return
 			"lock_control":
 				_lock.lock(_control_target)
@@ -142,31 +144,31 @@ func _execute(sequence: Dictionary, gen: int) -> void:
 				_run_cue(step)
 			"change_scene":
 				if _cancel_requested or not _running or gen != _generation:
-					_cleanup()
+					_cleanup(gen)
 					return
-				_perform_change_scene(step)
+				_perform_change_scene(step, gen)
 				if _cancel_requested or not _running or gen != _generation:
-					_cleanup()
+					_cleanup(gen)
 					return
-				_finalize_completion()
+				_finalize_completion(gen)
 				return
 			"finish":
 				break
 			_:
-				_fail("unknown sequence op: %s" % op)
+				_fail(gen, "unknown sequence op: %s" % op)
 				return
 		if _cancel_requested or not _running or gen != _generation:
-			_cleanup()
+			_cleanup(gen)
 			return
 	if _cancel_requested or not _running or gen != _generation:
-		_cleanup()
+		_cleanup(gen)
 		return
-	_finalize_completion()
+	_finalize_completion(gen)
 
 
 func _run_dialogue(step: Dictionary, gen: int) -> bool:
 	if _panel == null or not is_instance_valid(_panel):
-		_fail("dialogue panel unavailable")
+		_fail(gen, "dialogue panel unavailable")
 		return false
 	var lines: Array = step.get("lines", []) as Array
 	var typed_lines: Array[Dictionary] = []
@@ -193,12 +195,12 @@ func _run_cue(step: Dictionary) -> void:
 		_cue_player.call(String(step.get("cue_id", "")))
 
 
-func _perform_change_scene(step: Dictionary) -> void:
+func _perform_change_scene(step: Dictionary, gen: int) -> void:
 	if _scene_changed:
 		return
 	var scene_path: String = String(step.get("scene_path", ""))
 	if not _allowed_scenes.has(scene_path):
-		_fail("scene transition not allowed: %s" % scene_path)
+		_fail(gen, "scene transition not allowed: %s" % scene_path)
 		return
 	_scene_changed = true
 	if _scene_transition.is_valid():
@@ -207,23 +209,25 @@ func _perform_change_scene(step: Dictionary) -> void:
 		get_tree().change_scene_to_file(scene_path)
 
 
-func _finalize_completion() -> void:
+func _finalize_completion(gen: int) -> void:
 	if _completion_emitted:
-		_cleanup()
+		_cleanup(gen)
 		return
 	_completion_emitted = true
 	if _state != null:
 		_state.mark_completed(_current_id)
-	_cleanup()
+	_cleanup(gen)
 	sequence_completed.emit(_current_id)
 
 
-func _fail(reason: String) -> void:
-	_cleanup()
+func _fail(gen: int, reason: String) -> void:
+	_cleanup(gen)
 	sequence_failed.emit(_current_id, reason)
 
 
-func _cleanup() -> void:
+func _cleanup(gen: int) -> void:
+	if gen != _generation:
+		return
 	_running = false
 	_skip_requested = false
 	_cancel_requested = false
@@ -241,4 +245,4 @@ func _exit_tree() -> void:
 		if _panel_open and _panel != null and is_instance_valid(_panel):
 			_panel.close()
 		_panel_open = false
-		_cleanup()
+		_cleanup(_generation)

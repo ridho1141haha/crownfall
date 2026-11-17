@@ -147,6 +147,37 @@ func _sequence_f() -> Dictionary:
 	}
 
 
+func _sequence_g() -> Dictionary:
+	return {
+		"id": "probe_runner_race_cancel_g",
+		"skip_allowed": false,
+		"steps": [
+			{"op": "lock_control"},
+			{"op": "dialogue", "lines": [
+				{"speaker": "Test Speaker", "text": "race cancel line"},
+			]},
+			{"op": "wait", "seconds": 5.0},
+			{"op": "play_cue", "cue_id": "cue_race_should_not_run"},
+			{"op": "unlock_control"},
+			{"op": "finish"},
+		],
+	}
+
+
+func _sequence_h() -> Dictionary:
+	return {
+		"id": "probe_runner_race_after_cancel_h",
+		"skip_allowed": false,
+		"steps": [
+			{"op": "dialogue", "lines": [
+				{"speaker": "Test Speaker", "text": "race after cancel line"},
+			]},
+			{"op": "unlock_control"},
+			{"op": "finish"},
+		],
+	}
+
+
 func _process(_delta: float) -> bool:
 	_frames += 1
 	if _frames > 4000:
@@ -386,6 +417,41 @@ func _process(_delta: float) -> bool:
 				return true
 			_check(_completed_ids.has("probe_runner_after_cancel"), "new run after cancel completes exactly once")
 			_check(_session.player.is_physics_processing(), "control restored after post-cancel run")
+			# --- NEW (PR #11 review): stale coroutine cleanup must not affect newer run ---
+			_check(_runner.play(_sequence_g()), "sequence G starts for stale-coroutine race")
+			_stage = 40
+			_frames = 0
+			return false
+		40:
+			if not _runner.is_running():
+				return false
+			if not _panel.is_open():
+				return false
+			_runner.cancel()
+			_check(_runner.play(_sequence_h()), "sequence H starts immediately after cancel before stale continuation cleanup")
+			_stage = 41
+			_frames = 0
+			return false
+		41:
+			if not _runner.is_running():
+				return false
+			if not _panel.is_open():
+				return false
+			_send_key(KEY_ENTER, true)
+			_stage = 42
+			_frames = 0
+			return false
+		42:
+			if _runner.is_running():
+				if _frames < 120:
+					return false
+				_check(false, "sequence H did not finish after cancel overlap")
+				return true
+			_check(not _completed_ids.has("probe_runner_race_cancel_g"), "stale cancelled run G added no completion")
+			_check(_completed_ids.has("probe_runner_race_after_cancel_h"), "new run H completed exactly once")
+			_check(not _cues.has("cue_race_should_not_run"), "stale cancelled run G did not run cue")
+			_check(_transitions.size() == 1, "stale cancelled run G did not transition")
+			_check(_session.player.is_physics_processing(), "control restored after race sequence H")
 			# unload cleanup: free the runner while a sequence is open
 			_check(_runner.play(_sequence_a()), "sequence A starts for unload test")
 			_stage = 15
