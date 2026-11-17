@@ -31,6 +31,7 @@ This is not a plan to implement all chapters, a branching RPG dialogue framework
 | [Chapter I Narrative Gap Analysis](CHAPTER_01_NARRATIVE_GAP_ANALYSIS.md) | Chapter I beats, implemented vs missing, Prologue/Chapter I boundary |
 | [Narrative Runtime Technical Design](narrative/NARRATIVE_RUNTIME_TECHNICAL_DESIGN.md) | N1–N3 runtime architecture decisions + N0 production contract |
 | [Prologue Production Breakdown](narrative/PROLOGUE_PRODUCTION_BREAKDOWN.md) | N4 readiness inventory (scenes, assets, audio, test criteria) |
+| [N4.3 Planning](narrative/N4_3_PLANNING.md) | Approved planning direction, interactive beat scope, technical boundary, acceptance criteria, and implementation slices for pl_03–pl_04 |
 
 If a story detail is marked OPEN, preserve that uncertainty. If a technical decision is not covered, inspect the current implementation and propose options before changing architecture.
 
