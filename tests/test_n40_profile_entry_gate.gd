@@ -213,8 +213,12 @@ func _initialize() -> void:
 	_real_save_existed = FileAccess.file_exists(SaveManager.DEFAULT_SAVE_PATH)
 	if _real_save_existed:
 		_real_save_snapshot = FileAccess.get_file_as_string(SaveManager.DEFAULT_SAVE_PATH)
+	# SaveManager also stages .bak beside the real save, so .bak is snapshotted
+	# for it. PlayerProfile never writes a .bak sidecar next to the profile,
+	# so no unused .bak snapshot is taken for the profile.
 	for suffix: String in [".tmp", ".bak", ".old"]:
 		_real_save_sidecars[suffix] = _snapshot_sidecar(SaveManager.DEFAULT_SAVE_PATH + suffix)
+	for suffix: String in [".tmp", ".old"]:
 		_real_profile_sidecars[suffix] = _snapshot_sidecar("user://player_profile.json" + suffix)
 	# Fail-closed: if the first isolation assertion fails, no metas are
 	# installed, no scene loads, and the run ends with exit code 1.
@@ -588,11 +592,13 @@ func _process(_delta: float) -> bool:
 			if DirAccess.dir_exists_absolute(TEST_DIR):
 				DirAccess.remove_absolute(ProjectSettings.globalize_path(TEST_DIR))
 			# Real player profile: byte-exact non-mutation proof (read-only).
+			# Profile sidecars are NOT proven by global absence — a pre-existing
+			# .tmp/.old from other suites or development must not fail this run —
+			# they are compared against their pre-run snapshots further below.
 			if _real_profile_existed:
 				_check(FileAccess.get_file_as_string("user://player_profile.json") == _real_profile_snapshot, "developer's real user://player_profile.json was never mutated")
 			else:
 				_check(not FileAccess.file_exists("user://player_profile.json"), "suite never created the developer's real user://player_profile.json")
-			_check(not FileAccess.file_exists("user://player_profile.json.tmp") and not FileAccess.file_exists("user://player_profile.json.old"), "no profile sidecar was created next to the real profile")
 			# Real world save + sidecars: the suite never stages, writes, or
 			# deletes them (review fix: Continue consumes the injected path).
 			# Sidecars are proven byte-identical to their pre-run snapshots —
