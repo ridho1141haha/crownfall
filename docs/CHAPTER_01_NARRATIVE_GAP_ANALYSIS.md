@@ -259,7 +259,7 @@ Status: **EXISTS** = implemented and reachable; **PARTIAL** = gameplay/system ex
 
 ### 5.2 Still OPEN
 
-**Prologue** (`PROLOGUE_STORY_DESIGN.md:248-265`): royal symbol design, ruins name, childhood location, travel notes/artifacts, ship origin, voyage destination, storm cause, crown post-wreck appearance (draft), dialogue language/voice, skip behavior.
+**Prologue** (`PROLOGUE_STORY_DESIGN.md:248-265`): royal symbol design, ruins name, childhood location, travel notes/artifacts, ship origin, voyage destination, storm cause, crown post-wreck appearance (draft), voice/audio, skip behavior. English is the approved default/source dialogue language.
 
 **Protected mysteries (must not be revealed):** crown origin, power source, dynasty/ancestor, ancient kingdom name, Great Eclipse cause.
 
@@ -322,4 +322,4 @@ The runtime foundation is already implemented. Content implementation remains ga
 
 ## 9. Chapter I beat sheet status
 
-The candidate Chapter I sequence and per-beat gameplay mapping are documented in [`CHAPTER_01_BEAT_SHEET.md`](CHAPTER_01_BEAT_SHEET.md). That document is a **proposal only**. It does not settle the Chapter I ending, shrine/relic/Greedling lore, NPC personalities, or unresolved lore. English is the approved default/source language; remaining presentation decisions still require owner approval before implementation.
+The candidate Chapter I sequence and per-beat gameplay mapping are documented in [`CHAPTER_01_BEAT_SHEET.md`](CHAPTER_01_BEAT_SHEET.md). That document remains a **draft proposal** for details not explicitly approved. The Chapter I endpoint and progression constraints are owner-approved; English is the default/source dialogue language. Shrine/relic/Greedling lore, NPC personalities, presentation details, and remaining triggers still require approval before implementation.
