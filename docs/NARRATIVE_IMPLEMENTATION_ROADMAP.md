@@ -194,7 +194,7 @@ The current menu entry flow is implemented: Start New Game routes through the Pr
 - **Prologue interruption:** no mid-Prologue save/resume. Exiting mid-Prologue restarts at pl_01 on the next New Game.
 - **After landing or eligible skip:** enter a fresh Forgotten Shore session; the existing world session and SaveManager own kingdom progress. Do not load or overwrite an unrelated old save accidentally.
 
-This policy is approved for N4 planning. It does not authorize implementation until the N4 task plan is reviewed.
+This policy is approved. N4.0 implements the entry routing and fail-safe profile gate; N4.5 is responsible for setting `prologue_completed_once` only after the successful full-Prologue handoff. Until then, the profile flag remains false and returning-player Skip stays locked.
 
 ## 7. Ownership boundaries
 
