@@ -1,6 +1,6 @@
 extends SceneTree
 
-## N43B mark-inspection tests — slice B1 (inspectable set only).
+## N43B mark-inspection tests — slices B1 + B2.
 ##
 ## B1 scope under test (N4.3-B design, section 10 slice 1):
 ##   1. D6 fail-closed table validation: empty table, fewer than two objects,
@@ -24,14 +24,42 @@ extends SceneTree
 ##   9. cancellation still records nothing and hides the prompt,
 ##  10. real profile/save files remain byte-exact untouched.
 ##
-## B2 interaction/recognition/completion cases (H1-H8, H10, H11, H14) arrive
-## with the interaction slice; the suite grows there. This file is NOT yet
-## registered in tests/run_all.sh — registration is slice B3 (per the design).
+## B2 scope under test (section 10 slice 2 — interaction, recognition,
+## completion):
+##  11. H1: a press within range records the nearest object silently (no
+##      dialogue, no completion),
+##  12. H3: approach past every object WITHOUT interact never completes,
+##  13. H4: same-object repeats never increase the distinct count; two
+##      DISTINCT objects open the approved recognition line exactly once,
+##  14. H5: interact presses during the recognition dialogue are inert,
+##  15. H6: the FINAL state after normal completion is the D3 ended/frozen
+##      boundary (panel closed, lock released, input disabled, actor frozen,
+##      prompt hidden, boundary status),
+##  16. H7a/H7b: cancellation before/during the recognition dialogue records
+##      nothing and cleans up deterministically,
+##  17. H8: a DIRECT scene unload while the recognition dialogue is open
+##      releases the lock (observed on the SURVIVING PlayerControlLock
+##      reference), records nothing, and never dereferences a freed node,
+##  18. H10: completion exactly-once separated into E (stage emission), A
+##      (shell acceptance via its two externally visible effects), and R
+##      (NarrativeState recording) — scenarios A-D, never one conflated count,
+##  19. H11: any two DISTINCT pairs complete; the third object is optional
+##      and inert after completion,
+##  20. H14: a held interact key across dialogue closure never re-inspects
+##      and never duplicates the completion,
+##  21. real profile/save files remain byte-exact untouched.
+##
+## This file is NOT yet registered in tests/run_all.sh — registration is
+## slice B3 (per the design).
 ##
 ## ISOLATION CONTRACT (same style as test_n43a): fixtures live under
 ## user://n43b_test/ injected via the crownfall_profile_path /
 ## crownfall_menu_save_path Engine metas; the developer's real files are only
 ## READ once for byte-exact non-mutation proof at the end of the run.
+## Interact presses use single Input.action_press/release calls (verified on
+## 4.7.2: one action_press from _process produces exactly ONE
+## is_action_just_pressed edge in the following physics tick; a held key
+## produces no further edges).
 
 const MAIN_SCENE: String = "res://scenes/main/Main.tscn"
 const PROLOGUE_SHELL_SCENE: String = "res://scenes/narrative/PrologueShell.tscn"
@@ -53,12 +81,23 @@ var _stage: int = 0
 var _wait_frames: int = 0
 var _shell_exits: Array[String] = []
 var _completions: Array[String] = []
+## H10 observables (rev 2.1): E = raw stage emissions in arrival order,
+## A = the two externally visible acceptance effects (asserted per scenario),
+## R = the pre-captured NarrativeState reference.
+var _emissions: Array[int] = []
+var _emission_panel_states: Array[bool] = []
+var _emission_panel: DialoguePanel = null
 var _real_profile_snapshot: String = ""
 var _real_profile_existed: bool = false
 var _real_save_snapshot: String = ""
 var _real_save_existed: bool = false
 var _real_save_sidecars: Dictionary = {}
 var _real_profile_sidecars: Dictionary = {}
+## H8 survivor captures (taken BEFORE the unload; only survivors are touched).
+var _unloaded_shell: Control = null
+var _unloaded_explorer: PrologueExplorer = null
+var _unlocked_lock_ref: PlayerControlLock = null
+var _unloaded_state: NarrativeState = null
 
 
 func _check(cond: bool, msg: String) -> bool:
@@ -162,6 +201,62 @@ func _stop_driving() -> void:
 
 func _teleport(explorer: PrologueExplorer, x: float) -> void:
 	explorer.position.x = x
+
+
+## H10 E listener (rev 2.1): counts raw stage emissions AND captures the
+## panel state AT emission time (record-after-dialogue ordering proof).
+func _connect_emission_listener(shell: Control) -> void:
+	_emissions.clear()
+	_emission_panel_states.clear()
+	_emission_panel = shell.call("dialogue_panel")
+	var stage := _stage_node(shell)
+	if stage != null:
+		stage.mark_inspection_completed.connect(_on_stage_emission)
+
+
+func _on_stage_emission() -> void:
+	_emissions.append(1)
+	_emission_panel_states.append(_emission_panel != null and _emission_panel.is_open())
+
+
+## The D3 ended/frozen terminal list (design section 8) after the boundary is
+## reached — asserted as a whole everywhere it applies. stage_emitted selects
+## the per-scenario E expectation: true after a NORMAL recognition completion
+## (H6/H10-A/H14), false after a SKIP (H10-B: the skip records through the
+## shell, the stage never emits — asserting `false` here IS the E=0 proof).
+func _check_terminal_state(shell: Control, label: String, stage_emitted: bool) -> void:
+	var stage := _stage_node(shell)
+	var explorer := _explorer_of(shell)
+	var panel: DialoguePanel = shell.call("dialogue_panel")
+	var inspectables := _inspectables_of(shell)
+	_check(not panel.is_open(), "%s: the dialogue panel is closed" % label)
+	_check(stage != null and not stage.is_dialogue_locked(), "%s: the stage-owned actor lock is released" % label)
+	_check(stage != null and stage.is_segment_ended() and stage.inspection_completed() == stage_emitted, "%s: the stage segment ended with the scenario-correct emission flag (emitted=%s)" % [label, stage_emitted])
+	_check(String(shell.call("active_exploration_beat")) == "" and bool(shell.call("n43_segment_complete")), "%s: the shell ended the segment at the N4.3 boundary" % label)
+	_check(explorer != null and not explorer.is_input_enabled() and not explorer.is_physics_processing(), "%s: the explorer is input-disabled and frozen" % label)
+	_check(inspectables != null and not inspectables.prompt().visible, "%s: the inspection prompt is hidden" % label)
+	var status: Label = shell.get_node_or_null("CenterContainer/VBoxContainer/StatusLabel") as Label
+	_check(status != null and status.text.contains("N4.3"), "%s: the boundary status is shown" % label)
+
+
+## Press-and-confirm driver: presses interact and re-arms the edge until the
+## expected effect is observed or the retry budget runs out. Test-side pacing
+## armor ONLY (a frame boundary without a physics tick can swallow a
+## just_pressed edge after scene churn): the extra edges are always safe
+## because a repeated mark is an idempotent no-op (D1) and edges while a
+## dialogue is open are D5-gated. keep_held leaves the key down (H14).
+func _await_interact_effect(has_effect: Callable, next_stage: int, keep_held: bool = false) -> bool:
+	if has_effect.call():
+		if not keep_held:
+			Input.action_release("interact")
+		_stage = next_stage
+		_wait_frames = 0
+		return true
+	if _wait_frames > 6:
+		_check(false, "the interact press produced no effect within the retry budget")
+		return true
+	Input.action_press("interact")
+	return false
 
 
 # --- D6 test-only table variants (no production test seam: subclasses only) ---
@@ -300,6 +395,11 @@ func _run_unit_checks() -> void:
 	set_valid.set_prompt_target("mark_artifact_c")
 	_check(prompt.visible and absf(prompt.position.x - (-280.0 - prompt.custom_minimum_size.x * 0.5)) < 0.01, "the prompt follows the requested target")
 	set_valid.free()
+	# --- H4 (data): the approved recognition line is authored data only ---
+	var recognition: Array[Dictionary] = PrologueBeats.exploration_recognition_lines()
+	_check(recognition.size() == 2, "the recognition line is authored with exactly two lines")
+	_check(String(recognition[0].get("speaker", "")) == PrologueBeats.MONARCH and String(recognition[1].get("speaker", "")) == PrologueBeats.MONARCH, "the recognition line uses the exploration MONARCH speaker convention")
+	_check(String(recognition[0].get("text", "")) == "I've seen this mark before..." and String(recognition[1].get("text", "")) == "Why does it keep appearing?", "the recognition text is the approved Story Design Beat 04 candidate, verbatim")
 
 
 func _initialize() -> void:
@@ -557,6 +657,738 @@ func _process(_delta: float) -> bool:
 			_wait_frames = 0
 			return false
 		17:
+			if not _on_main():
+				return false
+			# --- Shell C: normal recognition completion (H1/H3/H4/H5/H6/H10-A) ---
+			change_scene_to_file(PROLOGUE_SHELL_SCENE)
+			_stage = 18
+			_wait_frames = 0
+			return false
+		18:
+			if not _on_shell():
+				return false
+			var shell: Control = _shell()
+			_wire_shell_observers(shell)
+			if not _check(shell.call("start_prologue"), "shell C starts the chain explicitly"):
+				return true
+			_stage = 19
+			_wait_frames = 0
+			return false
+		19:
+			if not _on_shell():
+				return false
+			var shell: Control = _shell()
+			if bool(shell.call("in_exploration")):
+				_check(shell.call("skip_current_exploration_beat"), "shell C skips pl_03 to reach pl_04 (skips are the fast path)")
+				_connect_emission_listener(shell)
+				var stage := _stage_node(shell)
+				_check(String(shell.call("active_exploration_beat")) == BEAT_04 and stage != null and stage.is_input_enabled(), "shell C reaches interactive pl_04 with the E listener connected")
+				_stage = 20
+				_wait_frames = 0
+				return false
+			_skip_runner_beat(shell)
+			return false
+		20:
+			if not _on_shell():
+				return false
+			var shell: Control = _shell()
+			var explorer := _explorer_of(shell)
+			if _wait_frames < 2:
+				return false
+			# H3: move PAST every object without pressing interact.
+			_teleport(explorer, 450.0)
+			_stage = 21
+			_wait_frames = 0
+			return false
+		21:
+			if not _on_shell():
+				return false
+			var shell: Control = _shell()
+			var explorer := _explorer_of(shell)
+			if _wait_frames < 2:
+				return false
+			_teleport(explorer, 620.0)
+			_stage = 22
+			_wait_frames = 0
+			return false
+		22:
+			if not _on_shell():
+				return false
+			var shell: Control = _shell()
+			var explorer := _explorer_of(shell)
+			if _wait_frames < 2:
+				return false
+			_teleport(explorer, -280.0)
+			_stage = 23
+			_wait_frames = 0
+			return false
+		23:
+			if not _on_shell():
+				return false
+			var shell: Control = _shell()
+			var state: NarrativeState = shell.call("narrative_state")
+			if _wait_frames < 2:
+				return false
+			_check(String(shell.call("active_exploration_beat")) == BEAT_04 and not bool(state.is_completed(BEAT_04)) and state.completed_count() == 3 and _emissions.is_empty(), "H3: approach past every object without interact never completes (no emission, no record)")
+			# H1: press within range of A.
+			var explorer := _explorer_of(shell)
+			_teleport(explorer, 450.0)
+			_stage = 24
+			_wait_frames = 0
+			return false
+		24:
+			if not _on_shell():
+				return false
+			var shell: Control = _shell()
+			var inspectables := _inspectables_of(shell)
+			if _wait_frames < 2:
+				return false
+			Input.action_press("interact")
+			_stage = 25
+			_wait_frames = 0
+			return false
+		25:
+			if not _on_shell():
+				return false
+			var shell: Control = _shell()
+			var inspectables := _inspectables_of(shell)
+			if not _await_interact_effect(func() -> bool: return inspectables.distinct_inspected_count() == 1, 26):
+				return false
+			_stage = 26
+			_wait_frames = 0
+			return false
+		26:
+			if not _on_shell():
+				return false
+			var shell: Control = _shell()
+			var inspectables := _inspectables_of(shell)
+			var panel: DialoguePanel = shell.call("dialogue_panel")
+			_check(inspectables.is_inspected("mark_stone_a"), "H1: the press within range recorded the nearest object (A)")
+			_check(not panel.is_open(), "H1: the individual inspection opens NO dialogue (D1: silent)")
+			var state: NarrativeState = shell.call("narrative_state")
+			_check(not bool(state.is_completed(BEAT_04)) and _emissions.is_empty(), "H1: no completion request and no recording from a single inspection")
+			# H4a: repeat the SAME object (no armor needed: the effect IS the no-op).
+			Input.action_press("interact")
+			_stage = 27
+			_wait_frames = 0
+			return false
+		27:
+			if not _on_shell():
+				return false
+			var shell: Control = _shell()
+			var inspectables := _inspectables_of(shell)
+			Input.action_release("interact")
+			_check(inspectables.distinct_inspected_count() == 1, "H4a: re-inspecting the SAME object never increases the distinct count")
+			var panel: DialoguePanel = shell.call("dialogue_panel")
+			_check(not panel.is_open() and _emissions.is_empty(), "H4a: the repeated inspection still opens nothing and emits nothing")
+			# H4b: inspect the second DISTINCT object -> recognition opens.
+			var explorer := _explorer_of(shell)
+			_teleport(explorer, 620.0)
+			_stage = 28
+			_wait_frames = 0
+			return false
+		28:
+			if not _on_shell():
+				return false
+			var shell: Control = _shell()
+			if _wait_frames < 2:
+				return false
+			Input.action_press("interact")
+			_stage = 29
+			_wait_frames = 0
+			return false
+		29:
+			if not _on_shell():
+				return false
+			var shell: Control = _shell()
+			if not _await_interact_effect(func() -> bool: return _emission_panel != null and _emission_panel.is_open(), 30):
+				return false
+			_stage = 30
+			_wait_frames = 0
+			return false
+		30:
+			if not _on_shell():
+				return false
+			var shell: Control = _shell()
+			var inspectables := _inspectables_of(shell)
+			var stage := _stage_node(shell)
+			var panel: DialoguePanel = shell.call("dialogue_panel")
+			_check(inspectables.distinct_inspected_count() == 2, "H4b: two DISTINCT objects are recorded (A + B; D4)")
+			_check(panel.is_open() and panel.get_speaker_text() == "Monarch" and panel.get_body_text() == "I've seen this mark before...", "H4b: the recognition dialogue opened exactly once with the approved line through the existing panel")
+			_check(stage.is_dialogue_locked() and not stage.is_input_enabled(), "H4b: the actor is locked and input-disabled during the recognition (D2 steps 1-3)")
+			# H5: press interact DURING the recognition dialogue.
+			Input.action_press("interact")
+			_stage = 31
+			_wait_frames = 0
+			return false
+		31:
+			if not _on_shell():
+				return false
+			var shell: Control = _shell()
+			var inspectables := _inspectables_of(shell)
+			var panel: DialoguePanel = shell.call("dialogue_panel")
+			Input.action_release("interact")
+			_check(panel.is_open() and panel.get_body_text() == "I've seen this mark before..." and inspectables.distinct_inspected_count() == 2 and _emissions.is_empty(), "H5: interact presses during the recognition are inert (D5: panel open + lock held)")
+			panel.advance()
+			_check(panel.is_open() and panel.get_body_text() == "Why does it keep appearing?", "the recognition advances to its second approved line")
+			_stage = 32
+			_wait_frames = 0
+			return false
+		32:
+			if not _on_shell():
+				return false
+			var shell: Control = _shell()
+			var panel: DialoguePanel = shell.call("dialogue_panel")
+			# Last advance closes the panel: the recognition coroutine resumes
+			# synchronously inside close(), releases the lock, emits the ONE
+			# completion request, and the shell records + ends the segment.
+			panel.advance()
+			var state: NarrativeState = shell.call("narrative_state")
+			_check(_emissions == [1], "H10-A: exactly ONE natural stage emission (E_stage = 1)")
+			_check(_emission_panel_states == [false], "H10-A: the emission happened only AFTER the panel closed (record-after-dialogue ordering)")
+			_check(bool(state.is_completed(BEAT_04)) and state.completed_count() == 4, "H10-A: the recording R = 1 (pl_04 recorded exactly once; state: pl_01+pl_02+pl_03+pl_04)")
+			_check(String(shell.call("active_exploration_beat")) == "" and bool(shell.call("n43_segment_complete")), "H10-A: shell acceptance A = 1 (one transition to the ended boundary)")
+			_check(_completions == [BEAT_01, BEAT_02], "exploration completion adds NO SequenceRunner completion (runner stays out of exploration)")
+			_check_terminal_state(shell, "H6/D3", true)
+			_stage = 33
+			_wait_frames = 0
+			return false
+		33:
+			if not _on_shell():
+				return false
+			var shell: Control = _shell()
+			var stage := _stage_node(shell)
+			var state: NarrativeState = shell.call("narrative_state")
+			# H10-C: force-deliver duplicate/late requests at the shell boundary.
+			stage.mark_inspection_completed.emit()
+			stage.mark_inspection_completed.emit()
+			_check(_emissions.size() == 3 and _emissions[0] == 1, "H10-C: injected raw emissions counted SEPARATELY (E_stage stays 1, E_injected = 2)")
+			_check(state.completed_count() == 4 and bool(state.is_completed(BEAT_04)), "H10-C: no additional NarrativeState recording")
+			_check(String(shell.call("active_exploration_beat")) == "" and bool(shell.call("n43_segment_complete")), "H10-C: no additional shell acceptance or state transition")
+			# H11-post: the third object after completion changes nothing.
+			var explorer := _explorer_of(shell)
+			_teleport(explorer, -280.0)
+			Input.action_press("interact")
+			_stage = 34
+			_wait_frames = 0
+			return false
+		34:
+			if not _on_shell():
+				return false
+			var shell: Control = _shell()
+			var inspectables := _inspectables_of(shell)
+			var state: NarrativeState = shell.call("narrative_state")
+			Input.action_release("interact")
+			_check(inspectables.distinct_inspected_count() == 2, "H11-post: the third object is inert after completion (post-boundary physics gate)")
+			_check(state.completed_count() == 4 and _emissions.size() == 3, "H11-post: no new recording and no new emission of any kind")
+			change_scene_to_file(MAIN_SCENE)
+			_stage = 35
+			_wait_frames = 0
+			return false
+		35:
+			if not _on_main():
+				return false
+			# --- Shell D: H10-B skip during the recognition dialogue ---
+			change_scene_to_file(PROLOGUE_SHELL_SCENE)
+			_stage = 36
+			_wait_frames = 0
+			return false
+		36:
+			if not _on_shell():
+				return false
+			var shell: Control = _shell()
+			_wire_shell_observers(shell)
+			if not _check(shell.call("start_prologue"), "shell D starts the chain explicitly"):
+				return true
+			_stage = 37
+			_wait_frames = 0
+			return false
+		37:
+			if not _on_shell():
+				return false
+			var shell: Control = _shell()
+			if bool(shell.call("in_exploration")):
+				_check(shell.call("skip_current_exploration_beat"), "shell D skips pl_03 to reach pl_04")
+				_connect_emission_listener(shell)
+				_stage = 38
+				_wait_frames = 0
+				return false
+			_skip_runner_beat(shell)
+			return false
+		38:
+			if not _on_shell():
+				return false
+			var shell: Control = _shell()
+			var explorer := _explorer_of(shell)
+			if _wait_frames < 2:
+				return false
+			_teleport(explorer, 450.0)
+			Input.action_press("interact")
+			_stage = 39
+			_wait_frames = 0
+			return false
+		39:
+			if not _on_shell():
+				return false
+			var shell: Control = _shell()
+			var inspectables := _inspectables_of(shell)
+			if not _await_interact_effect(func() -> bool: return inspectables.distinct_inspected_count() == 1, 40):
+				return false
+			_stage = 40
+			_wait_frames = 0
+			return false
+		40:
+			if not _on_shell():
+				return false
+			var shell: Control = _shell()
+			var inspectables := _inspectables_of(shell)
+			_check(inspectables.distinct_inspected_count() == 1, "shell D: first inspection recorded")
+			var explorer := _explorer_of(shell)
+			_teleport(explorer, 620.0)
+			Input.action_press("interact")
+			_stage = 41
+			_wait_frames = 0
+			return false
+		41:
+			if not _on_shell():
+				return false
+			var shell: Control = _shell()
+			if not _await_interact_effect(func() -> bool: return _emission_panel != null and _emission_panel.is_open(), 42):
+				return false
+			_stage = 42
+			_wait_frames = 0
+			return false
+		42:
+			if not _on_shell():
+				return false
+			var shell: Control = _shell()
+			var panel: DialoguePanel = shell.call("dialogue_panel")
+			_check(panel.is_open() and panel.get_body_text() == "I've seen this mark before...", "shell D: the recognition dialogue is open")
+			# H10-B: SKIP while the recognition dialogue is open.
+			_check(shell.call("skip_current_exploration_beat"), "H10-B: the skip is accepted while the recognition dialogue is open")
+			var state: NarrativeState = shell.call("narrative_state")
+			_check(bool(state.is_completed(BEAT_04)) and state.completed_count() == 4, "H10-B: the skip records pl_04 exactly once through the existing skip path")
+			_check(not panel.is_open(), "H10-B: the skip closed the recognition dialogue")
+			_check(String(shell.call("active_exploration_beat")) == "" and bool(shell.call("n43_segment_complete")), "H10-B: shell acceptance via the SKIP path (A = 1)")
+			_check(_emissions.is_empty() and not bool(shell.call("skip_current_exploration_beat")), "H10-B: no stage emission occurred and a duplicate skip is rejected")
+			_check_terminal_state(shell, "H10-B final", false)
+			_stage = 43
+			_wait_frames = 0
+			return false
+		43:
+			if not _on_shell():
+				return false
+			var shell: Control = _shell()
+			var state: NarrativeState = shell.call("narrative_state")
+			if _wait_frames < 15:
+				return false
+			_check(_emissions.is_empty() and state.completed_count() == 4, "H10-B: the stale recognition coroutine never emits a later request (15 frames after the skip)")
+			change_scene_to_file(MAIN_SCENE)
+			_stage = 44
+			_wait_frames = 0
+			return false
+		44:
+			if not _on_main():
+				return false
+			# --- Shell E: H7a cancel BEFORE any recognition dialogue ---
+			change_scene_to_file(PROLOGUE_SHELL_SCENE)
+			_stage = 45
+			_wait_frames = 0
+			return false
+		45:
+			if not _on_shell():
+				return false
+			var shell: Control = _shell()
+			_wire_shell_observers(shell)
+			if not _check(shell.call("start_prologue"), "shell E starts the chain explicitly"):
+				return true
+			_stage = 46
+			_wait_frames = 0
+			return false
+		46:
+			if not _on_shell():
+				return false
+			var shell: Control = _shell()
+			if bool(shell.call("in_exploration")):
+				_check(shell.call("skip_current_exploration_beat"), "shell E skips pl_03 to reach pl_04")
+				_connect_emission_listener(shell)
+				_stage = 47
+				_wait_frames = 0
+				return false
+			_skip_runner_beat(shell)
+			return false
+		47:
+			if not _on_shell():
+				return false
+			var shell: Control = _shell()
+			var explorer := _explorer_of(shell)
+			if _wait_frames < 2:
+				return false
+			_teleport(explorer, 450.0)
+			Input.action_press("interact")
+			_stage = 48
+			_wait_frames = 0
+			return false
+		48:
+			if not _on_shell():
+				return false
+			var shell: Control = _shell()
+			var inspectables := _inspectables_of(shell)
+			if not _await_interact_effect(func() -> bool: return inspectables.distinct_inspected_count() == 1, 49):
+				return false
+			_stage = 49
+			_wait_frames = 0
+			return false
+		49:
+			if not _on_shell():
+				return false
+			var shell: Control = _shell()
+			var inspectables := _inspectables_of(shell)
+			var stage := _stage_node(shell)
+			_check(inspectables.distinct_inspected_count() == 1 and _emissions.is_empty(), "H7a: one silent inspection before the cancel (no recognition ever opened)")
+			shell.call("cancel_sequence")
+			var state: NarrativeState = shell.call("narrative_state")
+			_check(state.completed_count() == 3 and not bool(state.is_completed(BEAT_04)), "H7a: cancellation records nothing (not a skip)")
+			_check(String(shell.call("active_exploration_beat")) == "" and not bool(shell.call("in_exploration")) and shell.call("exploration_stage") == null, "H7a: the segment presentation is torn down")
+			_check(not inspectables.prompt().visible and inspectables.is_valid(), "H7a: the prompt is hidden and the component survived teardown intact")
+			_check(stage.is_torn_down(), "H7a: the stage is torn down")
+			change_scene_to_file(MAIN_SCENE)
+			_stage = 50
+			_wait_frames = 0
+			return false
+		50:
+			if not _on_main():
+				return false
+			# --- Shell F: H7b cancel DURING the recognition dialogue ---
+			change_scene_to_file(PROLOGUE_SHELL_SCENE)
+			_stage = 51
+			_wait_frames = 0
+			return false
+		51:
+			if not _on_shell():
+				return false
+			var shell: Control = _shell()
+			_wire_shell_observers(shell)
+			if not _check(shell.call("start_prologue"), "shell F starts the chain explicitly"):
+				return true
+			_stage = 52
+			_wait_frames = 0
+			return false
+		52:
+			if not _on_shell():
+				return false
+			var shell: Control = _shell()
+			if bool(shell.call("in_exploration")):
+				_check(shell.call("skip_current_exploration_beat"), "shell F skips pl_03 to reach pl_04")
+				_connect_emission_listener(shell)
+				_stage = 53
+				_wait_frames = 0
+				return false
+			_skip_runner_beat(shell)
+			return false
+		53:
+			if not _on_shell():
+				return false
+			var shell: Control = _shell()
+			var explorer := _explorer_of(shell)
+			if _wait_frames < 2:
+				return false
+			_teleport(explorer, 450.0)
+			Input.action_press("interact")
+			_stage = 54
+			_wait_frames = 0
+			return false
+		54:
+			if not _on_shell():
+				return false
+			var shell: Control = _shell()
+			var inspectables := _inspectables_of(shell)
+			if not _await_interact_effect(func() -> bool: return inspectables.distinct_inspected_count() == 1, 55):
+				return false
+			_stage = 55
+			_wait_frames = 0
+			return false
+		55:
+			if not _on_shell():
+				return false
+			var shell: Control = _shell()
+			var inspectables := _inspectables_of(shell)
+			_check(inspectables.distinct_inspected_count() == 1, "shell F: first inspection recorded")
+			var explorer := _explorer_of(shell)
+			_teleport(explorer, 620.0)
+			Input.action_press("interact")
+			_stage = 56
+			_wait_frames = 0
+			return false
+		56:
+			if not _on_shell():
+				return false
+			var shell: Control = _shell()
+			if not _await_interact_effect(func() -> bool: return _emission_panel != null and _emission_panel.is_open(), 57):
+				return false
+			_stage = 57
+			_wait_frames = 0
+			return false
+		57:
+			if not _on_shell():
+				return false
+			var shell: Control = _shell()
+			var panel: DialoguePanel = shell.call("dialogue_panel")
+			var stage := _stage_node(shell)
+			_check(panel.is_open() and stage.is_dialogue_locked(), "shell F: the recognition dialogue is open with the actor locked")
+			shell.call("cancel_sequence")
+			var state: NarrativeState = shell.call("narrative_state")
+			_check(not panel.is_open(), "H7b: cancellation closed the recognition dialogue")
+			_check(state.completed_count() == 3 and not bool(state.is_completed(BEAT_04)), "H7b: cancellation records NOTHING for pl_04 (not a skip)")
+			_check(stage.is_torn_down() and not stage.is_dialogue_locked() and not stage.is_input_enabled(), "H7b: the stage is torn down, the lock released, exploration input disabled")
+			var explorer := _explorer_of(shell)
+			_check(explorer == null or not explorer.is_physics_processing(), "H7b: the actor is frozen")
+			_check(String(shell.call("active_exploration_beat")) == "" and not bool(shell.call("in_exploration")), "H7b: the segment presentation ended")
+			_check(_emissions.is_empty(), "H7b: no completion emission was produced by the cancelled recognition")
+			# The dev exit routes through the same cancel_sequence: it must also
+			# stay record-free for the cancelled recognition beat.
+			_check(shell.call("request_main_menu_return"), "H7b: the development exit works from the cancelled-recognition state")
+			_check(_shell_exits.size() == 1 and String(_shell_exits[0]) == "res://scenes/main/Main.tscn", "H7b: the exit transitions exactly once")
+			_check(state.completed_count() == 3 and not bool(state.is_completed(BEAT_04)), "H7b: the exit after the cancelled recognition still records nothing")
+			change_scene_to_file(MAIN_SCENE)
+			_stage = 58
+			_wait_frames = 0
+			return false
+		58:
+			if not _on_main():
+				return false
+			# --- Shell G: H8 direct scene unload during the recognition ---
+			change_scene_to_file(PROLOGUE_SHELL_SCENE)
+			_stage = 59
+			_wait_frames = 0
+			return false
+		59:
+			if not _on_shell():
+				return false
+			var shell: Control = _shell()
+			_wire_shell_observers(shell)
+			if not _check(shell.call("start_prologue"), "shell G starts the chain explicitly"):
+				return true
+			_stage = 60
+			_wait_frames = 0
+			return false
+		60:
+			if not _on_shell():
+				return false
+			var shell: Control = _shell()
+			if bool(shell.call("in_exploration")):
+				_check(shell.call("skip_current_exploration_beat"), "shell G skips pl_03 to reach pl_04")
+				_connect_emission_listener(shell)
+				_stage = 61
+				_wait_frames = 0
+				return false
+			_skip_runner_beat(shell)
+			return false
+		61:
+			if not _on_shell():
+				return false
+			var shell: Control = _shell()
+			var explorer := _explorer_of(shell)
+			if _wait_frames < 2:
+				return false
+			_teleport(explorer, 450.0)
+			Input.action_press("interact")
+			_stage = 62
+			_wait_frames = 0
+			return false
+		62:
+			if not _on_shell():
+				return false
+			var shell: Control = _shell()
+			var inspectables := _inspectables_of(shell)
+			if not _await_interact_effect(func() -> bool: return inspectables.distinct_inspected_count() == 1, 63):
+				return false
+			_stage = 63
+			_wait_frames = 0
+			return false
+		63:
+			if not _on_shell():
+				return false
+			var shell: Control = _shell()
+			var inspectables := _inspectables_of(shell)
+			_check(inspectables.distinct_inspected_count() == 1, "shell G: first inspection recorded")
+			var explorer := _explorer_of(shell)
+			_teleport(explorer, 620.0)
+			Input.action_press("interact")
+			_stage = 64
+			_wait_frames = 0
+			return false
+		64:
+			if not _on_shell():
+				return false
+			var shell: Control = _shell()
+			if not _await_interact_effect(func() -> bool: return _emission_panel != null and _emission_panel.is_open(), 65):
+				return false
+			_stage = 65
+			_wait_frames = 0
+			return false
+		65:
+			if not _on_shell():
+				return false
+			var shell: Control = _shell()
+			var panel: DialoguePanel = shell.call("dialogue_panel")
+			var stage := _stage_node(shell)
+			_check(panel.is_open() and stage.is_dialogue_locked(), "shell G: the recognition dialogue is open with the actor locked")
+			# H8 capture phase (design, H8 contract detail step 1): capture the
+			# survivors BEFORE the unload. lock_ref via the documented test-side
+			# private-member access; state via the public getter; shell and
+			# explorer refs only for negative validity checks.
+			_unlocked_lock_ref = stage.get("_dialogue_lock") as PlayerControlLock
+			_unloaded_state = shell.call("narrative_state")
+			_unloaded_shell = shell
+			_unloaded_explorer = stage.explorer()
+			_check(_unlocked_lock_ref != null and _unlocked_lock_ref.is_locked() and stage.is_dialogue_locked(), "H8: the captured lock reference is alive and LOCKED at unload time")
+			_check(_unloaded_state != null and _unloaded_state.completed_count() == 3, "H8: the pre-captured NarrativeState holds exactly pl_01+pl_02+pl_03")
+			# Unload exactly as the N4.3-A stage-34 precedent does.
+			change_scene_to_file(MAIN_SCENE)
+			_stage = 66
+			_wait_frames = 0
+			return false
+		66:
+			if not _on_main():
+				return false
+			if _wait_frames < 8:
+				return false
+			# H8 step 3: assert on SURVIVORS only — the freed shell/stage/
+			# explorer are only touched through is_instance_valid (negative
+			# checks, never dereferenced).
+			_check(not is_instance_valid(_unloaded_shell), "H8: the PrologueShell is freed after the direct scene unload")
+			_check(not is_instance_valid(_unloaded_explorer), "H8: the explorer is freed after the direct scene unload")
+			_check(_unlocked_lock_ref.is_locked() == false, "H8: the surviving PlayerControlLock reports RELEASED (unlock ran during the unload's synchronous teardown)")
+			_check(_unloaded_state.completed_count() == 3 and not bool(_unloaded_state.is_completed(BEAT_04)), "H8: nothing was recorded by the unload (pl_04 not completed)")
+			_check(_emissions.is_empty(), "H8: no delayed completion emission occurred across the unload frames")
+			_unloaded_shell = null
+			_unloaded_explorer = null
+			_unlocked_lock_ref = null
+			_unloaded_state = null
+			_stage = 67
+			_wait_frames = 0
+			return false
+		67:
+			if not _on_main():
+				return false
+			# --- Shell H: H14 held interact across closure + A+C pair (H11) ---
+			change_scene_to_file(PROLOGUE_SHELL_SCENE)
+			_stage = 68
+			_wait_frames = 0
+			return false
+		68:
+			if not _on_shell():
+				return false
+			var shell: Control = _shell()
+			_wire_shell_observers(shell)
+			if not _check(shell.call("start_prologue"), "shell H starts the chain explicitly"):
+				return true
+			_stage = 69
+			_wait_frames = 0
+			return false
+		69:
+			if not _on_shell():
+				return false
+			var shell: Control = _shell()
+			if bool(shell.call("in_exploration")):
+				_check(shell.call("skip_current_exploration_beat"), "shell H skips pl_03 to reach pl_04")
+				_connect_emission_listener(shell)
+				_stage = 70
+				_wait_frames = 0
+				return false
+			_skip_runner_beat(shell)
+			return false
+		70:
+			if not _on_shell():
+				return false
+			var shell: Control = _shell()
+			var explorer := _explorer_of(shell)
+			if _wait_frames < 2:
+				return false
+			_teleport(explorer, 450.0)
+			Input.action_press("interact")
+			_stage = 71
+			_wait_frames = 0
+			return false
+		71:
+			if not _on_shell():
+				return false
+			var shell: Control = _shell()
+			var inspectables := _inspectables_of(shell)
+			if not _await_interact_effect(func() -> bool: return inspectables.distinct_inspected_count() == 1, 72):
+				return false
+			_stage = 72
+			_wait_frames = 0
+			return false
+		72:
+			if not _on_shell():
+				return false
+			var shell: Control = _shell()
+			var inspectables := _inspectables_of(shell)
+			_check(inspectables.distinct_inspected_count() == 1, "shell H: object A recorded")
+			# H14: HOLD interact from the accepting press onward (single press,
+			# never released until after the segment ends).
+			var explorer := _explorer_of(shell)
+			_teleport(explorer, -280.0)
+			Input.action_press("interact")
+			_stage = 73
+			_wait_frames = 0
+			return false
+		73:
+			if not _on_shell():
+				return false
+			var shell: Control = _shell()
+			var inspectables := _inspectables_of(shell)
+			var panel: DialoguePanel = shell.call("dialogue_panel")
+			if not _await_interact_effect(func() -> bool: return _emission_panel != null and _emission_panel.is_open(), 74, true):
+				return false
+			_stage = 74
+			_wait_frames = 0
+			return false
+		74:
+			if not _on_shell():
+				return false
+			var shell: Control = _shell()
+			var inspectables := _inspectables_of(shell)
+			var panel: DialoguePanel = shell.call("dialogue_panel")
+			_check(inspectables.distinct_inspected_count() == 2, "H14/H11: the A+C pair is recorded (any two DISTINCT objects complete; D4)")
+			_check(panel.is_open() and panel.get_body_text() == "I've seen this mark before...", "H14: the recognition opened from the accepting press while the key is HELD")
+			panel.advance()
+			_check(panel.get_body_text() == "Why does it keep appearing?", "the recognition advances while the key stays held")
+			_stage = 75
+			_wait_frames = 0
+			return false
+		75:
+			if not _on_shell():
+				return false
+			var shell: Control = _shell()
+			var panel: DialoguePanel = shell.call("dialogue_panel")
+			panel.advance()
+			var state: NarrativeState = shell.call("narrative_state")
+			var inspectables := _inspectables_of(shell)
+			_check(bool(state.is_completed(BEAT_04)) and state.completed_count() == 4, "H14/H11: the A+C pair completed pl_04 exactly once (R = 1)")
+			_check(_emissions == [1], "H14: exactly one natural emission")
+			_check(inspectables.distinct_inspected_count() == 2, "H14: the held key added NO second inspection")
+			_check_terminal_state(shell, "H14/D3", true)
+			_stage = 76
+			_wait_frames = 0
+			return false
+		76:
+			if not _on_shell():
+				return false
+			var shell: Control = _shell()
+			var state: NarrativeState = shell.call("narrative_state")
+			var inspectables := _inspectables_of(shell)
+			if _wait_frames < 10:
+				return false
+			_check(_emissions == [1] and inspectables.distinct_inspected_count() == 2 and state.completed_count() == 4, "H14: the held interact across closure and segment end never re-inspects and never duplicates the completion (10 frames)")
+			Input.action_release("interact")
+			change_scene_to_file(MAIN_SCENE)
+			_stage = 77
+			_wait_frames = 0
+			return false
+		77:
 			if not _on_main():
 				return false
 			# --- Hygiene: real files untouched, fixtures cleaned, metas removed ---

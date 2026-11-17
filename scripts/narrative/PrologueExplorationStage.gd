@@ -25,8 +25,10 @@ extends Node2D
 ## child built fail-closed during setup — the three placeholder mark objects
 ## render as pl_03 scenery and their shared prompt is driven per physics frame
 ## during pl_04. The component owns the range query and the per-run inspection
-## state; interaction input, the recognition dialogue, and the completion
-## handshake arrive with the later N4.3-B slices through this same stage.
+## state (D1: silent, idempotent per id); the stage owns the interact polling
+## behind the full D5 gate, the recognition dialogue (D2, stage-owned lock +
+## generation guard, approved text only), and the exactly-once completion
+## request emission. PrologueShell stays the sole NarrativeState writer.
 ##
 ## All environment art is labelled placeholder ColorRect geometry — no art
 ## assets ship in N4.3-A/N4.3-B and nothing here implies lore (no road name,
@@ -34,6 +36,10 @@ extends Node2D
 ## labelled placeholder whose design stays an OPEN owner decision).
 
 signal exploration_handoff_reached()
+## The stage's ONE pl_04 completion request (N4.3-B): emitted exactly once,
+## only after the recognition dialogue closed normally and the lifecycle
+## checks passed. PrologueShell validates the active beat and records.
+signal mark_inspection_completed()
 
 ## Authored stage layout (labelled placeholders; zoom 1.5 on a 1280x720
 ## viewport shows an 853x480 world band, so the 1600-wide road actually pans).
@@ -70,6 +76,9 @@ var _segment_ended: bool = false
 ## One completion request per exploration interval: the guard that keeps the
 ## stage from emitting duplicate handoff requests.
 var _handoff_emitted: bool = false
+## One N4.3-B completion request per run: the one-shot guard behind
+## mark_inspection_completed — the request can never re-emit (§8 layer 1).
+var _inspection_completed: bool = false
 ## Generation guard for the intro-dialogue coroutine: skip/cancel/teardown
 ## invalidate the presentation so a resumed await can never re-enable input
 ## for a beat that already moved on.
@@ -225,6 +234,10 @@ func inspectables() -> PrologueMarkInspectables:
 	return _inspectables
 
 
+func inspection_completed() -> bool:
+	return _inspection_completed
+
+
 func is_segment_ended() -> bool:
 	return _segment_ended
 
@@ -261,11 +274,16 @@ func _process_pl_03() -> void:
 		exploration_handoff_reached.emit()
 
 
-## pl_04 per-frame presentation (N4.3-B slice 1): prompt visibility follows
-## the nearest eligible inspectable while the beat is interactive. The D5
-## presentation gates (input enabled, no dialogue open, stage lock not held)
-## suppress the prompt while any of them fail — the interact polling that
-## completes the full D5 gate arrives with the interaction slice.
+## pl_04 per-frame logic (N4.3-B): prompt visibility follows the nearest
+## eligible inspectable while the beat is interactive, and the inspect
+## interaction is polled behind the FULL D5 gate list — active beat pl_04 and
+## not torn down / segment not ended (the dispatcher above), movement input
+## enabled, dialogue panel not open, stage lock not held, an eligible object
+## within the authored range, and `interact` just pressed. The panel's input
+## consumption is NEVER relied upon to suppress this raw polling (D5): the
+## explicit panel/lock/input gates do that. A held key cannot retrigger:
+## is_action_just_pressed fires only on the press edge, and every accepting
+## press flips the gate list to a rejecting state before the next poll.
 func _process_pl_04() -> void:
 	if _inspectables == null or not _inspectables.is_valid():
 		return
@@ -275,6 +293,56 @@ func _process_pl_04() -> void:
 		_inspectables.set_prompt_target("")
 		return
 	_inspectables.set_prompt_target(_inspectables.nearest_eligible_id(_explorer.position.x))
+	if _inspection_completed:
+		return
+	if not Input.is_action_just_pressed("interact"):
+		return
+	var id := _inspectables.nearest_eligible_id(_explorer.position.x)
+	if id.is_empty():
+		return
+	# D1: silent inspection — the first press records the id, a repeat is an
+	# idempotent no-op, and NOTHING opens until two DISTINCT ids exist (D4:
+	# the third object is optional and never required).
+	if not _inspectables.mark_inspected(id):
+		return
+	if _inspectables.distinct_inspected_count() < 2:
+		return
+	_begin_recognition_dialogue()
+
+
+## Begins the N4.3-B recognition presentation (D2 steps 1-5): two DISTINCT
+## objects have been inspected, so movement input is disabled, the stage-owned
+## lock holds the actor, and the approved Beat 04 line opens through the
+## existing DialoguePanel. Structurally identical to _present_intro_dialogue —
+## one code shape to review, same generation-guard discipline.
+func _begin_recognition_dialogue() -> void:
+	var lines: Array[Dictionary] = PrologueBeats.exploration_recognition_lines()
+	if lines.is_empty():
+		return
+	_dialogue_generation += 1
+	var gen: int = _dialogue_generation
+	_dialogue_lock.lock(_explorer)
+	_explorer.set_input_enabled(false)
+	_panel.open_lines(lines)
+	await _panel.dialogue_finished
+	# Stale-coroutine guard: skip/cancel/teardown invalidate the generation,
+	# so a resumed await never re-enables input and never emits a completion
+	# request for a beat that already moved on or was torn down.
+	if gen != _dialogue_generation or _active_beat != PrologueBeats.PL_04_REPEATED_MARK or _torn_down or _segment_ended:
+		return
+	if not is_instance_valid(_explorer):
+		return
+	# D2 steps 6-7: release the lock and restore input, then emit the ONE
+	# completion request. The restore is TRANSIENT: the shell handler runs
+	# synchronously inside this emission and immediately ends the segment
+	# (input disabled + actor frozen) — the ended/frozen boundary is the
+	# acceptance state (D3), never this brief restore.
+	_dialogue_lock.unlock()
+	_explorer.set_input_enabled(true)
+	if _inspection_completed:
+		return
+	_inspection_completed = true
+	mark_inspection_completed.emit()
 
 
 ## Presents the approved intro line through the existing DialoguePanel with

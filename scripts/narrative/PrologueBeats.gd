@@ -31,8 +31,8 @@ extends RefCounted
 ## pl_02 and can never auto-chain past the player-driven exploration interval.
 ## Only their narrative TEXT lives here (Story Design authority): pl_03's
 ## approved candidate internal line is presented through the existing
-## DialoguePanel at the start of exploration; pl_04's recognition line arrives
-## with N4.3-B and is intentionally absent here.
+## DialoguePanel at the start of exploration; N4.3-B adds pl_04's approved
+## candidate recognition line for the two-distinct-object trigger.
 
 const BEAT_IDS: Array[String] = [
 	"pl_01_lost_world",
@@ -91,8 +91,8 @@ static func exploration_beat_title(beat_id: String) -> String:
 
 ## The approved Story Design candidate internal line for an exploration beat,
 ## presented through the existing DialoguePanel (not a SequenceRunner
-## sequence). pl_03 uses the Beat 03 candidate text verbatim. pl_04 returns no
-## lines in N4.3-A: its recognition line is the N4.3-B two-object trigger.
+## sequence). pl_03 uses the Beat 03 candidate text verbatim. pl_04's
+## recognition line lives in exploration_recognition_lines() (N4.3-B).
 static func exploration_intro_lines(beat_id: String) -> Array[Dictionary]:
 	if beat_id == PL_03_WANDERER:
 		return [
@@ -100,6 +100,20 @@ static func exploration_intro_lines(beat_id: String) -> Array[Dictionary]:
 			{"speaker": MONARCH, "text": "Especially the things you cannot explain."},
 		]
 	return []
+
+
+## The approved Story Design Beat 04 candidate recognition line, verbatim
+## ("I've seen this mark before..." / "Why does it keep appearing?"), played
+## through the existing DialoguePanel when two DISTINCT inspectables have
+## been inspected (N4.3-B). Speaker presentation follows the exploration
+## convention (MONARCH). Data only — the shell-orchestrated presentation and
+## the completion handshake live in the exploration stage; this is never a
+## SequenceRunner sequence, and no lore beyond this approved text exists.
+static func exploration_recognition_lines() -> Array[Dictionary]:
+	return [
+		{"speaker": MONARCH, "text": "I've seen this mark before..."},
+		{"speaker": MONARCH, "text": "Why does it keep appearing?"},
+	]
 
 
 ## Placeholder caption for a stage cue id (labelled placeholder; unknown ids
