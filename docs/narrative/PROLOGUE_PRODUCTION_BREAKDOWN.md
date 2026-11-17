@@ -1,9 +1,9 @@
 # Crownfall — Prologue Production Breakdown (N4 preparation)
 
-**Status:** Production readiness inventory ONLY. Nothing here is implemented, and nothing here converts an OPEN story detail into canon.  
+**Status:** N4.0 (entry + profile gate) is IMPLEMENTED and verified. The Prologue scenes/beats (N4.1–N4.6) remain production-readiness inventory ONLY — nothing else here is implemented, and nothing here converts an OPEN story detail into canon.  
 **Story source:** [`PROLOGUE_STORY_DESIGN.md`](PROLOGUE_STORY_DESIGN.md) — beats, character direction, and lore boundaries.  
 **Runtime source:** [`NARRATIVE_RUNTIME_TECHNICAL_DESIGN.md`](NARRATIVE_RUNTIME_TECHNICAL_DESIGN.md) — N1–N3 foundation (dialogue panel, sequence runner, control lock).  
-**Baseline:** `main` @ `eb82ae4d63a33a5c0fb9bb3f17f4bf832860c79a` (after PR #11 merge; N1–N3 runtime is implemented).
+**Baseline:** N4.0 verified against `main` @ `a34e5b3` (PR #12 merge; N1–N3 runtime implemented).
 
 Legend for asset status: **E** = Existing, **R** = Reusable with modification, **M** = Missing, **P** = Placeholder acceptable (labelled, non-canon), **N** = Requires new production. Complexity: **S** / **M** / **L**.
 
@@ -136,7 +136,7 @@ Keep N4 incremental. Each slice is a separate PR with one coherent responsibilit
 
 | Slice | Scope | Main deliverable | Must pass before next slice |
 |---|---|---|---|
-| N4.0 — Entry + profile gate | Minimal global `PlayerProfile`; New Game/Continue routing; first-playthrough Skip gate; overwrite confirmation compatibility | New Game enters Prologue entry route; Continue loads world save; Skip hidden until one successful full completion; profile survives New Game and world-save replacement | Profile missing/corrupt fallback, atomic-write failure, first-run/returning-run/Continue tests; existing v1/v2 world saves and full gameplay suite remain green |
+| N4.0 — Entry + profile gate | **IMPLEMENTED.** Minimal global `PlayerProfile`; New Game/Continue routing; first-playthrough Skip gate; overwrite confirmation compatibility | New Game enters the labelled Prologue route placeholder (`PrologueShell`); Continue loads world save; Skip hidden until one successful full completion; profile survives New Game and world-save replacement | Profile missing/corrupt fallback, atomic-write failure, first-run/returning-run/Continue tests (`tests/test_n40_profile_entry_gate.gd`, 66 checks); existing v1/v2 world saves and full gameplay suite remain green |
 | N4.1 — Prologue shell | Prologue scene root, transition contract, reusable text-only sequence presentation, labelled placeholder visual treatment | A playable vertical shell that can load and run a sequence without yet authoring all nine beats | Scene transitions allowlisted; input isolation and cleanup; no runtime errors; no canon details invented |
 | N4.2 — Lost World + Faint Resonance | Beats pl_01 and pl_02 | Opening cinematic and childhood flashback using English dialogue/narration | First-playthrough flow; skip eligibility; visual continuity; Great Eclipse cause remains unknown |
 | N4.3 — Wanderer + Repeated Mark | Beats pl_03 and pl_04 | Short interactive exploration and repeated-symbol inspection | Movement/inspect controls isolated correctly; symbol consistency; no premature lore explanation |
@@ -146,14 +146,18 @@ Keep N4 incremental. Each slice is a separate PR with one coherent responsibilit
 
 ### N4.0 profile and entry-flow contract
 
-- Keep `SaveManager` and world-save schema v2 unchanged.
-- Store only `prologue_completed_once` in a small versioned global profile under `user://`; do not store kingdom progress there.
-- Treat missing, malformed, unsupported-version, or unreadable profile data as **not completed**. This locks Skip but must not block New Game or Continue.
-- Write the completion flag only after pl_09 completes successfully and the handoff to a fresh Forgotten Shore session is committed. Never set it when the player chooses Skip.
-- If the player skips on an eligible later New Game, hand off to a fresh Forgotten Shore session without replaying Prologue beats.
-- Continue always bypasses Prologue and uses the existing world save.
-- Preserve the existing Start New Game overwrite confirmation. The profile flag must not be deleted when the world save is replaced.
-- Do not add a general profile/settings framework. Keep this implementation narrowly scoped to the one durable eligibility fact.
+**Implemented (verified).** The concrete, as-built facts:
+
+- Keep `SaveManager` and world-save schema v2 unchanged. ✅ (no SaveManager/session/schema edits)
+- Profile: `scripts/narrative/PlayerProfile.gd`, stored at `user://player_profile.json` with schema `{"schema_version": 1, "prologue_completed_once": false}`. Strict validation (exact two-key shape, exact int schema version, bool flag; unknown/missing/unsupported data rejected). Atomic write: `.tmp` → re-read verify → staged rename with `.old` rollback. API: `load_profile(path) -> {ok, error}`, `is_prologue_completed_once() -> bool`, `mark_prologue_completed(path) -> bool` (reports persistence success; no Skip-related setter exists).
+- Treat missing, malformed, unsupported-version, or unreadable profile data as **not completed** (Skip locked); it never blocks New Game or Continue. ✅
+- Write the completion flag only after pl_09 completes successfully and the handoff to a fresh Forgotten Shore session is committed (N4.5). Never set it when the player chooses Skip. N4.0's runtime flow never calls `mark_prologue_completed`; only tests exercise it directly.
+- If the player skips on an eligible later New Game, hand off to a fresh Forgotten Shore session (`crownfall_load_on_start = false`) without replaying Prologue beats. ✅
+- Continue always bypasses Prologue and uses the existing world save (including legacy v1 saves); it never reads the profile. ✅
+- Preserve the existing Start New Game overwrite confirmation (wording unchanged; the Cancel button is now named `CancelNewGameButton` for tests). The profile flag is never deleted when the world save is replaced. ✅
+- No general profile/settings framework: one durable eligibility fact, no signals, no autoload. ✅
+- Prologue route target: `res://scenes/narrative/PrologueShell.tscn` (`scripts/narrative/PrologueShell.gd`) — a clearly labelled, inert N4.0 placeholder (no beats, no dialogue, no handoff, no completion marking; "Return to Main Menu" only). **N4.1 replaces the scene content at the same path** (or points `Main.PROLOGUE_ROUTE_SCENE` at the real shell in the same PR); routing, gate, and overlays do not change. Headless tests observe routing via `Main.set_route_transition(Callable)` plus Engine metas `crownfall_profile_path` / `crownfall_menu_save_path`.
+- Tests: `tests/test_n40_profile_entry_gate.gd` (66 checks: profile matrix, entry flow, fresh-session and legacy-save Continue behavior, placeholder sanity, real-file non-mutation), registered in `tests/run_all.sh` and the CI workflow; M8 integration slice now reaches Forgotten Shore through the real Skip path (39 checks).
 
 ### Cross-slice guardrails
 

@@ -2,6 +2,7 @@
 
 **Audit date:** 2026-11-17 (refreshed after PR #11)  
 **Repository snapshot:** `main` @ `eb82ae4d63a33a5c0fb9bb3f17f4bf832860c79a` (PR #11 merged; N1–N3 runtime foundation is now on main).  
+**N4.0 update (2026-11-17):** after this snapshot, N4.0 — the global `PlayerProfile` (`user://player_profile.json`), the New Game/Continue entry gate with the returning-player Skip choice, and the labelled `PrologueShell` placeholder route target — was implemented and verified (66-check suite plus the adapted M8 integration slice; see [`NARRATIVE_IMPLEMENTATION_ROADMAP.md`](NARRATIVE_IMPLEMENTATION_ROADMAP.md) §5 and [`narrative/PROLOGUE_PRODUCTION_BREAKDOWN.md`](narrative/PROLOGUE_PRODUCTION_BREAKDOWN.md) §5). The inventory below otherwise still describes the `eb82ae4` state; the Prologue remains not playable.  
 **Engine:** Godot `4.7.2.stable`  
 **Scope:** narrative implementation only. No gameplay code was modified, no features were added, no lore was invented.  
 **Companion documents:** [`CHAPTER_01_NARRATIVE_GAP_ANALYSIS.md`](CHAPTER_01_NARRATIVE_GAP_ANALYSIS.md), the official [`NARRATIVE_IMPLEMENTATION_ROADMAP.md`](NARRATIVE_IMPLEMENTATION_ROADMAP.md) (phases N0–N5), and [`narrative/PROLOGUE_STORY_DESIGN.md`](narrative/PROLOGUE_STORY_DESIGN.md)
