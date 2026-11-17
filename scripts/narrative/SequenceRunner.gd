@@ -177,9 +177,9 @@ func _run_dialogue(step: Dictionary, gen: int) -> bool:
 	_panel.open_lines(typed_lines)
 	_panel_open = true
 	await _panel.dialogue_finished
-	_panel_open = false
 	if _cancel_requested or not _running or gen != _generation:
 		return false
+	_panel_open = false
 	return true
 
 

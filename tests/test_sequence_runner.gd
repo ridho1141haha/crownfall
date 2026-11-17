@@ -169,6 +169,7 @@ func _sequence_h() -> Dictionary:
 		"id": "probe_runner_race_after_cancel_h",
 		"skip_allowed": false,
 		"steps": [
+			{"op": "lock_control"},
 			{"op": "dialogue", "lines": [
 				{"speaker": "Test Speaker", "text": "race after cancel line"},
 			]},
@@ -437,7 +438,8 @@ func _process(_delta: float) -> bool:
 				return false
 			if not _panel.is_open():
 				return false
-			_send_key(KEY_ENTER, true)
+			_check(not _session.player.is_physics_processing(), "H control lock engaged while dialogue open")
+			_runner.skip()
 			_stage = 42
 			_frames = 0
 			return false
@@ -445,7 +447,7 @@ func _process(_delta: float) -> bool:
 			if _runner.is_running():
 				if _frames < 120:
 					return false
-				_check(false, "sequence H did not finish after cancel overlap")
+				_check(false, "sequence H did not finish after skip during open dialogue")
 				return true
 			_check(not _completed_ids.has("probe_runner_race_cancel_g"), "stale cancelled run G added no completion")
 			_check(_completed_ids.has("probe_runner_race_after_cancel_h"), "new run H completed exactly once")
