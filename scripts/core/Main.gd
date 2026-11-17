@@ -1,10 +1,9 @@
 extends Control
 
 const FORGOTTEN_SHORE_SCENE: String = "res://scenes/world/ForgottenShore.tscn"
-## N4.0 PLACEHOLDER route target: a clearly-labelled, inert Prologue shell stub
-## (scripts/narrative/PrologueShell.gd). N4.1 replaces the scene content at the
-## same path with the real Prologue shell (or updates this constant in the same
-## PR). The entry-gate routing below does not change for N4.1.
+## N4.1 route target: the functional Prologue shell (scripts/narrative/
+## PrologueShell.gd — per-run narrative runtime + lifecycle, no story beats
+## until N4.2–N4.5). The entry-gate routing below is unchanged since N4.0.
 const PROLOGUE_ROUTE_SCENE: String = "res://scenes/narrative/PrologueShell.tscn"
 
 ## Engine-meta injection points (same contract style as crownfall_load_on_start).
