@@ -1,7 +1,7 @@
 # CROWNFALL — NARRATIVE IMPLEMENTATION ROADMAP
 
-**Status (updated 2026-11-17):** N1–N3, N4.0, N4.1, and N4.2 are implemented and merged. N4.2 delivers pl_01 *The Lost World* and pl_02 *A Faint Resonance*, including Prologue shell auto-start/chaining. N4.3–N4.6 remain unimplemented. The Prologue is partially playable, not complete. Chapter I (N5) remains in design planning; its beat sheet is a non-canon proposal pending owner approval.  
-**Baseline inspected:** `main` at `a34e5b3` (2026-11-17, after PR #12 merge; N4.0 verified against this baseline).  
+**Status (updated 2026-11-17):** N1–N3, N4.0, N4.1, and N4.2 are implemented and merged. N4.2 delivers pl_01 *The Lost World* and pl_02 *A Faint Resonance*, including Prologue shell auto-start/chaining. N4.3–N4.6 remain unimplemented. The Prologue is partially playable, not complete. Chapter I (N5) remains in design planning. Its core progression decisions have been approved; remaining dialogue, transition staging, and lore details remain open.  
+**Baseline inspected:** `main` at `539f8564f2417aefc22a1636f885dc45cea1b818` (2026-11-17, after PR #15 / N4.2 merge). This is the source baseline for the N4.3 planning work; the PR branch changes documentation only.  
 **Story design:** [Prologue Story Design](narrative/PROLOGUE_STORY_DESIGN.md)
 
 > This roadmap defines implementation order and technical boundaries. The Prologue Story Design defines story beats. Neither document authorizes the coding agent to invent unresolved lore or change gameplay rules outside approved scope.
@@ -41,7 +41,7 @@ This is a static source inspection of `main` at the baseline SHA above. It is no
 
 ### Current entry flow
 - `scenes/main/Main.tscn` provides Start New Game, Continue Saved Reign, and Exit Game.
-- Start New Game keeps the existing overwrite confirmation for a valid world save, then consults the N4.0 player-profile gate: first playthrough routes to the labelled Prologue route placeholder (no Skip); after one recorded completion it offers Play Prologue Again / Skip; Skip enters a fresh Forgotten Shore session without touching the profile.
+- Start New Game keeps the existing overwrite confirmation for a valid world save, then consults the N4.0 player-profile gate: first playthrough routes to the functional Prologue shell (no Skip); after one recorded full-Prologue completion it offers Play Prologue Again / Skip; Skip enters a fresh Forgotten Shore session without touching the profile.
 - Start New Game and Skip set `crownfall_load_on_start = false`; Continue sets it to `true` and never reads the profile.
 - `ForgottenShoreSession` consumes the pending-load flag and owns the active world/save orchestration.
 
@@ -56,9 +56,9 @@ This is a static source inspection of `main` at the baseline SHA above. It is no
 - The merged gameplay harness covers new game, movement, resource collection, building, wall upgrade, Scientist, research, shrine, buff, and save/load scenarios.
 - **Narrative runtime foundation (PR #11, merged as `eb82ae4`):** N1–N3 are implemented on `main`: `NarrativeState` (in-memory), `NarrativeData` validation, `DialoguePanel`, `PlayerControlLock`, `SequenceRunner`, `dialogue_advance`, and the New Game overwrite confirmation. Automated narrative suites and headless CI passed for the merge commit.
 - **Entry gate + profile (N4.0):** `PlayerProfile`, the profile gate, the returning-player choice, the Prologue route placeholder, and the N4.0 suite are implemented; full headless suite green (see §5 N4 status).
-- The runtime is not yet connected to canon Prologue or Chapter I content. There is no playable Prologue, NPC conversation integration, chapter progression system, quest/objective framework, or narrative save state. SaveManager remains schema v2.
+- The runtime is connected to the first two authored Prologue beats. `PrologueShell` auto-starts and chains pl_01 → pl_02 using `PrologueBeats`; the shell then stops at the N4.2 boundary. The Prologue is only partially playable: pl_03–pl_09, the Forgotten Shore handoff, and full-completion marking are not implemented. There is still no NPC conversation integration, chapter progression system, quest/objective framework, or narrative save state. `SaveManager` remains schema v2.
 
-**Implication:** The technical foundation exists and can now be used by content work. N4 remains the next implementation milestone; N5 is being designed in parallel as a draft, but Chapter I implementation must respect the Prologue/Chapter I boundary and approved sequencing.
+**Implication:** The technical foundation and opening two Prologue beats are implemented. The next Prologue implementation milestone is N4.3 (pl_03 The Wanderer and pl_04 The Repeated Mark); N4.3 planning is documented separately. N5 design may continue in parallel, but Chapter I implementation must respect the Prologue/Chapter I boundary and approved sequencing.
 
 ## 4. Prologue scope
 
@@ -94,7 +94,7 @@ Tasks:
 - Finalize only production details needed to build it: visual design of the repeated symbol, staging of the childhood manifestation, visual language of the vision, and minimum ship-to-island transition. Authored dialogue uses English as its default/source language; localization and voice acting are not N4 blockers.
 - Keep unnecessary lore explanations OPEN.
 - Decide New Game / Continue / legacy-save behavior (section 6).
-- Keep GDD and ROADMAP explicit that the Prologue is planned but not implemented.
+- Keep GDD and ROADMAP explicit that the Prologue is partially implemented (pl_01–pl_02) but not complete; do not describe it as wholly unimplemented or as a finished experience.
 
 **Exit criteria:** Story beats, boundaries, entry-flow policy, and first playable scope are documented. No unresolved lore is silently converted into canon.
 
@@ -146,7 +146,7 @@ Tasks:
 
 ### N4 — Prologue content integration
 
-**Status: N4.0 + N4.1 implemented (entry/profile gate + functional shell; NO story beats yet).** `scripts/narrative/PlayerProfile.gd` (`user://player_profile.json`, `{"schema_version": 1, "prologue_completed_once": false}`, strict validation, atomic writes, fail-safe "not completed" default), the New Game entry gate with the returning-player Play Prologue Again / Skip choice, and Continue independence are implemented and covered by `tests/test_n40_profile_entry_gate.gd` (101 checks). **N4.1** replaces the inert placeholder with the functional shell at the same route path (`scenes/narrative/PrologueShell.tscn` + `scripts/narrative/PrologueShell.gd`): the shell owns a per-run `NarrativeState` plus a `DialoguePanel` and a `SequenceRunner` configured with an allowlisted sequence scene transition (`res://scenes/world/ForgottenShore.tscn` only, the future N4.5 handoff channel), exposes `play_sequence` / `skip_sequence` / `cancel_sequence` for future beat content, and guards all exits/handoffs behind a single-transition guard (duplicate requests are ignored); exit semantics are split — the development exit cancels a running sequence (completes nothing) while a sequence-driven handoff lets the finishing sequence complete exactly once (`sequence_completed` + `NarrativeState`); a clearly labelled development-only exit button returns to the main menu. Entering, running, or exiting the shell never touches `PlayerProfile` — completion marking stays an N4.5 contract, nothing in the runtime flow sets the completion flag. Covered by `tests/test_n41_prologue_shell.gd` (87 checks). **N4.2** authors the first two story beats in `scripts/narrative/PrologueBeats.gd` (`pl_01_lost_world` "The Lost World" + `pl_02_faint_resonance` "A Faint Resonance" — NarrativeData-validated data only: pl_01 uses the Story Design candidate narration verbatim and never states the Eclipse cause; pl_02 shows exactly one small uncontrolled childhood manifestation, no spellcasting, no power origin, and the crown never appears in either beat) and wires the shell's content lifecycle: the shell auto-plays the first uncompleted beat on route load (Engine meta `crownfall_prologue_autostart` override for headless suites, same injection convention as `crownfall_load_on_start`), chains pl_01 → pl_02 exactly-once via `sequence_completed`, stages cues on a labelled placeholder stage through the existing `play_cue` op (no new runner ops, no art/audio assets), and marks the N4.2 boundary ONLY when next-beat discovery finds no next authored beat after the completed beat — every playback refusal (exit started, busy runner, already-completed beat, invalid data, `play()` rejection) keeps the boundary false and is reported explicitly — no scene transition (the shore handoff stays N4.5), no completion marking, and the development exit remains the only way out. Covered by `tests/test_n42_prologue_beats.gd` (113 checks). The remaining beats pl_03–pl_09 are NOT implemented; N4.3–N4.6 remain not implemented and the Prologue is not yet a complete story experience (its opening two beats now play on New Game).
+**Status: N4.0–N4.2 implemented and merged (entry/profile gate, functional shell, and first two authored beats).** `scripts/narrative/PlayerProfile.gd` (`user://player_profile.json`, `{"schema_version": 1, "prologue_completed_once": false}`, strict validation, atomic writes, fail-safe "not completed" default), the New Game entry gate with the returning-player Play Prologue Again / Skip choice, and Continue independence are implemented and covered by `tests/test_n40_profile_entry_gate.gd` (101 checks). **N4.1** replaces the inert placeholder with the functional shell at the same route path (`scenes/narrative/PrologueShell.tscn` + `scripts/narrative/PrologueShell.gd`): the shell owns a per-run `NarrativeState` plus a `DialoguePanel` and a `SequenceRunner` configured with an allowlisted sequence scene transition (`res://scenes/world/ForgottenShore.tscn` only, the future N4.5 handoff channel), exposes `play_sequence` / `skip_sequence` / `cancel_sequence` for future beat content, and guards all exits/handoffs behind a single-transition guard (duplicate requests are ignored); exit semantics are split — the development exit cancels a running sequence (completes nothing) while a sequence-driven handoff lets the finishing sequence complete exactly once (`sequence_completed` + `NarrativeState`); a clearly labelled development-only exit button returns to the main menu. Entering, running, or exiting the shell never touches `PlayerProfile` — completion marking stays an N4.5 contract, nothing in the runtime flow sets the completion flag. Covered by `tests/test_n41_prologue_shell.gd` (87 checks). **N4.2** authors the first two story beats in `scripts/narrative/PrologueBeats.gd` (`pl_01_lost_world` "The Lost World" + `pl_02_faint_resonance` "A Faint Resonance" — NarrativeData-validated data only: pl_01 uses the Story Design candidate narration verbatim and never states the Eclipse cause; pl_02 shows exactly one small uncontrolled childhood manifestation, no spellcasting, no power origin, and the crown never appears in either beat) and wires the shell's content lifecycle: the shell auto-plays the first uncompleted beat on route load (Engine meta `crownfall_prologue_autostart` override for headless suites, same injection convention as `crownfall_load_on_start`), chains pl_01 → pl_02 exactly-once via `sequence_completed`, stages cues on a labelled placeholder stage through the existing `play_cue` op (no new runner ops, no art/audio assets), and marks the N4.2 boundary ONLY when next-beat discovery finds no next authored beat after the completed beat — every playback refusal (exit started, busy runner, already-completed beat, invalid data, `play()` rejection) keeps the boundary false and is reported explicitly — no scene transition (the shore handoff stays N4.5), no completion marking, and the development exit remains the only way out. Covered by `tests/test_n42_prologue_beats.gd` (113 checks). The remaining beats pl_03–pl_09 are NOT implemented; N4.3–N4.6 remain not implemented and the Prologue is not yet a complete story experience (its opening two beats now play on New Game).
 
 The N4.0 entry contract for N4.1 is fulfilled: the shell lives at `res://scenes/narrative/PrologueShell.tscn` (route constant unchanged); Main routes to it with `crownfall_load_on_start = false`; routing decisions remain observable headlessly via `Main.set_route_transition(Callable)` and the `crownfall_profile_path` / `crownfall_menu_save_path` Engine metas (shell exits are observable via `PrologueShell.set_exit_transition(Callable)`). N4.5 wires the completion marker (`PlayerProfile.mark_prologue_completed()`, called only after the pl_09 handoff commits) and the fresh-shore handoff.
 
@@ -183,7 +183,7 @@ Tasks:
 
 ## 6. New Game, Continue, and save compatibility
 
-The current menu sends both Start New Game and Continue directly to Forgotten Shore. Adding the Prologue changes that entry flow and requires an explicit policy.
+The current menu entry flow is implemented: Start New Game routes through the Prologue gate, while Continue bypasses the Prologue and loads the existing world save.
 
 ### Approved policy (owner decision, 2026-11-17)
 - **First-ever Start New Game:** always play the Prologue. Do not display a Skip option.
@@ -251,22 +251,24 @@ This policy is approved for N4 planning. It does not authorize implementation un
 
 ## 10. Next tasks for the coding agent
 
-**No gameplay or narrative runtime code is authorized by this documentation milestone.** N1–N3 are already merged into `main` through PR #11. Next:
+**No gameplay or narrative runtime code is authorized by this documentation milestone.** N1–N3 and N4.0–N4.2 are already implemented and merged. Next:
 
-1. Review N0/entry-flow decisions still marked PROPOSED or OPEN in the technical design and Prologue Story Design.
-2. Use the N4.0–N4.6 PR-sized implementation slices in `narrative/PROLOGUE_PRODUCTION_BREAKDOWN.md`. Start with N4.0 (global profile + entry/skip gate), then proceed in order. New Game routing, interruption, and first-playthrough skip policy are approved; each slice still needs its own code review, tests, and windowed verification before merge.
-3. Review [`CHAPTER_01_BEAT_SHEET.md`](CHAPTER_01_BEAT_SHEET.md) and resolve its owner questions. Chapter I implementation remains downstream of the Prologue handoff.
-4. Keep subsequent code work in separate PRs with tests and windowed inspection.
+1. Review the N4.3 plan in [`narrative/N4_3_PLANNING.md`](narrative/N4_3_PLANNING.md) against the current source contracts before implementation.
+2. Start with N4.3-A: a technical spike for the isolated Prologue exploration stage, dedicated Monarch actor, movement bounds, camera, input isolation, and handoff from pl_02. Do not add the repeated-mark interaction until the orchestration works without changing generic `SequenceRunner` / `NarrativeData` semantics.
+3. After N4.3-A is independently reviewed, proceed to N4.3-B (three authored inspectables, distinct-object tracking, and pl_04 recognition dialogue), then N4.3-C integration/regression.
+4. Keep Chapter I design work separate. Its approved progression decisions and remaining open questions are tracked in [`CHAPTER_01_BEAT_SHEET.md`](CHAPTER_01_BEAT_SHEET.md); Chapter I implementation remains downstream of the Prologue handoff.
+5. Keep subsequent code work in separate PRs with tests and windowed inspection.
 
 The objective remains a small, testable story experience, not a speculative narrative framework.
 
-## 11. Audit-aligned technical findings (refreshed after PR #11)
+## 11. Audit-aligned technical findings (refreshed after PR #15)
 
-The source audit and Chapter I gap analysis are refreshed against the PR #11 merge commit (`eb82ae4`). They distinguish implemented runtime infrastructure from authored narrative content.
+This section reflects the source baseline after N4.2 / PR #15 (`539f8564`). It distinguishes implemented runtime infrastructure, implemented Prologue beats, and remaining narrative content.
 
 ### Runtime facts
 - N1–N3 are implemented and merged: in-memory `NarrativeState`, `NarrativeData` validation, `DialoguePanel`, `PlayerControlLock`, and `SequenceRunner`.
-- The runtime is not connected to Prologue scenes, NPC conversations, or Chapter I beats. No quest/objective framework, chapter progression runtime, or narrative save fields exist.
+- `PrologueShell` is the active New Game route and auto-plays the authored pl_01 and pl_02 beats through `PrologueBeats`; it does not yet provide the interactive exploration, inspectable objects, or later Prologue scenes.
+- pl_03–pl_09, the pl_09 Forgotten Shore handoff, and successful full-Prologue completion marking remain unimplemented. No NPC conversation integration, quest/objective framework, chapter progression runtime, or narrative save fields exist.
 - `SaveManager` remains schema v2. Do not add narrative persistence without a separate design and migration decision.
 - `ClockHUD.FeedbackLabel` remains gameplay feedback only; dialogue uses its own panel.
 
@@ -282,7 +284,7 @@ The source audit and Chapter I gap analysis are refreshed against the PR #11 mer
 - Prologue protected mysteries remain protected: crown origin, power source, dynasty/ancestor, ancient kingdom name, and Great Eclipse cause.
 
 ### Documentation hygiene
-- This roadmap's baseline and companion audit snapshots must be updated whenever source evidence changes.
+- This roadmap's baseline and companion audit snapshots must be updated whenever source evidence changes. The current baseline is `539f8564` (after PR #15); do not copy the older N4.0/PR #12 baseline (`a34e5b3`) into current-status headers.
 - Older first-slice values in other project documents (node counts, wall/watchtower positions, save schema, NPC/enemy scope) are outside this narrative-only PR unless directly needed for a story beat. Verify source data before authoring details.
 
 ---
