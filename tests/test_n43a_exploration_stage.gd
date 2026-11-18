@@ -24,8 +24,10 @@ extends SceneTree
 ##   9. pl_03 completion activates pl_04 (movement stays interactive),
 ##  10. pl_03 Skip records pl_03 and activates pl_04 (also while the intro
 ##      dialogue is open; pl_04 is NOT skipped),
-##  11. pl_04 Skip records pl_04 and ends at the defined N4.3 boundary
-##      (dialogue closed, actor lock released, input disabled, no pl_05),
+##  11. pl_04 Skip records pl_04 and continues the chain into pl_05 (the O6
+##      documented default: per-beat skip precedent); the next Skip is the
+##      pl_05 skip, which records pl_05 once and activates DORMANT pl_06
+##      (no pl_06 content in N4.4-A; pl_06 skip is not implemented in A),
 ##  12. Skip never touches PlayerProfile or world saves (no completion flag),
 ##  13. cancellation does not complete the active beat and releases locks,
 ##  14. the development exit does not complete the active beat,
@@ -63,6 +65,8 @@ const BEAT_01: String = "pl_01_lost_world"
 const BEAT_02: String = "pl_02_faint_resonance"
 const BEAT_03: String = "pl_03_wanderer"
 const BEAT_04: String = "pl_04_repeated_mark"
+const BEAT_05: String = "pl_05_forgotten_ruins"
+const BEAT_06: String = "pl_06_crowns_call"
 const MAX_WAIT_FRAMES: int = 1800
 
 var _checks: int = 0
@@ -513,17 +517,27 @@ func _process(_delta: float) -> bool:
 			stage.exploration_handoff_reached.emit()
 			_check(state.completed_count() == before and String(shell.call("active_exploration_beat")) == BEAT_04, "duplicate pl_03 completion requests are ignored by the shell")
 			_check(stage.handoff_emitted(), "the handoff request stays single-shot (no new request on repeated entry)")
-			# --- pl_04 Skip ends the N4.3 segment at its defined boundary ---
+			# --- pl_04 Skip continues the chain into pl_05 (O6 documented
+			# default: the per-beat skip precedent — skipping a beat records
+			# it once and activates the NEXT beat, which is NOT skipped) ---
 			_check(shell.call("skip_current_exploration_beat"), "pl_04 Skip is accepted")
 			_check(bool(state.is_completed(BEAT_04)) and state.completed_count() == 4, "pl_04 Skip records pl_04 exactly once")
-			_check(String(shell.call("active_exploration_beat")) == "" and bool(shell.call("n43_segment_complete")), "the N4.3 segment ends at its defined idle boundary")
-			_check(explorer == null or (not explorer.is_input_enabled() and not explorer.is_physics_processing()), "the boundary disables exploration input and freezes the actor")
-			_check(stage != null and not stage.is_dialogue_locked(), "the boundary releases the stage-owned actor lock")
-			_check(not shell.call("is_sequence_running") and _completions == [BEAT_01, BEAT_02], "no pl_05 content is fabricated (runner untouched, no new completions)")
+			_check(String(shell.call("active_exploration_beat")) == BEAT_05 and not bool(shell.call("n43_segment_complete")), "pl_04 Skip activates pl_05 WITHOUT skipping it (O6 documented default)")
+			_check(explorer == null or explorer.is_input_enabled(), "the ruins beat enables exploration input")
+			_check(stage != null and not stage.is_dialogue_locked(), "no stage-owned actor lock is held in pl_05")
+			_check(not shell.call("is_sequence_running") and _completions == [BEAT_01, BEAT_02], "no runner content is fabricated (runner untouched, no new completions)")
 			var status: Label = shell.get_node_or_null("UICanvasLayer/CenterContainer/VBoxContainer/StatusLabel") as Label
-			_check(status != null and status.text.contains("N4.3") and status.text.contains("N4.4+"), "the boundary status names the N4.3 segment end and the next unimplemented milestone")
-			_check(not shell.call("skip_current_exploration_beat"), "a duplicate pl_04 Skip is rejected (already recorded)")
-			_check(state.completed_count() == 4, "the duplicate Skip records nothing")
+			_check(status != null and status.text.contains("Forgotten Ruins") and status.text.contains("[Placeholder art]"), "the status presents the ruins beat as labelled placeholder")
+			# The next Skip is the pl_05 skip (the per-beat chain), not a
+			# duplicate pl_04 skip: it records pl_05 once and activates the
+			# DORMANT pl_06 (N4.4-A stages no pl_06 content).
+			_check(shell.call("skip_current_exploration_beat"), "pl_05 Skip is accepted")
+			_check(bool(state.is_completed(BEAT_05)) and state.completed_count() == 5, "pl_05 Skip records pl_05 exactly once")
+			_check(String(shell.call("active_exploration_beat")) == BEAT_06 and not bool(shell.call("n43_segment_complete")), "pl_05 Skip activates DORMANT pl_06 (segment stays live)")
+			_check(stage != null and not stage.altar_request_emitted(), "the skip records through the shell — the stage never emitted the altar request")
+			_check(stage == null or not stage.is_dialogue_locked(), "no stage-owned actor lock is held in dormant pl_06")
+			_check(not shell.call("skip_current_exploration_beat"), "pl_06 Skip is not implemented in N4.4-A (rejected)")
+			_check(state.completed_count() == 5, "the rejected Skip records nothing")
 			var profile_fixture: String = FileAccess.get_file_as_string(PROFILE_FALSE)
 			_check(profile_fixture == JSON.stringify({"schema_version": 1, "prologue_completed_once": false}, "\t"), "Skip never touches the player profile fixture (no completion flag)")
 			_stage = 16
@@ -533,7 +547,7 @@ func _process(_delta: float) -> bool:
 			if not _on_shell():
 				return false
 			var shell: Control = _shell()
-			_check(shell.call("request_main_menu_return"), "the development exit works from the N4.3 boundary")
+			_check(shell.call("request_main_menu_return"), "the development exit works from the dormant pl_06 state")
 			_check(_shell_exits.size() == 1 and String(_shell_exits[0]) == "res://scenes/main/Main.tscn", "the boundary exit transitions to the main menu exactly once")
 			change_scene_to_file(MAIN_SCENE)
 			_stage = 17
@@ -693,7 +707,7 @@ func _process(_delta: float) -> bool:
 			var stage := _stage_node(shell)
 			_check(stage == null, "the failed stage instance is fully released")
 			var status: Label = shell.get_node_or_null("UICanvasLayer/CenterContainer/VBoxContainer/StatusLabel") as Label
-			_check(status != null and status.text.contains("Later beats (N4.3+)"), "the fallback shows the defined idle boundary status")
+			_check(status != null and status.text.contains("No exploration segment is active"), "the fallback shows the defined idle boundary status")
 			Engine.remove_meta(STAGE_TEXTURE_META)
 			_stage = 28
 			_wait_frames = 0

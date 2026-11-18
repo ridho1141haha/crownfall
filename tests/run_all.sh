@@ -38,6 +38,7 @@ run_godot "N4.2 prologue beats" "--script res://tests/test_n42_prologue_beats.gd
 run_godot "N43A exploration stage" "--script res://tests/test_n43a_exploration_stage.gd" "PASS: All .* N43A Exploration Stage"
 run_godot "N43B mark inspection" "--script res://tests/test_n43b_mark_inspection.gd" "PASS: All .* N43B Mark Inspection"
 run_godot "N43C full flow" "--script res://tests/test_n43c_full_flow.gd" "PASS: All .* N43C Full Flow"
+run_godot "N44A ruins foundation" "--script res://tests/test_n44a_ruins_foundation.gd" "PASS: All .* N44A Ruins Foundation"
 if [ "${failed}" -ne 0 ]; then
   echo "SOME SUITES FAILED (logs in ${LOG_DIR})"
   exit 1

@@ -65,6 +65,8 @@ const BEAT_01: String = "pl_01_lost_world"
 const BEAT_02: String = "pl_02_faint_resonance"
 const BEAT_03: String = "pl_03_wanderer"
 const BEAT_04: String = "pl_04_repeated_mark"
+const BEAT_05: String = "pl_05_forgotten_ruins"
+const BEAT_06: String = "pl_06_crowns_call"
 const MAIN_MENU_SCENE: String = "res://scenes/main/Main.tscn"
 const MAX_WAIT_FRAMES: int = 1800
 ## How long an interact press may wait for its effect before the driver
@@ -82,6 +84,13 @@ var _completions: Array[String] = []
 var _cues: Array[String] = []
 var _handoff_emissions: int = 0
 var _inspection_emissions: int = 0
+## N4.4-A: the stage's ONE pl_05 altar completion request (same observability
+## contract as the pl_03/pl_04 request counters).
+var _altar_emissions: int = 0
+## A12 two-phase flag: phase 1 waits for the natural altar completion, phase 2
+## measures the post-completion interact inertness after a settle window.
+var _a12_pressed: bool = false
+var _a12_press_frame: int = 0
 var _recognition_seen: bool = false
 var _real_profile_snapshot: String = ""
 var _real_profile_existed: bool = false
@@ -192,6 +201,9 @@ func _wire_shell_observers(shell: Control) -> void:
 	_cues.clear()
 	_handoff_emissions = 0
 	_inspection_emissions = 0
+	_altar_emissions = 0
+	_a12_pressed = false
+	_a12_press_frame = 0
 	_recognition_seen = false
 	shell.call("set_exit_transition", func(scene_path: String) -> void: _shell_exits.append(scene_path))
 	shell.call("set_cue_player", func(cue_id: String) -> void: _cues.append(cue_id))
@@ -202,6 +214,7 @@ func _wire_shell_observers(shell: Control) -> void:
 func _wire_stage_observers(stage: PrologueExplorationStage) -> void:
 	stage.exploration_handoff_reached.connect(func() -> void: _handoff_emissions += 1)
 	stage.mark_inspection_completed.connect(func() -> void: _inspection_emissions += 1)
+	stage.ruins_altar_reached.connect(func() -> void: _altar_emissions += 1)
 
 
 func _stage_node(shell: Control) -> PrologueExplorationStage:
@@ -641,23 +654,23 @@ func _process(_delta: float) -> bool:
 			var explorer := _explorer_of(shell)
 			_check(state.completed_count() == 4 and bool(state.is_completed(BEAT_04)), "A11: normal recognition closure completes pl_04 exactly once (state: pl_01..pl_04)")
 			_check(stage.inspection_completed() and _inspection_emissions == 1, "A11: the stage emitted exactly its one pl_04 completion request, after the dialogue lifecycle")
-			_check(String(shell.call("active_exploration_beat")) == "" and bool(shell.call("n43_segment_complete")), "A11: the N4.3 segment reaches its defined boundary")
-			_check(explorer != null and not explorer.is_input_enabled() and not explorer.is_physics_processing(), "A11: the boundary disables exploration input and freezes the actor (D3)")
-			_check(stage != null and not stage.is_dialogue_locked() and stage.is_segment_ended(), "A11: the boundary releases the stage-owned actor lock and ends the segment")
-			_check(not _inspectables_of(shell).prompt().visible, "A11: no stale prompt remains after completion")
+			# N4.4-A: recording pl_04 ACTIVATES pl_05 (the O6 documented
+			# default) — the segment stays live and the chain continues into
+			# the ruins; the old defined boundary moved to the N4.4-D state.
+			_check(String(shell.call("active_exploration_beat")) == BEAT_05 and not bool(shell.call("n43_segment_complete")), "A11: pl_04 completion activates pl_05 (the chain continues)")
+			_check(explorer != null and explorer.is_input_enabled(), "A11: the ruins beat enables exploration input")
+			_check(stage != null and not stage.is_dialogue_locked() and not stage.is_segment_ended(), "A11: the stage-owned actor lock is released and the segment stays live")
+			_check(not _inspectables_of(shell).prompt().visible, "A11: no stale prompt leaks into pl_05")
 			var runner: SequenceRunner = shell.call("sequence_runner")
 			_check(not runner.is_control_locked() and not bool(shell.call("is_sequence_running")) and _completions == [BEAT_01, BEAT_02], "A11: the runner stayed out of exploration and the runner lock is released")
 			var status: Label = shell.get_node_or_null("UICanvasLayer/CenterContainer/VBoxContainer/StatusLabel") as Label
-			_check(status != null and status.text.contains("N4.3") and status.text.contains("N4.4+"), "A11: the boundary status names the N4.3 segment end and the next unimplemented milestone")
+			_check(status != null and status.text.contains("Forgotten Ruins"), "A11: the status presents the ruins beat")
 			_ui_button_on_screen(shell, "A11")
 			_check(_inspectables_of(shell).distinct_inspected_count() == 2, "A11: the held interact key added NO second inspection across the recognition window (H14 inside the full flow)")
 			# The held-input window is over: release the key explicitly.
 			Input.action_release("interact")
-			# --- A12: post-boundary inertness ---
-			stage.exploration_handoff_reached.emit()
-			stage.mark_inspection_completed.emit()
-			_check(state.completed_count() == 4 and String(shell.call("active_exploration_beat")) == "" and bool(shell.call("n43_segment_complete")), "A12: late re-emitted completion requests are ignored by the shell after the boundary")
-			Input.action_press("interact")
+			# --- A11b: drive east through the ruins to the altar ---
+			_drive_right(shell)
 			_stage = 19
 			_wait_frames = 0
 			return false
@@ -665,13 +678,39 @@ func _process(_delta: float) -> bool:
 			if not _on_shell():
 				return false
 			var shell: Control = _shell()
-			Input.action_release("interact")
+			var stage := _stage_node(shell)
 			var state: NarrativeState = shell.call("narrative_state")
-			_check(state.completed_count() == 4 and not _panel_of(shell).is_open() and not _inspectables_of(shell).prompt().visible, "A12: a post-boundary interact press is structurally inert (segment-ended gate, no re-inspection, no dialogue)")
-			_check(_handoff_emissions + _inspection_emissions == 4, "A12: exactly the 2 natural + 2 forced completion requests were emitted (no unexpected extras)")
-			# --- A13: exit from the boundary ---
-			_check(shell.call("request_main_menu_return"), "A13: the development exit works from the N4.3 boundary")
-			_check(_shell_exits.size() == 1 and String(_shell_exits[0]) == MAIN_MENU_SCENE, "A13: the boundary exit transitions to the main menu exactly once")
+			# Phase 1: drive east until the ONE natural altar completion lands.
+			if not _a12_pressed:
+				if _altar_emissions == 0 and _wait_frames < MAX_WAIT_FRAMES - 60:
+					return false
+				_stop_driving()
+				_check(_altar_emissions == 1, "A11b: the stage emitted exactly its one pl_05 altar completion request (driving east reaches the altar)")
+				_check(stage != null and stage.altar_request_emitted(), "A11b: the altar request stays single-shot (no re-emission)")
+				_check(state.completed_count() == 5 and bool(state.is_completed(BEAT_05)), "A11b: reaching the altar completes pl_05 exactly once (state: pl_01..pl_05)")
+				_check(String(shell.call("active_exploration_beat")) == BEAT_06 and not bool(shell.call("n43_segment_complete")), "A11b: pl_05 completion activates DORMANT pl_06 (segment stays live, no pl_06 content)")
+				var explorer := _explorer_of(shell)
+				_check(explorer != null and explorer.is_input_enabled(), "A11b: dormant pl_06 keeps exploration input enabled")
+				var status: Label = shell.get_node_or_null("UICanvasLayer/CenterContainer/VBoxContainer/StatusLabel") as Label
+				_check(status != null and status.text.contains("Crown's Call"), "A11b: the status presents the dormant pl_06 beat")
+				# --- A12: wrong-beat completion requests are ignored ---
+				stage.exploration_handoff_reached.emit()
+				stage.mark_inspection_completed.emit()
+				stage.ruins_altar_reached.emit()
+				_check(state.completed_count() == 5 and String(shell.call("active_exploration_beat")) == BEAT_06 and not bool(shell.call("n43_segment_complete")), "A12: late re-emitted completion requests are ignored by the shell (wrong active beat)")
+				_check(_handoff_emissions + _inspection_emissions + _altar_emissions == 6, "A12: exactly the 3 natural + 3 forced completion requests were emitted (no unexpected extras)")
+				Input.action_press("interact")
+				_a12_pressed = true
+				_a12_press_frame = _wait_frames
+				return false
+			# Phase 2: after a settle window, the dormant-pl_06 press is inert.
+			if _wait_frames < _a12_press_frame + 5:
+				return false
+			Input.action_release("interact")
+			_check(state.completed_count() == 5 and not _panel_of(shell).is_open() and not _inspectables_of(shell).prompt().visible, "A12: a post-completion interact press is structurally inert (dormant pl_06 polls nothing)")
+			# --- A13: exit from the dormant pl_06 state ---
+			_check(shell.call("request_main_menu_return"), "A13: the development exit works from the dormant pl_06 state")
+			_check(_shell_exits.size() == 1 and String(_shell_exits[0]) == MAIN_MENU_SCENE, "A13: the exit transitions to the main menu exactly once")
 			change_scene_to_file(MAIN_SCENE)
 			_stage = 20
 			_wait_frames = 0
@@ -743,14 +782,21 @@ func _process(_delta: float) -> bool:
 			var stage := _stage_node(shell)
 			var explorer := _explorer_of(shell)
 			_check(bool(state.is_completed(BEAT_04)) and state.completed_count() == 4, "B4: pl_04 Skip records pl_04 exactly once")
-			_check(String(shell.call("active_exploration_beat")) == "" and bool(shell.call("n43_segment_complete")), "B4: the segment ends at the defined boundary (no pl_05)")
-			_check(stage != null and stage.is_segment_ended() and not stage.is_dialogue_locked() and not stage.inspection_completed(), "B4: the boundary releases the lock with no recognition ever staged")
-			_check(explorer == null or (not explorer.is_input_enabled() and not explorer.is_physics_processing()), "B4: the boundary disables exploration input and freezes the actor")
+			# N4.4-A (O6 documented default): the pl_04 skip CONTINUES the chain
+			# into pl_05 instead of ending the segment; the next skip is the
+			# pl_05 skip, which records pl_05 once and activates DORMANT pl_06.
+			_check(String(shell.call("active_exploration_beat")) == BEAT_05 and not bool(shell.call("n43_segment_complete")), "B4: pl_04 Skip activates pl_05 WITHOUT skipping it")
+			_check(stage != null and not stage.is_segment_ended() and not stage.is_dialogue_locked() and not stage.inspection_completed(), "B4: no recognition ever staged and the segment stays live")
+			_check(explorer == null or explorer.is_input_enabled(), "B4: the ruins beat enables exploration input")
 			_check(_inspectables_of(shell).distinct_inspected_count() == 0 and not _recognition_seen and _inspection_emissions == 0, "B4: no inspection happened and no recognition/completion path ran")
 			var status: Label = shell.get_node_or_null("UICanvasLayer/CenterContainer/VBoxContainer/StatusLabel") as Label
-			_check(status != null and status.text.contains("N4.3") and status.text.contains("N4.4+"), "B4: the boundary status names the segment end")
-			_check(not shell.call("skip_current_exploration_beat") and state.completed_count() == 4, "B4: a duplicate Skip after the beat ended is rejected and records nothing")
-			_check(shell.call("request_main_menu_return") and _shell_exits.size() == 1 and String(_shell_exits[0]) == MAIN_MENU_SCENE, "B4: the development exit transitions exactly once from the boundary")
+			_check(status != null and status.text.contains("Forgotten Ruins"), "B4: the status presents the ruins beat")
+			_check(shell.call("skip_current_exploration_beat"), "B4: the follow-up pl_05 Skip is accepted (the per-beat chain)")
+			_check(bool(state.is_completed(BEAT_05)) and state.completed_count() == 5, "B4: pl_05 Skip records pl_05 exactly once")
+			_check(String(shell.call("active_exploration_beat")) == BEAT_06 and not bool(shell.call("n43_segment_complete")), "B4: pl_05 Skip activates DORMANT pl_06 (segment stays live)")
+			_check(stage != null and not stage.altar_request_emitted(), "B4: the skips record through the shell — the stage never emitted the altar request")
+			_check(not shell.call("skip_current_exploration_beat") and state.completed_count() == 5, "B4: pl_06 Skip is not implemented in N4.4-A (rejected, records nothing)")
+			_check(shell.call("request_main_menu_return") and _shell_exits.size() == 1 and String(_shell_exits[0]) == MAIN_MENU_SCENE, "B4: the development exit transitions exactly once from the dormant pl_06 state")
 			change_scene_to_file(MAIN_SCENE)
 			_stage = 25
 			_wait_frames = 0
@@ -799,9 +845,10 @@ func _process(_delta: float) -> bool:
 			var state: NarrativeState = shell.call("narrative_state")
 			_check(inspectables.distinct_inspected_count() == 1 and not _recognition_seen, "B5: exactly one inspection is recorded (no recognition at 1 distinct)")
 			_check(shell.call("skip_current_exploration_beat"), "B5: pl_04 Skip AFTER one inspection is accepted")
-			_check(bool(state.is_completed(BEAT_04)) and state.completed_count() == 4 and bool(shell.call("n43_segment_complete")), "B5: the Skip records pl_04 exactly once and ends the segment")
+			_check(bool(state.is_completed(BEAT_04)) and state.completed_count() == 4 and String(shell.call("active_exploration_beat")) == BEAT_05, "B5: the Skip records pl_04 exactly once and activates pl_05 (O6 documented default)")
 			_check(inspectables.distinct_inspected_count() == 1 and not _recognition_seen and _inspection_emissions == 0, "B5: the partial inspection never opened the recognition and emitted no completion request")
-			_check(not shell.call("skip_current_exploration_beat") and state.completed_count() == 4, "B5: a duplicate Skip is rejected after the segment ended")
+			_check(shell.call("skip_current_exploration_beat") and String(shell.call("active_exploration_beat")) == BEAT_06 and state.completed_count() == 5, "B5: the follow-up pl_05 Skip records pl_05 once and activates DORMANT pl_06")
+			_check(not shell.call("skip_current_exploration_beat") and state.completed_count() == 5, "B5: pl_06 Skip is not implemented in N4.4-A (rejected, records nothing)")
 			_check(shell.call("request_main_menu_return") and _shell_exits.size() == 1 and String(_shell_exits[0]) == MAIN_MENU_SCENE, "B5: the development exit transitions exactly once")
 			change_scene_to_file(MAIN_SCENE)
 			_stage = 29
@@ -869,8 +916,8 @@ func _process(_delta: float) -> bool:
 			_check(stage.is_dialogue_locked() and not explorer.is_input_enabled(), "B6: the recognition holds the actor lock before the Skip")
 			_check(shell.call("skip_current_exploration_beat"), "B6: pl_04 Skip is accepted WHILE the recognition dialogue is open")
 			_check(not panel.is_open() and not stage.is_dialogue_locked(), "B6: the Skip closes the panel and releases the stage-owned actor lock")
-			_check(bool(state.is_completed(BEAT_04)) and state.completed_count() == 4 and bool(shell.call("n43_segment_complete")), "B6: the Skip itself records pl_04 exactly once and ends the segment")
-			_check(explorer == null or (not explorer.is_input_enabled() and not explorer.is_physics_processing()), "B6: the boundary freezes the actor")
+			_check(bool(state.is_completed(BEAT_04)) and state.completed_count() == 4 and String(shell.call("active_exploration_beat")) == BEAT_05, "B6: the Skip itself records pl_04 exactly once and activates pl_05 (O6 documented default)")
+			_check(explorer == null or explorer.is_input_enabled(), "B6: the ruins beat re-enables exploration input after the skip")
 			_stage = 34
 			_wait_frames = 0
 			return false
@@ -886,8 +933,7 @@ func _process(_delta: float) -> bool:
 			# against a bumped generation and must NOT have emitted the
 			# completion request — the recording belongs to the Skip alone.
 			_check(_inspection_emissions == 0 and not stage.inspection_completed(), "B6: the resumed recognition coroutine emitted NO completion request after the Skip (stale generation)")
-			_check(state.completed_count() == 4, "B6: no duplicate pl_04 recording lands after the settle window")
-			_check(not shell.call("skip_current_exploration_beat"), "B6: a duplicate Skip is rejected after the segment ended")
+			_check(state.completed_count() == 4 and String(shell.call("active_exploration_beat")) == BEAT_05, "B6: no duplicate pl_04 recording lands after the settle window")
 			Input.action_release("interact")
 			_check(shell.call("request_main_menu_return") and _shell_exits.size() == 1 and String(_shell_exits[0]) == MAIN_MENU_SCENE, "B6: the development exit transitions exactly once")
 			change_scene_to_file(MAIN_SCENE)
@@ -1288,7 +1334,7 @@ func _process(_delta: float) -> bool:
 			_check(bool(shell.call("prologue_reached_end")), "D: the structural chain end stays true after the fallback")
 			_check(not runner.is_control_locked() and not bool(shell.call("is_sequence_running")), "D: failed setup leaves no control lock and an idle runner")
 			var status: Label = shell.get_node_or_null("UICanvasLayer/CenterContainer/VBoxContainer/StatusLabel") as Label
-			_check(status != null and status.text.contains("Later beats (N4.3+)"), "D: the fallback shows the defined idle boundary status")
+			_check(status != null and status.text.contains("No exploration segment is active"), "D: the fallback shows the defined idle boundary status")
 			Engine.remove_meta(STAGE_TEXTURE_META)
 			_check(shell.call("request_main_menu_return") and _shell_exits.size() == 1 and String(_shell_exits[0]) == MAIN_MENU_SCENE, "D: the development exit works from the failed-setup fallback")
 			change_scene_to_file(MAIN_SCENE)

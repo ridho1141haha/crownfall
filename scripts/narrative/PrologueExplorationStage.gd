@@ -30,21 +30,43 @@ extends Node2D
 ## generation guard, approved text only), and the exactly-once completion
 ## request emission. PrologueShell stays the sole NarrativeState writer.
 ##
+## RUINS CONTRACT (N4.4-A): the stage owns a PrologueRuinsEnvironment child
+## built fail-closed during setup — the placeholder ruin zones, the hidden
+## chamber reveal, and the altar area east of the road. The stage polls the
+## component's zone state per physics frame during pl_05 and emits exactly
+## ONE `ruins_altar_reached` request when the actor reaches the authored
+## altar threshold (mirroring the pl_03 handoff contract: one-shot guard,
+## active-beat + input-enabled gating, shell validates and records). pl_06 is
+## DORMANT in N4.4-A: it is a valid active beat (movement stays enabled) with
+## no interaction, no dialogue, and no completion path — N4.4-C/D own those.
+##
 ## All environment art is labelled placeholder ColorRect geometry — no art
-## assets ship in N4.3-A/N4.3-B and nothing here implies lore (no road name,
-## no kingdom/dynasty references, no royal-symbol design; the mark glyph is a
-## labelled placeholder whose design stays an OPEN owner decision).
+## assets ship in N4.3-A/N4.3-B/N4.4-A and nothing here implies lore (no road
+## name, no ruins name, no kingdom/dynasty references, no royal-symbol
+## design; the mark glyph is a labelled placeholder whose design stays an
+## OPEN owner decision).
 
 signal exploration_handoff_reached()
 ## The stage's ONE pl_04 completion request (N4.3-B): emitted exactly once,
 ## only after the recognition dialogue closed normally and the lifecycle
 ## checks passed. PrologueShell validates the active beat and records.
 signal mark_inspection_completed()
+## The stage's ONE pl_05 completion request (N4.4-A): emitted exactly once,
+## only while pl_05 is active with movement enabled and the actor has reached
+## the authored altar threshold. PrologueShell validates the active beat and
+## records; reaching the altar is the pl_05 completion boundary (runtime beat
+## table: exit condition "Reach altar"), NOT the N4.4-C crown interaction.
+signal ruins_altar_reached()
 
 ## Authored stage layout (labelled placeholders; zoom 1.5 on a 1280x720
-## viewport shows an 853x480 world band, so the 1600-wide road actually pans).
+## viewport shows an 853x480 world band, so the band actually pans).
+## N4.4-A: the authored band extends EAST through the ruins — the road path
+## physically continues into the ruin interior as its floor (the ruins zone
+## presentation draws above it), the camera limits extend with the band, and
+## the containment guarantee (limits == band) is unchanged. The value is the
+## east band end from the N4.4-A staging placeholders (OPEN decision O7).
 const ROAD_MIN_X: float = -800.0
-const ROAD_MAX_X: float = 800.0
+const ROAD_MAX_X: float = 2200.0
 const VIEW_TOP: float = -240.0
 const VIEW_BOTTOM: float = 240.0
 const GROUND_Y: float = 200.0
@@ -68,6 +90,9 @@ const BACKDROP_MARGIN: float = 4096.0
 var _panel: DialoguePanel = null
 var _explorer: PrologueExplorer = null
 var _inspectables: PrologueMarkInspectables = null
+## N4.4-A ruins component (zones + chamber reveal + altar area; east of the
+## road). Null only before setup or after a failed build (fail-closed).
+var _ruins: PrologueRuinsEnvironment = null
 var _dialogue_lock: PlayerControlLock = null
 var _active_beat: String = ""
 var _built: bool = false
@@ -79,6 +104,9 @@ var _handoff_emitted: bool = false
 ## One N4.3-B completion request per run: the one-shot guard behind
 ## mark_inspection_completed — the request can never re-emit (§8 layer 1).
 var _inspection_completed: bool = false
+## One N4.4-A completion request per run: the one-shot guard behind
+## ruins_altar_reached — the request can never re-emit.
+var _altar_request_emitted: bool = false
 ## Generation guard for the intro-dialogue coroutine: skip/cancel/teardown
 ## invalidate the presentation so a resumed await can never re-enable input
 ## for a beat that already moved on.
@@ -99,6 +127,16 @@ func setup(panel: DialoguePanel, explorer_texture: Texture2D) -> bool:
 	_panel = panel
 	_dialogue_lock = PlayerControlLock.new()
 	_build_environment()
+	# N4.4-A (D6): the ruins environment is built fail-closed BEFORE the
+	# inspectables and the actor — a failed build fails the whole setup, so
+	# no partial ruins can ever be committed and the shell falls back to its
+	# idle boundary (records nothing, acquires no lock).
+	_ruins = PrologueRuinsEnvironment.new()
+	if not _ruins.build(ROAD_MIN_X, ROAD_MAX_X, GROUND_Y, VIEW_TOP, VIEW_BOTTOM):
+		_ruins.free()
+		_ruins = null
+		return false
+	add_child(_ruins)
 	# N4.3-B (D6): the inspectable set is built fail-closed BEFORE the actor —
 	# a failed build fails the whole setup, so no partial inspection system is
 	# ever committed and the shell falls back to its idle boundary.
@@ -136,25 +174,43 @@ func is_built() -> bool:
 ## authored start point, and the approved internal line plays through the
 ## DialoguePanel while the stage-owned lock holds the actor. Movement is
 ## enabled only after the line closes (the intended point).
+## N4.4-A: starting pl_05 enables movement directly — Beat 05 has NO approved
+## dialogue (environmental storytelling only, Story Design Beat 05; adding an
+## unapproved line would invent lore), so activation is silent.
 func begin_beat(beat_id: String) -> void:
 	if not _built or _torn_down or _segment_ended:
 		return
-	if beat_id != PrologueBeats.PL_03_WANDERER:
+	if beat_id != PrologueBeats.PL_03_WANDERER and beat_id != PrologueBeats.PL_05_FORGOTTEN_RUINS:
 		return
 	_active_beat = beat_id
+	if beat_id == PrologueBeats.PL_05_FORGOTTEN_RUINS:
+		_explorer.set_input_enabled(true)
+		return
 	_present_intro_dialogue(beat_id)
 
 
 ## pl_04 activation (shell-validated). N4.3-A presents no pl_04 dialogue:
 ## its recognition interaction is N4.3-B. Movement stays enabled — pl_04 is
 ## an interactive beat on the same stage.
+## N4.4-A: pl_05 activates with movement enabled (interactive exploration);
+## pl_06 activates DORMANT — movement stays enabled (the player may wander
+## the chamber) but the stage polls nothing for pl_06 in N4.4-A: no prompt,
+## no dialogue, no completion path (N4.4-C/D own the crown interaction and
+## the awakening/vision; staging them here would implement a future slice).
 func set_active_beat(beat_id: String) -> void:
 	if not _built or _torn_down or _segment_ended:
 		return
-	if beat_id != PrologueBeats.PL_03_WANDERER and beat_id != PrologueBeats.PL_04_REPEATED_MARK:
+	if beat_id != PrologueBeats.PL_03_WANDERER and beat_id != PrologueBeats.PL_04_REPEATED_MARK \
+			and beat_id != PrologueBeats.PL_05_FORGOTTEN_RUINS and beat_id != PrologueBeats.PL_06_CROWNS_CALL:
 		return
 	_active_beat = beat_id
-	if beat_id == PrologueBeats.PL_04_REPEATED_MARK:
+	if beat_id != PrologueBeats.PL_04_REPEATED_MARK and _inspectables != null and is_instance_valid(_inspectables):
+		# Only pl_04 polls the shared inspection prompt; every other beat
+		# hides it so a stale prompt can never leak across the beat change
+		# (e.g. a skip that lands between the recognition opening and the next
+		# gated poll would otherwise carry a visible "[E] Inspect" into pl_05).
+		_inspectables.set_prompt_target("")
+	if beat_id != PrologueBeats.PL_03_WANDERER:
 		_explorer.set_input_enabled(true)
 
 
@@ -170,10 +226,14 @@ func close_active_dialogue() -> void:
 		_dialogue_lock.unlock()
 
 
-## Ends the N4.3 segment at its defined boundary (pl_04 skip): closes any
-## active dialogue, releases the stage-owned actor lock, disables exploration
+## Ends the exploration segment at its defined boundary: closes any active
+## dialogue, releases the stage-owned actor lock, disables exploration
 ## input, and freezes the actor. No beat is recorded here — the shell records
 ## completions. Idempotent.
+## N4.4-A NOTE: the NORMAL flow no longer ends the segment anywhere — the
+## chain continues into dormant pl_06 (the terminal state of slice A). This
+## path stays for the N4.4-D boundary machinery (record pl_06 -> end segment
+## -> defined boundary); until then it is reachable only by tests.
 func end_segment() -> void:
 	if _segment_ended:
 		return
@@ -238,6 +298,18 @@ func inspection_completed() -> bool:
 	return _inspection_completed
 
 
+## The ruins environment component (null before setup or after a failed
+## build; test observability + the shell's B-slice extension point).
+func ruins() -> PrologueRuinsEnvironment:
+	return _ruins
+
+
+## Whether the ONE pl_05 altar completion request has been emitted (test
+## observability, mirroring handoff_emitted()).
+func altar_request_emitted() -> bool:
+	return _altar_request_emitted
+
+
 func is_segment_ended() -> bool:
 	return _segment_ended
 
@@ -250,7 +322,9 @@ func is_torn_down() -> bool:
 ## branches are gated on the torn-down/segment-ended flags first, so a
 ## finished or cancelled segment can never process anything (the pl_04
 ## prompt/inspection logic needs its own branch — the old single-purpose
-## early return on _handoff_emitted belonged to pl_03 only).
+## early return on _handoff_emitted belonged to pl_03 only). N4.4-A: pl_05
+## gets its own branch (zone polling + the altar trigger); pl_06 is DORMANT
+## and deliberately has NO branch — no polling, no triggers in N4.4-A.
 func _physics_process(_delta: float) -> void:
 	if _torn_down or _segment_ended:
 		return
@@ -258,6 +332,8 @@ func _physics_process(_delta: float) -> void:
 		_process_pl_03()
 	elif _active_beat == PrologueBeats.PL_04_REPEATED_MARK:
 		_process_pl_04()
+	elif _active_beat == PrologueBeats.PL_05_FORGOTTEN_RUINS:
+		_process_pl_05()
 
 
 ## Exploration condition: the handoff area completes pl_03 when the actor
@@ -272,6 +348,29 @@ func _process_pl_03() -> void:
 	if _explorer.position.x >= HANDOFF_X:
 		_handoff_emitted = true
 		exploration_handoff_reached.emit()
+
+
+## pl_05 per-frame logic (N4.4-A): the ruins component tracks the explorer's
+## x for the one-way zone-state machine (exterior -> interior passage ->
+## chamber reveal), and the altar threshold fires the stage's ONE pl_05
+## completion request — the same one-shot discipline as the pl_03 handoff:
+## exactly once, only while pl_05 is active with movement enabled (a placed-
+## but-not-controllable actor can never complete the beat). The component
+## itself never emits completion requests; the stage is the sole emitter and
+## PrologueShell the sole recorder.
+func _process_pl_05() -> void:
+	if _ruins == null or not _ruins.is_valid():
+		return
+	if _explorer == null or not is_instance_valid(_explorer):
+		return
+	_ruins.update_explorer_x(_explorer.position.x)
+	if _altar_request_emitted:
+		return
+	if not is_input_enabled():
+		return
+	if _explorer.position.x >= _ruins.altar_x():
+		_altar_request_emitted = true
+		ruins_altar_reached.emit()
 
 
 ## pl_04 per-frame logic (N4.3-B): prompt visibility follows the nearest

@@ -176,3 +176,10 @@ jobs:
           godot --headless --script res://tests/test_n43c_full_flow.gd 2>&1 | tee /tmp/godot_n43c.log
           ! grep -E "(SCRIPT ERROR:|Parser Error:|TEST FAILURE:)" /tmp/godot_n43c.log
           grep -q "PASS: All .* N43C Full Flow" /tmp/godot_n43c.log
+
+      - name: Run N44A Ruins Foundation Tests
+        run: |
+          set -o pipefail
+          godot --headless --script res://tests/test_n44a_ruins_foundation.gd 2>&1 | tee /tmp/godot_n44a.log
+          ! grep -E "(SCRIPT ERROR:|Parser Error:|TEST FAILURE:)" /tmp/godot_n44a.log
+          grep -q "PASS: All .* N44A Ruins Foundation" /tmp/godot_n44a.log
