@@ -7,6 +7,33 @@ This changelog records repository changes that actually occurred. Planned featur
 
 ---
 
+## [2026-11-18] N4.3-C: Full-Flow Integration & Regression
+
+**Type:** Integration & regression milestone (new integration suite + one demonstrated-defect production fix; no narrative content, no pl_05)
+**Engine Verified:** `Godot 4.7.2.stable` (headless suites + windowed Xvfb visual pass; full `tests/run_all.sh` ALL SUITES PASSED; static verifier PASS)
+
+### Summary
+1. **Integration suite.** New `tests/test_n43c_full_flow.gd` (176 checks) drives the complete experience as ONE continuous shell — pl_01 advance → pl_02 advance → pl_03 intro → genuine movement to the handoff → pl_04 prompt/inspection → recognition → completion → defined boundary — then walks the skip matrix (runner skips stage no cues after the skip point; pl_03 Skip while the intro is open; pl_04 Skip before any inspection / after exactly one / WHILE the recognition dialogue is open — the resumed coroutine emits nothing, the recording belongs to the Skip), the cancellation/teardown matrix (cancel during pl_01 / the pl_03 intro / pl_04 after one inspection / DURING the recognition — the N4.3-B ordering contract holds end to end — plus the dev exit during recognition and a direct scene unload during recognition), failed exploration setup, post-boundary inertness, and input/file hygiene. Ownership is asserted throughout: the runner never records exploration beats, the shell is the sole `NarrativeState` writer, each beat records exactly once. Registered in `tests/run_all.sh` and `.github/workflows/godot-ci.yml`.
+2. **Production fix (demonstrated by the windowed visual pass; deferred since N4.3-B).** The shell's CenterContainer UI (status labels + the development exit button) sat on the default canvas, which the exploration Camera2D transforms: during pl_03/pl_04 and at the boundary the whole shell UI was displaced outside the viewport (status invisible, dev exit unreachable — while the status text itself claimed "The development exit remains available"). The N4.3-B changelog had noted the camera-transformed labels and deferred the UI change to a later slice. The fix moves the shell UI onto the new `UICanvasLayer` CanvasLayer (layer 1, camera-immune — the same mechanism the DialoguePanel already used at layer 100); world rendering, the camera contract, and all narrative behavior are unchanged. Regression-tested headlessly (the button's true screen rect stays inside the viewport during exploration while the world actor is camera-displaced — contrast proof) and visually (before/after screenshots).
+
+### Key Changes
+- `tests/test_n43c_full_flow.gd` (+ `.uid`): new N4.3-C full-flow integration suite.
+- `tests/run_all.sh`, `.github/workflows/godot-ci.yml`: N43C suite registered.
+- `scenes/narrative/PrologueShell.tscn`: shell UI moved under the new `UICanvasLayer` CanvasLayer.
+- `scripts/narrative/PrologueShell.gd`: shell-UI lookups updated to the `UICanvasLayer` paths + in-code contract comment; no behavioral change beyond the fix.
+- `tests/test_n41_prologue_shell.gd`, `tests/test_n42_prologue_beats.gd`, `tests/test_n43a_exploration_stage.gd`, `tests/test_n43b_mark_inspection.gd`: shell-UI path lookups updated (Main.tscn lookups untouched).
+- `scripts/tools/n43c_visual_pass.gd` (+ `.uid`): the reproducible windowed visual-pass harness (7 screenshots as evidence).
+- Docs status sync: `docs/narrative/N4_3_PLANNING.md`, `docs/narrative/NARRATIVE_RUNTIME_TECHNICAL_DESIGN.md`, `docs/NARRATIVE_IMPLEMENTATION_ROADMAP.md`, `docs/narrative/PROLOGUE_PRODUCTION_BREAKDOWN.md`, `docs/narrative/PROLOGUE_STORY_DESIGN.md` (stale status line), and the new `docs/narrative/N43C_IMPLEMENTATION_REPORT.md`.
+
+### Verified
+- `tests/test_n43c_full_flow.gd`: **PASS: All 176 N43C Full Flow checks … 0 failures** (exit 0; 10 consecutive runs before AND 10 after the UI fix).
+- Regression after the UI fix: N43A 106, N43B 193, N42 113, N41 87 — all exit 0.
+- Full `tests/run_all.sh`: **ALL SUITES PASSED** (exit 0, 20 entries); static verifier PASS.
+- Windowed visual verification (Xvfb, 1280x720): 7 screenshots (pl_01 cinematic, pl_02, pl_03 intro/road start + walking, prompt at object A, recognition dialogue, terminal boundary) — Adult Monarch visible and correctly placed; road fully covered with no out-of-bounds exposure; the mark glyph identical on the props; the shell UI (status + development exit) now visible during exploration and at the boundary (fixed); no pl_05 content; no stale prompt.
+- Real `user://player_profile.json` / `user://save_slot_0.json` byte-exact unchanged (suite hygiene checks).
+
+---
+
 ## [2026-11-17] N4.3-B: Repeated Mark Inspection (slices B1 + B2 + B3)
 
 **Type:** Feature implementation (N4.3-B only — N4.3-C integration/regression is NOT started)
