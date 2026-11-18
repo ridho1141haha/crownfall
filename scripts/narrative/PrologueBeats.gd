@@ -40,8 +40,15 @@ const BEAT_IDS: Array[String] = [
 ]
 
 ## N4.3 exploration beat ids (shell-orchestrated, never runner sequences).
+## N4.4-A adds pl_05 (the Forgotten Ruins) and the dormant pl_06 id: the
+## shell-orchestrated chain continues past pl_04 (runtime beat table: pl_05
+## entry = "pl_04 finished", pl_06 entry = "pl_05 finished"). pl_06 is DORMANT
+## in N4.4-A — its interaction/awakening is N4.4-C/D; activating it only
+## moves the shell's active-beat bookkeeping, it stages no content.
 const PL_03_WANDERER: String = "pl_03_wanderer"
 const PL_04_REPEATED_MARK: String = "pl_04_repeated_mark"
+const PL_05_FORGOTTEN_RUINS: String = "pl_05_forgotten_ruins"
+const PL_06_CROWNS_CALL: String = "pl_06_crowns_call"
 
 ## Presentation speaker for adult Monarch (exploration internal lines).
 const MONARCH: String = "Monarch"
@@ -72,10 +79,13 @@ static func is_beat(sequence_id: String) -> bool:
 
 
 ## True when the id is one of the shell-orchestrated exploration beats
-## (pl_03/pl_04). These never enter BEAT_IDS: SequenceRunner must not chain
-## or validate them as sequences.
+## (pl_03..pl_06). These never enter BEAT_IDS: SequenceRunner must not chain
+## or validate them as sequences. pl_06 is dormant in N4.4-A (N4.4-C/D own
+## its interaction and completion); the id exists so the shell can activate
+## it as the post-pl_05 chain state.
 static func is_exploration_beat(sequence_id: String) -> bool:
-	return sequence_id == PL_03_WANDERER or sequence_id == PL_04_REPEATED_MARK
+	return sequence_id == PL_03_WANDERER or sequence_id == PL_04_REPEATED_MARK \
+		or sequence_id == PL_05_FORGOTTEN_RUINS or sequence_id == PL_06_CROWNS_CALL
 
 
 ## Human-readable exploration beat title (status presentation only).
@@ -85,6 +95,10 @@ static func exploration_beat_title(beat_id: String) -> String:
 			return "The Wanderer"
 		PL_04_REPEATED_MARK:
 			return "The Repeated Mark"
+		PL_05_FORGOTTEN_RUINS:
+			return "The Forgotten Ruins"
+		PL_06_CROWNS_CALL:
+			return "The Crown's Call"
 		_:
 			return "Prologue exploration"
 

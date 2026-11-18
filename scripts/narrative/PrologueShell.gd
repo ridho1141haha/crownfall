@@ -55,6 +55,17 @@ extends Control
 ## suites that must keep the N4.2 terminal-boundary behavior disable the
 ## segment with the Engine meta "crownfall_prologue_exploration" = false.
 ##
+## N4.4-A INTEGRATION: the exploration chain continues past pl_04. Recording
+## pl_04 now ACTIVATES pl_05 (the Forgotten Ruins); the stage's ONE
+## `ruins_altar_reached` request completes pl_05 exactly once at the authored
+## altar threshold and activates pl_06 DORMANT (no pl_06 content in slice A:
+## the crown interaction is N4.4-C, the awakening/vision N4.4-D — the
+## segment stays LIVE with pl_06 as the active beat and the development exit
+## as the way out). The per-beat skip chain extends the same way (pl_04 skip
+## -> pl_05, pl_05 skip -> pl_06 dormant; the O6 documented default — see
+## skip_current_exploration_beat). _n43_segment_ended is no longer reachable
+## in the normal flow; it remains for the N4.4-D boundary machinery.
+##
 ## COMPLETION SEMANTICS: this shell NEVER touches PlayerProfile. Entering,
 ## exiting, skipping, or closing the application must not mark
 ## prologue_completed_once; only the future N4.5 successful full-Prologue
@@ -106,6 +117,11 @@ var _runner: SequenceRunner = null
 var _current_beat_id: String = ""
 var _prologue_reached_end: bool = false
 ## N4.3-A exploration segment state (per-run, dies with the scene).
+## N4.4-A: _n43_segment_ended is no longer reachable in the NORMAL flow —
+## the chain continues into dormant pl_06 and the segment stays live (the
+## slice-A terminal state). The flag/API remain for the N4.4-D boundary
+## machinery (record pl_06 -> end segment -> defined boundary) and for the
+## existing regression suites; see n43_segment_complete().
 var _exploration_stage: PrologueExplorationStage = null
 var _exploration_beat: String = ""
 var _n43_segment_ended: bool = false
@@ -367,7 +383,11 @@ func active_exploration_beat() -> String:
 	return _exploration_beat
 
 
-## True once the N4.3 segment ended at its defined idle boundary (pl_04 skip).
+## True once the exploration segment ended at its defined boundary. N4.4-A:
+## never true in the NORMAL flow (the chain continues into dormant pl_06 and
+## the segment stays live — the slice-A terminal state); the flag/API remain
+## for the N4.4-D boundary machinery (record pl_06 -> end segment). The
+## existing name is kept for the regression suites until D renames it.
 func n43_segment_complete() -> bool:
 	return _n43_segment_ended
 
@@ -404,6 +424,7 @@ func _begin_exploration_segment() -> void:
 		return
 	stage.exploration_handoff_reached.connect(_on_exploration_handoff_reached)
 	stage.mark_inspection_completed.connect(_on_mark_inspection_completed)
+	stage.ruins_altar_reached.connect(_on_ruins_altar_reached)
 	_exploration_beat = PrologueBeats.PL_03_WANDERER
 	_set_exploration_status(PrologueBeats.PL_03_WANDERER)
 	stage.begin_beat(PrologueBeats.PL_03_WANDERER)
@@ -449,8 +470,10 @@ func _activate_exploration_beat(beat_id: String) -> void:
 ## the request against the ACTIVE beat and records the completion exactly
 ## once; duplicate, inactive-beat, or post-exit requests are ignored — and a
 ## duplicate record is already a rejected no-op in _record_exploration_beat.
-## The terminal sequence mirrors the pl_04 skip exactly (defined N4.3
-## boundary, no pl_05 fabrication).
+## N4.4-A: recording pl_04 now ACTIVATES pl_05 (the runtime beat table's
+## pl_05 entry condition is "pl_04 finished") — the exploration segment no
+## longer ends here; the defined boundary moved to the post-pl_06 N4.4
+## boundary (N4.4-D).
 func _on_mark_inspection_completed() -> void:
 	if _exit_started or _exploration_stage == null:
 		return
@@ -460,26 +483,53 @@ func _on_mark_inspection_completed() -> void:
 		return
 	if not _record_exploration_beat(PrologueBeats.PL_04_REPEATED_MARK):
 		return
-	if _exploration_stage != null:
-		_exploration_stage.end_segment()
-	_exploration_beat = ""
-	_n43_segment_ended = true
-	_set_n43_boundary_status()
+	_activate_exploration_beat(PrologueBeats.PL_05_FORGOTTEN_RUINS)
+
+
+## The stage's ONE pl_05 completion request (N4.4-A: the actor reached the
+## authored altar threshold — the runtime beat table's pl_05 exit condition
+## "Reach altar"). The shell validates the request against the ACTIVE beat
+## and records the completion exactly once; duplicate, inactive-beat, or
+## post-exit requests are ignored. Recording pl_05 activates pl_06 DORMANT:
+## the beat id becomes the active chain state, but N4.4-A stages no pl_06
+## content (the crown interaction is N4.4-C, the awakening/vision N4.4-D) —
+## the segment stays LIVE and the development exit remains the way out.
+func _on_ruins_altar_reached() -> void:
+	if _exit_started or _exploration_stage == null:
+		return
+	if _exploration_beat != PrologueBeats.PL_05_FORGOTTEN_RUINS:
+		# A request for an inactive beat is never accepted (late duplicate,
+		# torn-down stage, or a beat that already moved on).
+		return
+	if not _record_exploration_beat(PrologueBeats.PL_05_FORGOTTEN_RUINS):
+		return
+	_activate_exploration_beat(PrologueBeats.PL_06_CROWNS_CALL)
 
 
 ## Narrow Prologue-specific per-beat Skip path (N4.3 planning, DECIDED): not a
 ## global shortcut, not SequenceRunner.skip (exploration beats are not runner
-## runs), and never a full-Prologue skip. Skipping pl_03 records it once and
-## starts pl_04 normally (pl_04 is NOT skipped); skipping pl_04 records it
-## once, closes any active dialogue, releases the stage-owned actor lock, and
-## ends the N4.3 segment at its defined boundary without fabricating pl_05.
-## Returns false when no exploration beat is active, the segment already
-## ended, an exit started, or the beat was already completed (duplicate skip).
+## runs), and never a full-Prologue skip. The skip chain follows the
+## per-beat precedent (skipping a beat records it once and activates the
+## NEXT beat, which is NOT skipped):
+##   - skipping pl_03 records it once and starts pl_04 normally;
+##   - skipping pl_04 records it once and activates pl_05 — the documented
+##     O6 default (N44_OWNER_DECISIONS.md: "skip chain continues"; the N4.3
+##     epoch sentence "pl_04 skip ends the segment" was explicitly epoch-
+##     scoped to a time when pl_05 did not exist). O6 REMAINS OPEN: flipping
+##     to the epoch behavior (end the segment here instead) is a one-branch
+##     change gated on the owner's ruling — see the PR and N44 docs;
+##   - skipping pl_05 records it once and activates pl_06 dormant.
+## pl_06 is deliberately NOT skippable in N4.4-A: its skip semantics (the
+## vision-moment granularity, decision O4) belong to N4.4-D.
+## Returns false when no eligible exploration beat is active, the segment
+## already ended, an exit started, or the beat was already completed
+## (duplicate skip).
 func skip_current_exploration_beat() -> bool:
 	if _exit_started or _n43_segment_ended:
 		return false
 	var beat: String = _exploration_beat
-	if beat != PrologueBeats.PL_03_WANDERER and beat != PrologueBeats.PL_04_REPEATED_MARK:
+	if beat != PrologueBeats.PL_03_WANDERER and beat != PrologueBeats.PL_04_REPEATED_MARK \
+			and beat != PrologueBeats.PL_05_FORGOTTEN_RUINS:
 		return false
 	if not _record_exploration_beat(beat):
 		return false
@@ -488,11 +538,11 @@ func skip_current_exploration_beat() -> bool:
 	if beat == PrologueBeats.PL_03_WANDERER:
 		_activate_exploration_beat(PrologueBeats.PL_04_REPEATED_MARK)
 		return true
-	if _exploration_stage != null:
-		_exploration_stage.end_segment()
-	_exploration_beat = ""
-	_n43_segment_ended = true
-	_set_n43_boundary_status()
+	if beat == PrologueBeats.PL_04_REPEATED_MARK:
+		# O6 documented default: the skip chain continues into the ruins.
+		_activate_exploration_beat(PrologueBeats.PL_05_FORGOTTEN_RUINS)
+		return true
+	_activate_exploration_beat(PrologueBeats.PL_06_CROWNS_CALL)
 	return true
 
 
@@ -513,21 +563,35 @@ func _abort_exploration_segment(update_status: bool) -> void:
 
 
 ## Exploration status text (beat-aware, labelled placeholder presentation).
+## N4.4-A: pl_05/pl_06 present the ruins and the dormant chamber honestly —
+## no ruins name (Story Design §10: OPEN, may remain unnamed), no lore, and
+## the dormant pl_06 text says exactly what is and is not implemented.
 func _set_exploration_status(beat_id: String) -> void:
 	var status: Label = get_node_or_null("UICanvasLayer/CenterContainer/VBoxContainer/StatusLabel") as Label
 	if status != null:
-		status.text = "[Placeholder art] N4.3 exploration — %s: a quiet, weathered ancient road." % PrologueBeats.exploration_beat_title(beat_id)
+		if beat_id == PrologueBeats.PL_05_FORGOTTEN_RUINS:
+			status.text = "[Placeholder art] N4.4 exploration — %s: a forgotten ruin of weathered stone." % PrologueBeats.exploration_beat_title(beat_id)
+		elif beat_id == PrologueBeats.PL_06_CROWNS_CALL:
+			status.text = "[Placeholder art] N4.4 exploration — %s: the hidden chamber." % PrologueBeats.exploration_beat_title(beat_id)
+		else:
+			status.text = "[Placeholder art] N4.3 exploration — %s: a quiet, weathered ancient road." % PrologueBeats.exploration_beat_title(beat_id)
 	var detail: Label = get_node_or_null("UICanvasLayer/CenterContainer/VBoxContainer/DetailLabel") as Label
 	if detail != null:
 		if beat_id == PrologueBeats.PL_03_WANDERER:
 			detail.text = "Walk the road (A/D or arrow keys) and reach the far end to continue. Nothing records Prologue completion."
-		else:
+		elif beat_id == PrologueBeats.PL_04_REPEATED_MARK:
 			# N4.3-B: pl_04 IS interactive now — inspection polls the existing
 			# interact action behind the stage's prompt/range gates, and two
 			# distinct marks trigger the recognition. The per-beat skip stays
 			# a scripted/API path only (no button or input binding here), so
 			# the UI names only what the player actually has.
 			detail.text = "Inspect the marked objects (press E when the prompt appears): two distinct marks reveal the recognition. The development exit remains available."
+		elif beat_id == PrologueBeats.PL_05_FORGOTTEN_RUINS:
+			detail.text = "Follow the ruin path east into the hidden chamber and reach the altar. Environmental clues only — nothing records Prologue completion."
+		else:
+			# Dormant pl_06 (N4.4-A boundary state): honest about the slice.
+			# Kept short enough for the unwrapped placeholder label layout.
+			detail.text = "pl_05 is recorded. The awakening is not implemented yet (N4.4-C/D)."
 
 
 ## Defined N4.3 boundary presentation (pl_04 skip): mirrors the N4.2 boundary.
@@ -571,11 +635,15 @@ func _hide_stage() -> void:
 
 
 ## Boundary presentation: replaces the placeholder status text so the idle
-## shell screen states exactly where the Prologue milestone ends.
+## shell screen states exactly where the Prologue milestone ends. N4.4-A:
+## the text stops claiming "later beats are not implemented" (pl_05 IS
+## implemented now); the fallback state itself is unchanged — it covers both
+## the exploration-disabled mode and a failed exploration setup, recording
+## nothing either way.
 func _set_boundary_status() -> void:
 	var status: Label = get_node_or_null("UICanvasLayer/CenterContainer/VBoxContainer/StatusLabel") as Label
 	if status != null:
-		status.text = "N4.2 Prologue opening complete (pl_01 + pl_02). Later beats (N4.3+) are not implemented yet."
+		status.text = "N4.2 Prologue opening complete (pl_01 + pl_02). No exploration segment is active (disabled or setup failed) — nothing was recorded."
 	var detail: Label = get_node_or_null("UICanvasLayer/CenterContainer/VBoxContainer/DetailLabel") as Label
 	if detail != null:
 		detail.text = "No scene transition happens here (the shore handoff is N4.5) and nothing records Prologue completion. Use the development exit to return to the menu."
