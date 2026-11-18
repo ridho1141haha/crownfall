@@ -7,6 +7,16 @@ This changelog records repository changes that actually occurred. Planned featur
 
 ---
 
+## [2026-11-18] N4.4-A review fixes: ChamberOverlay geometry + documentation status refresh
+
+**Type:** Review-fix pass on the open N4.4-A PR (no gameplay behavior change; no new content; O6 untouched)
+
+- **ChamberOverlay width fix** (`PrologueRuinsEnvironment.gd`): the chamber zone overlay call passed the chamber's absolute EAST END (`_chamber_end_x(road_max_x)` = the world boundary, 2200) directly as `_create_zone_overlay`'s WIDTH parameter, so the overlay painted [1800, 4000] — 1800 px past the authored band — instead of [1800, 2200]. The call site now converts end→width (`_chamber_end_x(road_max_x) - INTERIOR_END_X`), mirroring the InteriorPassageOverlay's correct delta pattern; `_chamber_end_x` keeps its honest absolute-end contract with a docstring warning about the conversion. The companion unit suite grew 96 → 100 checks: the new assertions pin both overlays' left edge/width/right edge (ChamberOverlay right edge exactly ON the world boundary, both overlays inside the band with positive width) and were verified to FAIL against the old implementation (3 failures, exit 1) before the fix was restored. A repo-wide geometry audit found no other end-vs-width confusion (stage backdrop/road use correct delta sizing; inspectables/walls/altar use correct center-offset geometry).
+- **Documentation status refresh:** the living status surfaces now distinguish the review-branch state (N4.4-A implemented, pl_05 playable, pl_06 dormant) from merged main and future content (N4.4-B–E, N4.5–N4.6, pl_07–pl_09): `NARRATIVE_RUNTIME_TECHNICAL_DESIGN.md` (Status + Baseline), `NARRATIVE_IMPLEMENTATION_ROADMAP.md` (Status header, Current state, Implication, policy parenthetical; the historical N4.3-C account and the §11 N4.2-era audit kept verbatim with dated annotations), `PROLOGUE_PRODUCTION_BREAKDOWN.md` and `PROLOGUE_STORY_DESIGN.md` (status headers — the breakdown header no longer contradicts its own "A IMPLEMENTED" row), and `GDD.md` (scope clarification + narrative scope row). Historical milestone records (N43C report, older changelog entries) were deliberately left verbatim.
+- **Validation:** full `tests/run_all.sh` ALL SUITES PASSED (verifier 256, N4.2 113, N43A 111, N43B 193, N43C 186, N44A 100); windowed Xvfb visual pass re-run for pl_05 (ChamberOverlay boundaries + reveal sequence reviewed by eye).
+
+---
+
 ## [2026-11-18] N4.4-A: Forgotten Ruins foundation & pl_05 exploration
 
 **Type:** Production milestone slice (N4.4-A; new narrative component + chain extension; no new scenes, assets, runner ops, or dialogue; pl_06 DORMANT — its content is N4.4-C/D)

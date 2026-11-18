@@ -117,7 +117,7 @@ func build(road_min_x: float, road_max_x: float, ground_y: float, view_top: floa
 		else:
 			staging.add_child(passage_overlay)
 	if ok:
-		var chamber_overlay := _create_zone_overlay("ChamberOverlay", INTERIOR_END_X, _chamber_end_x(road_max_x), ground_y, view_top, CHAMBER_OVERLAY_COLOR)
+		var chamber_overlay := _create_zone_overlay("ChamberOverlay", INTERIOR_END_X, _chamber_end_x(road_max_x) - INTERIOR_END_X, ground_y, view_top, CHAMBER_OVERLAY_COLOR)
 		if chamber_overlay == null:
 			ok = false
 		else:
@@ -226,8 +226,11 @@ func _validate_table(road_min_x: float, road_max_x: float, ground_y: float, view
 	return true
 
 
-## The chamber overlay runs from the chamber threshold to the east band end
-## (the walkable world ends inside the chamber, per the extended band).
+## The chamber zone's absolute EAST END (the walkable world boundary, per the
+## extended band — the walkable world ends inside the chamber). It is an END
+## coordinate, not a width: overlay callers must convert it (end minus the
+## chamber threshold) before passing it to _create_zone_overlay, whose width
+## parameter spans [x, x + width].
 func _chamber_end_x(road_max_x: float) -> float:
 	return road_max_x
 

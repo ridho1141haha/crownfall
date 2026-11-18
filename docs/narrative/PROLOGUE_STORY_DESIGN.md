@@ -2,7 +2,7 @@
 
 **Title:** The Crown's Call  
 **Leads into:** Chapter I — Forgotten Shore  
-**Status (updated 2026-11-18):** Narrative design draft; pl_01–pl_04 are implemented (pl_03/pl_04 as the N4.3 exploration segment, verified end to end by N4.3-C). pl_05–pl_09 are not implemented. This document remains the content authority; implementation status is tracked in the roadmap and production breakdown.  
+**Status (updated 2026-11-18):** Narrative design draft; pl_01–pl_04 are implemented (pl_03/pl_04 as the N4.3 exploration segment, verified end to end by N4.3-C). **pl_05 is implemented on the N4.4-A review branch `feature/n44a-ruins-foundation` (PR #23, not yet merged); pl_06 is activated DORMANT there with no content.** pl_06's content (N4.4-B/C/D) and pl_07–pl_09 are not implemented. This document remains the content authority; implementation status is tracked in the roadmap and production breakdown.  
 **Companion plan:** [Narrative Implementation Roadmap](../NARRATIVE_IMPLEMENTATION_ROADMAP.md)
 
 > This document defines the intended story experience. It does not authorize the coding agent to invent unresolved lore. Any detail marked OPEN must remain undecided until the project owner approves it.

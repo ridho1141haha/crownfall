@@ -286,6 +286,19 @@ func _run_unit_checks() -> void:
 	var root: Node2D = ruins.get_node_or_null("RuinsEnvironment") as Node2D
 	_check(root != null, "the ruins root commits under its authored name")
 	_check(root != null and root.get_node_or_null("ExteriorWalls") != null and root.get_node_or_null("InteriorPassageOverlay") != null and root.get_node_or_null("ChamberOverlay") != null and root.get_node_or_null("PassageAndChamberWalls") != null and root.get_node_or_null("RuinMarkGlyphs") != null, "the exterior, passage, chamber, framing walls, and mark glyphs all commit")
+	# --- Zone overlay geometry regression (review fix): _create_zone_overlay's
+	# third parameter is a WIDTH spanning [x, x + width] — an absolute east END
+	# must be converted first. The old ChamberOverlay call passed the east band
+	# end (road_max_x) directly as the width, painting the overlay from
+	# interior_end to road_max_x PAST the world boundary instead of up to it.
+	var passage_overlay: ColorRect = root.get_node_or_null("InteriorPassageOverlay") as ColorRect
+	var chamber_overlay: ColorRect = root.get_node_or_null("ChamberOverlay") as ColorRect
+	var road_max: float = float(PrologueExplorationStage.ROAD_MAX_X)
+	var road_min: float = float(PrologueExplorationStage.ROAD_MIN_X)
+	_check(passage_overlay != null and passage_overlay.position.x == PrologueRuinsEnvironment.EXTERIOR_END_X and passage_overlay.size.x == PrologueRuinsEnvironment.INTERIOR_END_X - PrologueRuinsEnvironment.EXTERIOR_END_X, "the InteriorPassageOverlay WIDTH spans exactly the passage zone (exterior_end -> interior_end)")
+	_check(chamber_overlay != null and chamber_overlay.position.x == PrologueRuinsEnvironment.INTERIOR_END_X and chamber_overlay.size.x == road_max - PrologueRuinsEnvironment.INTERIOR_END_X, "the ChamberOverlay WIDTH is the chamber span (interior_end -> road_max), NOT the absolute east boundary")
+	_check(chamber_overlay != null and chamber_overlay.position.x + chamber_overlay.size.x == road_max, "the ChamberOverlay right edge lands exactly ON the world boundary")
+	_check(passage_overlay != null and chamber_overlay != null and passage_overlay.position.x >= road_min and passage_overlay.size.x > 0.0 and chamber_overlay.size.x > 0.0 and chamber_overlay.position.x + chamber_overlay.size.x <= road_max, "both zone overlays stay inside the authored world band with positive width")
 	var altar_group: Node2D = ruins.altar_group()
 	_check(altar_group != null and altar_group.name == "AltarGroup" and not altar_group.visible, "the altar group commits HIDDEN (the chamber reveal shows it)")
 	_check(root != null and root.get_node_or_null("AltarGroup/CrownPlaceholder") != null and root.get_node_or_null("AltarGroup/AltarStone") != null, "the altar stone and the labelled crown placeholder commit under the altar group")
