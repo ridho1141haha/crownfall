@@ -11,7 +11,7 @@
 - The exploration chain continues past pl_04: **pl_04 completion/skip now activates pl_05** (the runtime beat table's pl_05 entry condition) and **reaching the authored altar threshold completes pl_05 exactly once and activates pl_06 DORMANT** (no pl_06 content in slice A — the crown interaction is N4.4-C, the awakening/vision N4.4-D).
 - New stage-owned child component **`PrologueRuinsEnvironment`** (`scripts/narrative/PrologueRuinsEnvironment.gd`): placeholder ruin zones (exterior → interior passage → hidden chamber), the one-way zone-state machine with the chamber-reveal trigger, the hidden-until-revealed altar group with the labelled crown continuity placeholder, and TWO identical U2-placeholder mark glyphs on ruin surfaces (environmental scenery, deliberately NOT inspectable).
 - Authored band extension: `PrologueExplorationStage.ROAD_MAX_X` `800 → 2200` (the road path physically continues into the ruins as its floor; camera limits extend with the band; the limits == bounds containment guarantee is unchanged).
-- The O6 documented default skip chain: pl_03 skip → pl_04; **pl_04 skip → pl_05**; **pl_05 skip → dormant pl_06**; pl_06 skip deliberately NOT implemented in N4.4-A (O4/N4.4-D scope).
+- The O6-approved skip chain (owner ruling 2026-11-18, Option A): pl_03 skip → pl_04; **pl_04 skip → pl_05**; **pl_05 skip → dormant pl_06**; pl_06 skip deliberately NOT implemented in N4.4-A (O4/N4.4-D scope).
 - Status texts for pl_05 and dormant pl_06 (honest about the slice); the N4.2 fallback text corrected to stop claiming "later beats are not implemented".
 
 ## 2. Design traceability (requirement → implementation)
@@ -26,7 +26,7 @@
 | R21/U2 (symbol consistency) | identical two-rect glyph geometry on both ruin glyphs (same shape as the N4.3-B props) | N44A unit (measured geometry equality) |
 | R16 (exactly-once) | one-shot stage guard + shell active-beat validation + NarrativeState idempotence | N44A shells A/E + N43C A12 |
 | R19 (crown = visual continuity, no inventory) | `CrownPlaceholder` ColorRect, no interaction path in the component | component purity greps + N44A |
-| O6 default (skip chain continues) | `skip_current_exploration_beat` pl_04→pl_05, pl_05→pl_06 | N44A shell B + N43C B4/B5 |
+| O6 (APPROVED, Option A: skip chain continues) | `skip_current_exploration_beat` pl_04→pl_05, pl_05→pl_06 | N44A shell B + N43C B4/B5 |
 | Architecture §2.1 Option A (continuous world) | band extension, no second stage, no scene reload | N43A containment (unmodified guarantees) |
 | Architecture §2.2 child component | `PrologueRuinsEnvironment` stage-owned, atomic fail-closed build | N44A D6 matrix |
 | Architecture §2.3 Option A (no new runner ops) | zero `SequenceRunner` changes in this slice | diff review |
@@ -69,7 +69,7 @@
 ## 7. Known limitations and review findings (P0–P3)
 
 - **P0/P1:** none found (independent diff review + full regression clean).
-- **P2 (documented, decision-gated):** O6 remains OPEN — the implemented pl_04-skip behavior is the documented default (skip → pl_05) and the PR flags it for owner review; flipping to the N4.3-epoch behavior is a one-branch change in `skip_current_exploration_beat` (the roadmap's "explicit reviewable constant" was implemented as a documented branch instead, because pre-writing the epoch branch would have preserved its now-false boundary text; the flip diff is one branch + one status-text decision).
+- **P2 → RESOLVED (2026-11-18):** O6 was the one decision this PR flagged for owner review; the owner has now **APPROVED Option A** (skip chain continues: pl_04 skip → pl_05) as the intentional approved default for N4.4 — the implemented behavior matches the ruling exactly, so no production change was required. Historical note kept for the record: the roadmap's "explicit reviewable constant" was implemented as a documented branch instead, because pre-writing the epoch branch would have preserved its now-false boundary text; with O6 approved, the epoch branch is off the table entirely. The ruling is recorded in `N44_OWNER_DECISIONS.md` (O6 → Owner approval) with the decision's original context preserved.
 - **P3:** `scripts/tools/n43c_visual_pass.gd`'s terminal wait (`n43_segment_complete`) is unsatisfiable under the N4.4-A chain — it is superseded for N4.4-A by `n44a_visual_pass.gd` and should be updated/retired in N4.4-E (left untouched here: historical N4.3 evidence tooling).
 - **P3:** the runtime design's decision-record table still carries its pre-existing duplicate D8/D9 rows (recon finding #4 — unrelated to this slice, untouched).
 - **P3:** the visual harness captured one redundant near-duplicate frame (removed from the evidence set; the harness guard is a convenience, not a contract).
@@ -77,6 +77,6 @@
 
 ## 8. Owner decisions touched
 
-- **O6 — still OPEN.** Implemented the documented default only; no ruling made. **This is the one decision the PR asks the owner to confirm** (its ambiguity affects the pl_04-skip contract; everything else proceeds on placeholders).
+- **O6 — APPROVED (owner ruling, 2026-11-18, Option A).** The implemented skip-chain behavior matches the ruling exactly (no code change needed); the ruling is recorded in `N44_OWNER_DECISIONS.md` with the decision's original context preserved.
 - **O7 (staging values), O1 (ruins identity), U2 (mark design):** placeholders only — thresholds 1400/1800/2050, unnamed grey-stone family, identical two-rect glyph. No canon created.
 - **O2/O3/O4/O5/O8:** untouched — no vision, no camera op, no pl_06 skip, no altar prompt, no audio.

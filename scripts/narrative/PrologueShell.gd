@@ -62,7 +62,7 @@ extends Control
 ## the crown interaction is N4.4-C, the awakening/vision N4.4-D — the
 ## segment stays LIVE with pl_06 as the active beat and the development exit
 ## as the way out). The per-beat skip chain extends the same way (pl_04 skip
-## -> pl_05, pl_05 skip -> pl_06 dormant; the O6 documented default — see
+## -> pl_05, pl_05 skip -> pl_06 dormant; the O6-APPROVED default — see
 ## skip_current_exploration_beat). _n43_segment_ended is no longer reachable
 ## in the normal flow; it remains for the N4.4-D boundary machinery.
 ##
@@ -512,12 +512,11 @@ func _on_ruins_altar_reached() -> void:
 ## per-beat precedent (skipping a beat records it once and activates the
 ## NEXT beat, which is NOT skipped):
 ##   - skipping pl_03 records it once and starts pl_04 normally;
-##   - skipping pl_04 records it once and activates pl_05 — the documented
-##     O6 default (N44_OWNER_DECISIONS.md: "skip chain continues"; the N4.3
-##     epoch sentence "pl_04 skip ends the segment" was explicitly epoch-
-##     scoped to a time when pl_05 did not exist). O6 REMAINS OPEN: flipping
-##     to the epoch behavior (end the segment here instead) is a one-branch
-##     change gated on the owner's ruling — see the PR and N44 docs;
+##   - skipping pl_04 records it once and activates pl_05 — the O6-APPROVED
+##     default (owner ruling 2026-11-18, Option A, recorded in
+##     N44_OWNER_DECISIONS.md: "skip chain continues"; the N4.3 epoch
+##     sentence "pl_04 skip ends the segment" was explicitly epoch-scoped to
+##     a time when pl_05 did not exist and is superseded by that ruling);
 ##   - skipping pl_05 records it once and activates pl_06 dormant.
 ## pl_06 is deliberately NOT skippable in N4.4-A: its skip semantics (the
 ## vision-moment granularity, decision O4) belong to N4.4-D.
@@ -539,7 +538,8 @@ func skip_current_exploration_beat() -> bool:
 		_activate_exploration_beat(PrologueBeats.PL_04_REPEATED_MARK)
 		return true
 	if beat == PrologueBeats.PL_04_REPEATED_MARK:
-		# O6 documented default: the skip chain continues into the ruins.
+		# O6-APPROVED default (owner ruling 2026-11-18, Option A): the skip
+		# chain continues into the ruins.
 		_activate_exploration_beat(PrologueBeats.PL_05_FORGOTTEN_RUINS)
 		return true
 	_activate_exploration_beat(PrologueBeats.PL_06_CROWNS_CALL)

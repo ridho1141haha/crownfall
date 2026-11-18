@@ -1,6 +1,6 @@
 # Crownfall — N4.4 Owner Decision Register
 
-**Status:** Every decision below is **OPEN until the project owner explicitly approves it**. Nothing in the N4.4 design package implements any of these; all affected values ship as labelled placeholders with the documented fallback.
+**Status:** Every decision below is **OPEN until the project owner explicitly approves it**. Nothing in the N4.4 design package implements any of these; all affected values ship as labelled placeholders with the documented fallback. **Exception: O6 is APPROVED (owner ruling, 2026-11-18, Option A — skip chain continues); all other decisions below remain OPEN.**
 **Related:** [N44_PREPRODUCTION_REPORT.md](N44_PREPRODUCTION_REPORT.md) (R-matrix) · [N44_ARCHITECTURE_DESIGN.md](N44_ARCHITECTURE_DESIGN.md) · [N44_IMPLEMENTATION_ROADMAP.md](N44_IMPLEMENTATION_ROADMAP.md) (gating graph).
 
 ---
@@ -301,7 +301,10 @@ Slice A changes what happens after pl_04 completes OR is skipped. Keeping the ep
 **Option A**, documented as a superseding decision with the N4.3 sentence annotated.
 
 ### Owner approval
-OPEN — the roadmap marks this as the only decision that can gate a slice **merge** (not the work; the work proceeds behind the documented default).
+**APPROVED (owner ruling, 2026-11-18).**
+- **Approved default skip-chain policy:** skipping `pl_04` continues directly to `pl_05` (Forgotten Ruins) — **Option A**, as recommended. This behavior is intentional and is the approved default for N4.4; the N4.3-epoch sentence ("pl_04 skip ends the segment… does not start pl_05") is superseded by this explicit ruling, not silently rewritten.
+- The context, options, evidence, and recommendation above are preserved unchanged as the decision's original record.
+- Implementation note: N4.4-A shipped exactly this behavior (skip chain continues: pl_04 skip → pl_05, pl_05 skip → dormant pl_06; pl_06 skip remains N4.4-D/O4 scope) — the implemented behavior now matches an approved decision with no code change required. The boundary TEXT part of this decision (the post-pl_06 N4.4 boundary wording) stays with slice D/N4.4-E.
 
 ---
 
@@ -383,7 +386,7 @@ OPEN.
 | O3 | Camera-focus op | No (not needed by baseline) | No | deferred (D9) |
 | O4 | Vision-moment skip | No (Option A default) | Slice D flagged | per-beat skip allowed |
 | O5 | Altar prompt wording | No (placeholder) | No | `[E] Touch the crown` (provisional) |
-| O6 | Skip-chain extension & boundary text | No (documented default) | **Slice A flagged** | skip chain continues |
+| O6 | Skip-chain extension & boundary text | No (APPROVED — Option A) | No (merge gate RESOLVED 2026-11-18) | approved: skip chain continues |
 | O7 | N4.4 staging values | No (placeholder) | No | feasible-scale constants |
 | O8 | Audio scope | No (silent) | No | silent placeholders |
 
