@@ -78,6 +78,7 @@ const BEAT_01: String = "pl_01_lost_world"
 const BEAT_02: String = "pl_02_faint_resonance"
 const BEAT_03: String = "pl_03_wanderer"
 const BEAT_04: String = "pl_04_repeated_mark"
+const BEAT_05: String = "pl_05_forgotten_ruins"
 const MAX_WAIT_FRAMES: int = 1800
 ## How long an interact press may wait for its effect before the driver
 ## declares the attempt failed. Headless/windowed pacing runs process frames
@@ -231,24 +232,26 @@ func _on_stage_emission() -> void:
 	_emission_panel_states.append(_emission_panel != null and _emission_panel.is_open())
 
 
-## The D3 ended/frozen terminal list (design section 8) after the boundary is
-## reached — asserted as a whole everywhere it applies. stage_emitted selects
-## the per-scenario E expectation: true after a NORMAL recognition completion
-## (H6/H10-A/H14), false after a SKIP (H10-B: the skip records through the
-## shell, the stage never emits — asserting `false` here IS the E=0 proof).
-func _check_terminal_state(shell: Control, label: String, stage_emitted: bool) -> void:
+## The post-pl_04 acceptance state (N4.4-A: recording pl_04 ACTIVATES pl_05 —
+## the exploration segment no longer ends here; the defined boundary moved to
+## the post-pl_06 N4.4 boundary, N4.4-D). Asserted as a whole everywhere it
+## applies. stage_emitted selects the per-scenario E expectation: true after a
+## NORMAL recognition completion (H6/H10-A/H14), false after a SKIP (H10-B:
+## the skip records through the shell, the stage never emits — asserting
+## `false` here IS the E=0 proof).
+func _check_post_pl04_state(shell: Control, label: String, stage_emitted: bool) -> void:
 	var stage := _stage_node(shell)
 	var explorer := _explorer_of(shell)
 	var panel: DialoguePanel = shell.call("dialogue_panel")
 	var inspectables := _inspectables_of(shell)
 	_check(not panel.is_open(), "%s: the dialogue panel is closed" % label)
 	_check(stage != null and not stage.is_dialogue_locked(), "%s: the stage-owned actor lock is released" % label)
-	_check(stage != null and stage.is_segment_ended() and stage.inspection_completed() == stage_emitted, "%s: the stage segment ended with the scenario-correct emission flag (emitted=%s)" % [label, stage_emitted])
-	_check(String(shell.call("active_exploration_beat")) == "" and bool(shell.call("n43_segment_complete")), "%s: the shell ended the segment at the N4.3 boundary" % label)
-	_check(explorer != null and not explorer.is_input_enabled() and not explorer.is_physics_processing(), "%s: the explorer is input-disabled and frozen" % label)
+	_check(stage != null and not stage.is_segment_ended() and stage.inspection_completed() == stage_emitted, "%s: the segment stays LIVE with the scenario-correct emission flag (emitted=%s)" % [label, stage_emitted])
+	_check(String(shell.call("active_exploration_beat")) == BEAT_05 and not bool(shell.call("n43_segment_complete")), "%s: the shell activated pl_05 (the chain continues, O6 documented default)" % label)
+	_check(explorer != null and explorer.is_input_enabled(), "%s: the explorer is input-enabled in pl_05" % label)
 	_check(inspectables != null and not inspectables.prompt().visible, "%s: the inspection prompt is hidden" % label)
 	var status: Label = shell.get_node_or_null("UICanvasLayer/CenterContainer/VBoxContainer/StatusLabel") as Label
-	_check(status != null and status.text.contains("N4.3"), "%s: the boundary status is shown" % label)
+	_check(status != null and status.text.contains("Forgotten Ruins"), "%s: the ruins status is shown" % label)
 
 
 ## Press-and-confirm driver for NORMAL interactions. The press stage presses
@@ -330,7 +333,11 @@ class OutOfBoundsInspectables extends PrologueMarkInspectables:
 	func _authored_table() -> Array[Dictionary]:
 		return [
 			{"id": "mark_stone_a", "name": "MarkStoneA", "x": 430.0, "condition": "stone"},
-			{"id": "mark_fragment_b", "name": "MarkFragmentB", "x": 900.0, "condition": "fragment"},
+			# N4.4-A: the authored band extends east through the ruins
+			# (ROAD_MAX_X 800 -> 2200), so the out-of-bounds probe moved east
+			# with it — the assertion's intent (outside the authored bounds)
+			# is unchanged.
+			{"id": "mark_fragment_b", "name": "MarkFragmentB", "x": 2300.0, "condition": "fragment"},
 		]
 
 
@@ -886,9 +893,9 @@ func _process(_delta: float) -> bool:
 			_check(_emissions == [1], "H10-A: exactly ONE natural stage emission (E_stage = 1)")
 			_check(_emission_panel_states == [false], "H10-A: the emission happened only AFTER the panel closed (record-after-dialogue ordering)")
 			_check(bool(state.is_completed(BEAT_04)) and state.completed_count() == 4, "H10-A: the recording R = 1 (pl_04 recorded exactly once; state: pl_01+pl_02+pl_03+pl_04)")
-			_check(String(shell.call("active_exploration_beat")) == "" and bool(shell.call("n43_segment_complete")), "H10-A: shell acceptance A = 1 (one transition to the ended boundary)")
+			_check(String(shell.call("active_exploration_beat")) == BEAT_05 and not bool(shell.call("n43_segment_complete")), "H10-A: shell acceptance A = 1 (one transition: pl_04 recorded, pl_05 activated)")
 			_check(_completions == [BEAT_01, BEAT_02], "exploration completion adds NO SequenceRunner completion (runner stays out of exploration)")
-			_check_terminal_state(shell, "H6/D3", true)
+			_check_post_pl04_state(shell, "H6/D3", true)
 			_stage = 33
 			_wait_frames = 0
 			return false
@@ -903,7 +910,7 @@ func _process(_delta: float) -> bool:
 			stage.mark_inspection_completed.emit()
 			_check(_emissions.size() == 3 and _emissions[0] == 1, "H10-C: injected raw emissions counted SEPARATELY (E_stage stays 1, E_injected = 2)")
 			_check(state.completed_count() == 4 and bool(state.is_completed(BEAT_04)), "H10-C: no additional NarrativeState recording")
-			_check(String(shell.call("active_exploration_beat")) == "" and bool(shell.call("n43_segment_complete")), "H10-C: no additional shell acceptance or state transition")
+			_check(String(shell.call("active_exploration_beat")) == BEAT_05 and not bool(shell.call("n43_segment_complete")), "H10-C: no additional shell acceptance or state transition")
 			# H11-post: the third object after completion changes nothing.
 			var explorer := _explorer_of(shell)
 			_teleport(explorer, -280.0)
@@ -1008,9 +1015,14 @@ func _process(_delta: float) -> bool:
 			var state: NarrativeState = shell.call("narrative_state")
 			_check(bool(state.is_completed(BEAT_04)) and state.completed_count() == 4, "H10-B: the skip records pl_04 exactly once through the existing skip path")
 			_check(not panel.is_open(), "H10-B: the skip closed the recognition dialogue")
-			_check(String(shell.call("active_exploration_beat")) == "" and bool(shell.call("n43_segment_complete")), "H10-B: shell acceptance via the SKIP path (A = 1)")
-			_check(_emissions.is_empty() and not bool(shell.call("skip_current_exploration_beat")), "H10-B: no stage emission occurred and a duplicate skip is rejected")
-			_check_terminal_state(shell, "H10-B final", false)
+			_check(String(shell.call("active_exploration_beat")) == BEAT_05 and not bool(shell.call("n43_segment_complete")), "H10-B: shell acceptance via the SKIP path (A = 1: pl_04 recorded, pl_05 activated)")
+			# N4.4-A: a second skip call is no longer a "duplicate pl_04 skip" —
+			# pl_05 is the active beat and is itself skippable (the per-beat
+			# chain). The exactly-once protection lives in the record guard
+			# (proven in N43A's duplicate-handoff case) and in the E=0 proof
+			# below, so this scenario asserts the emission path only.
+			_check(_emissions.is_empty(), "H10-B: no stage emission occurred (the skip records through the shell, E = 0)")
+			_check_post_pl04_state(shell, "H10-B final", false)
 			_stage = 43
 			_wait_frames = 0
 			return false
@@ -1409,7 +1421,7 @@ func _process(_delta: float) -> bool:
 			_check(bool(state.is_completed(BEAT_04)) and state.completed_count() == 4, "H14/H11: the A+C pair completed pl_04 exactly once (R = 1)")
 			_check(_emissions == [1], "H14: exactly one natural emission")
 			_check(inspectables.distinct_inspected_count() == 2, "H14: the held key added NO second inspection")
-			_check_terminal_state(shell, "H14/D3", true)
+			_check_post_pl04_state(shell, "H14/D3", true)
 			_stage = 76
 			_wait_frames = 0
 			return false
