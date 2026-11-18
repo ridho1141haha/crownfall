@@ -56,10 +56,15 @@ extends SceneTree
 ## user://n43b_test/ injected via the crownfall_profile_path /
 ## crownfall_menu_save_path Engine metas; the developer's real files are only
 ## READ once for byte-exact non-mutation proof at the end of the run.
-## Interact presses use single Input.action_press/release calls (verified on
-## 4.7.2: one action_press from _process produces exactly ONE
-## is_action_just_pressed edge in the following physics tick; a held key
-## produces no further edges).
+## Interact presses use single Input.action_press/release calls. Measured on
+## 4.7.2 (two dedicated probes): one action_press from _process produces
+## exactly ONE is_action_just_pressed edge, observed by the FIRST physics
+## tick after the press no matter how many process frames later that tick
+## runs; a held key produces no further edges; and an action_press while the
+## action is ALREADY held does NOT arm a new edge — so every retry in the
+## normal driver releases the action before re-pressing (see
+## _await_interact_effect), while the H14 held-input window never does (see
+## _await_held_interact_effect).
 
 const MAIN_SCENE: String = "res://scenes/main/Main.tscn"
 const PROLOGUE_SHELL_SCENE: String = "res://scenes/narrative/PrologueShell.tscn"
@@ -74,6 +79,13 @@ const BEAT_02: String = "pl_02_faint_resonance"
 const BEAT_03: String = "pl_03_wanderer"
 const BEAT_04: String = "pl_04_repeated_mark"
 const MAX_WAIT_FRAMES: int = 1800
+## How long an interact press may wait for its effect before the driver
+## declares the attempt failed. Headless/windowed pacing runs process frames
+## faster than the 60 Hz physics clock, so physics ticks arrive every 2-5
+## process frames with occasional gaps up to ~10 (measured on this binary);
+## the budget is sized well above that ceiling. It is a bounded retry window,
+## not a sleep — the effect lands at the first tick after the press.
+const INTERACT_RETRY_BUDGET_FRAMES: int = 30
 
 var _checks: int = 0
 var _failures: int = 0
@@ -239,23 +251,50 @@ func _check_terminal_state(shell: Control, label: String, stage_emitted: bool) -
 	_check(status != null and status.text.contains("N4.3"), "%s: the boundary status is shown" % label)
 
 
-## Press-and-confirm driver: presses interact and re-arms the edge until the
-## expected effect is observed or the retry budget runs out. Test-side pacing
-## armor ONLY (a frame boundary without a physics tick can swallow a
-## just_pressed edge after scene churn): the extra edges are always safe
-## because a repeated mark is an idempotent no-op (D1) and edges while a
-## dialogue is open are D5-gated. keep_held leaves the key down (H14).
-func _await_interact_effect(has_effect: Callable, next_stage: int, keep_held: bool = false) -> bool:
+## Press-and-confirm driver for NORMAL interactions. The press stage presses
+## once; this await then guarantees a FRESH just-pressed edge per attempt:
+## an Input.action_press while the action is already held does NOT arm a new
+## edge on 4.7.2 (measured), so every retry releases before re-pressing —
+## the previous retry (press without release) could never recover a missed
+## press. Every exit path leaves the action RELEASED (known state): on
+## success, and on the failure path before the suite aborts. The extra edges
+## are always safe because a repeated mark is an idempotent no-op (D1) and
+## edges while a dialogue is open are D5-gated.
+func _await_interact_effect(has_effect: Callable, next_stage: int) -> bool:
 	if has_effect.call():
-		if not keep_held:
-			Input.action_release("interact")
+		Input.action_release("interact")
 		_stage = next_stage
 		_wait_frames = 0
 		return true
-	if _wait_frames > 6:
+	if _wait_frames > INTERACT_RETRY_BUDGET_FRAMES:
+		Input.action_release("interact")
 		_check(false, "the interact press produced no effect within the retry budget")
 		return true
+	# Re-arm deterministically: cancel any not-yet-observed pending edge and
+	# press again, so the first physics tick after THIS frame observes a
+	# fresh edge (measured: same-call release+press always re-arms).
+	Input.action_release("interact")
 	Input.action_press("interact")
+	return false
+
+
+## Held-input await (H14 ONLY): the accepting press must stay DOWN for the
+## whole window — a single continuous hold, with NO release/press cycles
+## here (those would convert the held-input scenario into repeated presses
+## and defeat the contract). The held press's edge is observed by the first
+## physics tick after the press regardless of the frame gap (measured), so
+## this only waits for the effect. On the failure path the key is released
+## before the suite aborts; on success the hold intentionally continues and
+## the test releases it explicitly after the assertion window.
+func _await_held_interact_effect(has_effect: Callable, next_stage: int) -> bool:
+	if has_effect.call():
+		_stage = next_stage
+		_wait_frames = 0
+		return true
+	if _wait_frames > INTERACT_RETRY_BUDGET_FRAMES:
+		Input.action_release("interact")
+		_check(false, "the held interact press produced no effect within the retry budget")
+		return true
 	return false
 
 
@@ -1341,7 +1380,7 @@ func _process(_delta: float) -> bool:
 			var shell: Control = _shell()
 			var inspectables := _inspectables_of(shell)
 			var panel: DialoguePanel = shell.call("dialogue_panel")
-			if not _await_interact_effect(func() -> bool: return _emission_panel != null and _emission_panel.is_open(), 74, true):
+			if not _await_held_interact_effect(func() -> bool: return _emission_panel != null and _emission_panel.is_open(), 74):
 				return false
 			_stage = 74
 			_wait_frames = 0
@@ -1410,6 +1449,8 @@ func _process(_delta: float) -> bool:
 			Engine.remove_meta(AUTOSTART_META)
 			Engine.remove_meta("crownfall_profile_path")
 			Engine.remove_meta("crownfall_menu_save_path")
+			_check(not Input.is_action_pressed("interact"), "no interact input state leaks past the suite")
+			_check(not Input.is_action_pressed("move_left") and not Input.is_action_pressed("move_right"), "no movement input state leaks past the suite")
 			if _failures == 0:
 				print("PASS: All %d N43B Mark Inspection checks completed with 0 failures." % _checks)
 				quit(0)
