@@ -7,6 +7,24 @@ This changelog records repository changes that actually occurred. Planned featur
 
 ---
 
+## [2026-11-18] N4.4 Pre-Production: Forgotten Ruins & Crown's Call design package
+
+**Type:** Documentation only (planning/design; no production code, scene, test, asset, or configuration changes; N4.4 NOT implemented)
+**Verification:** docs-only diff reviewed; repository static verifier PASS on the exact tree
+
+### Summary
+New PROPOSED design package for N4.4 (pl_05 The Forgotten Ruins + pl_06 The Crown's Call), grounded in the approved story documents and the verified N4.3-C baseline (`main` @ `3ba7b62`):
+- `docs/narrative/N44_PREPRODUCTION_REPORT.md` — post-merge reconnaissance, pl_05/pl_06 narrative requirement audit with a fully sourced requirement matrix (APPROVED/DERIVED/PROPOSED/OPEN), scene-level specifications, and the player-experience flowchart.
+- `docs/narrative/N44_ARCHITECTURE_DESIGN.md` — architecture decision record (reuse vs narrow extension vs the one new stage-owned component), technical contracts, state machines, and binding exactly-once rules extending the N4.3 ownership model.
+- `docs/narrative/N44_TEST_STRATEGY.md` — failure-mode-to-coverage mapping (F1–F18), planned suite layers, full-flow matrix, visual verification plan, and the N4.3 regression guarantees that must stay green.
+- `docs/narrative/N44_IMPLEMENTATION_ROADMAP.md` — five independently reviewable slices (A–E) with per-slice scope/acceptance/negative-path criteria, the dependency graph, and the decision-gating analysis.
+- `docs/narrative/N44_OWNER_DECISIONS.md` — decision packets for U2/U4/U5 plus eight new N4.4 decisions (O1–O8: ruins identity, vision presentation, camera-focus op, vision-moment skip granularity, altar prompt, skip-chain extension, staging values, audio scope); every decision remains OPEN with a documented placeholder default.
+- `docs/NARRATIVE_IMPLEMENTATION_ROADMAP.md` §10 — navigation pointer to the package (implementation gated on decision disposition).
+
+No lore invented; all PROPOSED content labelled; pl_05–pl_09 remain NOT implemented.
+
+---
+
 ## [2026-11-18] N4.3-C: Full-Flow Integration & Regression
 
 **Type:** Integration & regression milestone (new integration suite + one demonstrated-defect production fix; no narrative content, no pl_05)
