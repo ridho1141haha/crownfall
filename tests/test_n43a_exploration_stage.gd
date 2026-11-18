@@ -520,7 +520,7 @@ func _process(_delta: float) -> bool:
 			_check(explorer == null or (not explorer.is_input_enabled() and not explorer.is_physics_processing()), "the boundary disables exploration input and freezes the actor")
 			_check(stage != null and not stage.is_dialogue_locked(), "the boundary releases the stage-owned actor lock")
 			_check(not shell.call("is_sequence_running") and _completions == [BEAT_01, BEAT_02], "no pl_05 content is fabricated (runner untouched, no new completions)")
-			var status: Label = shell.get_node_or_null("CenterContainer/VBoxContainer/StatusLabel") as Label
+			var status: Label = shell.get_node_or_null("UICanvasLayer/CenterContainer/VBoxContainer/StatusLabel") as Label
 			_check(status != null and status.text.contains("N4.3") and status.text.contains("N4.4+"), "the boundary status names the N4.3 segment end and the next unimplemented milestone")
 			_check(not shell.call("skip_current_exploration_beat"), "a duplicate pl_04 Skip is rejected (already recorded)")
 			_check(state.completed_count() == 4, "the duplicate Skip records nothing")
@@ -639,7 +639,7 @@ func _process(_delta: float) -> bool:
 				_check(String(shell.call("active_exploration_beat")) == "" and not bool(shell.call("in_exploration")), "cancellation ends the segment presentation")
 				_check(state.completed_count() == 2 and not bool(state.is_completed(BEAT_03)), "cancellation does NOT complete the active pl_03 beat")
 				_check(not shell.call("is_sequence_running") and _completions == [BEAT_01, BEAT_02], "cancellation emits no duplicate completion signals")
-				var status: Label = shell.get_node_or_null("CenterContainer/VBoxContainer/StatusLabel") as Label
+				var status: Label = shell.get_node_or_null("UICanvasLayer/CenterContainer/VBoxContainer/StatusLabel") as Label
 				_check(status != null and status.text.contains("cancelled"), "the cancelled state has a defined idle status text")
 				_stage = 24
 				_wait_frames = 0
@@ -692,7 +692,7 @@ func _process(_delta: float) -> bool:
 			_check(not runner.is_control_locked() and not bool(shell.call("is_sequence_running")), "failed setup leaves no control lock and an idle runner")
 			var stage := _stage_node(shell)
 			_check(stage == null, "the failed stage instance is fully released")
-			var status: Label = shell.get_node_or_null("CenterContainer/VBoxContainer/StatusLabel") as Label
+			var status: Label = shell.get_node_or_null("UICanvasLayer/CenterContainer/VBoxContainer/StatusLabel") as Label
 			_check(status != null and status.text.contains("Later beats (N4.3+)"), "the fallback shows the defined idle boundary status")
 			Engine.remove_meta(STAGE_TEXTURE_META)
 			_stage = 28

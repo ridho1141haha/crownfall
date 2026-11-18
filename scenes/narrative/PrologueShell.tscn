@@ -45,7 +45,10 @@ theme_override_font_sizes/font_size = 20
 text = "[Placeholder art]"
 horizontal_alignment = 1
 
-[node name="CenterContainer" type="CenterContainer" parent="."]
+[node name="UICanvasLayer" type="CanvasLayer" parent="."]
+layer = 1
+
+[node name="CenterContainer" type="CenterContainer" parent="UICanvasLayer"]
 layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
@@ -53,28 +56,28 @@ anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
 
-[node name="VBoxContainer" type="VBoxContainer" parent="CenterContainer"]
+[node name="VBoxContainer" type="VBoxContainer" parent="UICanvasLayer/CenterContainer"]
 layout_mode = 2
 theme_override_constants/separation = 16
 
-[node name="TitleLabel" type="Label" parent="CenterContainer/VBoxContainer"]
+[node name="TitleLabel" type="Label" parent="UICanvasLayer/CenterContainer/VBoxContainer"]
 layout_mode = 2
 text = "PROLOGUE"
 horizontal_alignment = 1
 
-[node name="StatusLabel" type="Label" parent="CenterContainer/VBoxContainer"]
+[node name="StatusLabel" type="Label" parent="UICanvasLayer/CenterContainer/VBoxContainer"]
 layout_mode = 2
 text = "N4.2 Prologue shell — authored opening beats (pl_01, pl_02) start automatically."
 horizontal_alignment = 1
 
-[node name="DetailLabel" type="Label" parent="CenterContainer/VBoxContainer"]
+[node name="DetailLabel" type="Label" parent="UICanvasLayer/CenterContainer/VBoxContainer"]
 layout_mode = 2
 text = "Exploration (pl_03 The Wanderer) begins after the opening beats. Nothing in this scene records Prologue completion."
 horizontal_alignment = 1
 
-[node name="DevExitButton" type="Button" parent="CenterContainer/VBoxContainer"]
+[node name="DevExitButton" type="Button" parent="UICanvasLayer/CenterContainer/VBoxContainer"]
 custom_minimum_size = Vector2(320, 42)
 layout_mode = 2
 text = "Return to Main Menu (Development Exit)"
 
-[connection signal="pressed" from="CenterContainer/VBoxContainer/DevExitButton" to="." method="_on_dev_exit_button_pressed"]
+[connection signal="pressed" from="UICanvasLayer/CenterContainer/VBoxContainer/DevExitButton" to="." method="_on_dev_exit_button_pressed"]

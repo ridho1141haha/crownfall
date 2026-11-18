@@ -81,9 +81,14 @@ const STAGE_TEXTURE_META: String = "crownfall_prologue_stage_texture"
 ## The existing adult-Monarch sprite sheet (planning reuse policy): frames
 ## 0-3 idle / 4-7 walk, identical convention to the gameplay player scene.
 const EXPLORER_TEXTURE_PATH: String = "res://assets/characters/player/player_monarch_sheet.png"
-## Tree index the exploration stage is inserted at: above the backdrop layers
-## and below the CenterContainer UI, so the development exit button stays
-## reachable during exploration.
+## Tree index the exploration stage is inserted at: above the backdrop layers.
+## The shell UI (CenterContainer) lives on the "UICanvasLayer" CanvasLayer
+## (N4.3-C fix: a plain Control on the default canvas is displaced OFF-SCREEN
+## by the exploration Camera2D — the status labels and the development exit
+## button disappeared during pl_03/pl_04; a CanvasLayer does not follow the
+## viewport camera, matching the DialoguePanel's own camera immunity). The
+## index still places the world stage after the backdrop siblings; canvas
+## layers keep the UI above the world regardless of tree order.
 const EXPLORATION_STAGE_UI_INDEX: int = 2
 
 ## Test/handoff observability contract (same style as Main.set_route_transition):
@@ -509,10 +514,10 @@ func _abort_exploration_segment(update_status: bool) -> void:
 
 ## Exploration status text (beat-aware, labelled placeholder presentation).
 func _set_exploration_status(beat_id: String) -> void:
-	var status: Label = get_node_or_null("CenterContainer/VBoxContainer/StatusLabel") as Label
+	var status: Label = get_node_or_null("UICanvasLayer/CenterContainer/VBoxContainer/StatusLabel") as Label
 	if status != null:
 		status.text = "[Placeholder art] N4.3 exploration — %s: a quiet, weathered ancient road." % PrologueBeats.exploration_beat_title(beat_id)
-	var detail: Label = get_node_or_null("CenterContainer/VBoxContainer/DetailLabel") as Label
+	var detail: Label = get_node_or_null("UICanvasLayer/CenterContainer/VBoxContainer/DetailLabel") as Label
 	if detail != null:
 		if beat_id == PrologueBeats.PL_03_WANDERER:
 			detail.text = "Walk the road (A/D or arrow keys) and reach the far end to continue. Nothing records Prologue completion."
@@ -527,20 +532,20 @@ func _set_exploration_status(beat_id: String) -> void:
 
 ## Defined N4.3 boundary presentation (pl_04 skip): mirrors the N4.2 boundary.
 func _set_n43_boundary_status() -> void:
-	var status: Label = get_node_or_null("CenterContainer/VBoxContainer/StatusLabel") as Label
+	var status: Label = get_node_or_null("UICanvasLayer/CenterContainer/VBoxContainer/StatusLabel") as Label
 	if status != null:
 		status.text = "N4.3 Prologue exploration complete (pl_03 + pl_04). Later beats (N4.4+) are not implemented yet."
-	var detail: Label = get_node_or_null("CenterContainer/VBoxContainer/DetailLabel") as Label
+	var detail: Label = get_node_or_null("UICanvasLayer/CenterContainer/VBoxContainer/DetailLabel") as Label
 	if detail != null:
 		detail.text = "No scene transition happens here (the shore handoff is N4.5) and nothing records Prologue completion. Use the development exit to return to the menu."
 
 
 ## Defined idle presentation after a cancelled exploration segment.
 func _set_cancelled_exploration_status() -> void:
-	var status: Label = get_node_or_null("CenterContainer/VBoxContainer/StatusLabel") as Label
+	var status: Label = get_node_or_null("UICanvasLayer/CenterContainer/VBoxContainer/StatusLabel") as Label
 	if status != null:
 		status.text = "Prologue exploration cancelled — nothing was recorded."
-	var detail: Label = get_node_or_null("CenterContainer/VBoxContainer/DetailLabel") as Label
+	var detail: Label = get_node_or_null("UICanvasLayer/CenterContainer/VBoxContainer/DetailLabel") as Label
 	if detail != null:
 		detail.text = "The Prologue is non-resumable: the next New Game restarts it from the beginning. Use the development exit to return to the menu."
 
@@ -568,10 +573,10 @@ func _hide_stage() -> void:
 ## Boundary presentation: replaces the placeholder status text so the idle
 ## shell screen states exactly where the Prologue milestone ends.
 func _set_boundary_status() -> void:
-	var status: Label = get_node_or_null("CenterContainer/VBoxContainer/StatusLabel") as Label
+	var status: Label = get_node_or_null("UICanvasLayer/CenterContainer/VBoxContainer/StatusLabel") as Label
 	if status != null:
 		status.text = "N4.2 Prologue opening complete (pl_01 + pl_02). Later beats (N4.3+) are not implemented yet."
-	var detail: Label = get_node_or_null("CenterContainer/VBoxContainer/DetailLabel") as Label
+	var detail: Label = get_node_or_null("UICanvasLayer/CenterContainer/VBoxContainer/DetailLabel") as Label
 	if detail != null:
 		detail.text = "No scene transition happens here (the shore handoff is N4.5) and nothing records Prologue completion. Use the development exit to return to the menu."
 

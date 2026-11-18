@@ -328,8 +328,8 @@ func _process(_delta: float) -> bool:
 			_check(backdrop2 != null and not backdrop2.visible, "the placeholder stage is hidden after the boundary")
 			_check(_cues == [PrologueBeats.CUE_PL01_PROSPERITY, PrologueBeats.CUE_PL01_ECLIPSE, PrologueBeats.CUE_PL01_RUINS, PrologueBeats.CUE_PL02_CHILDHOOD, PrologueBeats.CUE_PL02_RESONANCE], "all five stage cues fired in story order across both beats (exactly one manifestation)")
 			_check(not shell.call("is_exit_started") and _shell_exits.is_empty(), "the N4.2 boundary performs NO scene transition (shore handoff stays N4.5)")
-			var status: Label = shell.get_node_or_null("CenterContainer/VBoxContainer/StatusLabel") as Label
-			var detail: Label = shell.get_node_or_null("CenterContainer/VBoxContainer/DetailLabel") as Label
+			var status: Label = shell.get_node_or_null("UICanvasLayer/CenterContainer/VBoxContainer/StatusLabel") as Label
+			var detail: Label = shell.get_node_or_null("UICanvasLayer/CenterContainer/VBoxContainer/DetailLabel") as Label
 			_check(status != null and status.text.contains("Later beats (N4.3+)"), "the boundary status text names the next unimplemented milestone")
 			_check(detail != null and detail.text.contains("N4.5"), "the boundary detail text keeps the shore handoff contract visible")
 			_fixture_completions_untouched()
@@ -503,7 +503,7 @@ func _process(_delta: float) -> bool:
 			var runner6: SequenceRunner = shell.call("sequence_runner")
 			_check(not runner6.is_control_locked(), "control is restored after the refusal (runner cleanup)")
 			_check(shell.call("completed_sequence_count") == 2, "NarrativeState holds both completions without a boundary")
-			var status2: Label = shell.get_node_or_null("CenterContainer/VBoxContainer/StatusLabel") as Label
+			var status2: Label = shell.get_node_or_null("UICanvasLayer/CenterContainer/VBoxContainer/StatusLabel") as Label
 			_check(status2 != null and not status2.text.contains("Later beats (N4.3+)"), "the boundary status text is NOT applied on a playback refusal")
 			# --- Retry: every beat completed -> refuse again, boundary still false ---
 			_check(not shell.call("start_prologue") and not shell.call("prologue_reached_end"), "start_prologue with every beat completed stays false without falsely marking the boundary")
