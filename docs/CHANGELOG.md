@@ -7,6 +7,25 @@ This changelog records repository changes that actually occurred. Planned featur
 
 ---
 
+## [2026-11-18] N4.4-A: Forgotten Ruins foundation & pl_05 exploration
+
+**Type:** Production milestone slice (N4.4-A; new narrative component + chain extension; no new scenes, assets, runner ops, or dialogue; pl_06 DORMANT — its content is N4.4-C/D)
+**Engine Verified:** `Godot 4.7.2.stable` (headless suites + windowed Xvfb visual pass; full `tests/run_all.sh` ALL SUITES PASSED; static verifier PASS)
+**Baseline:** `main` @ `5d10200` (after the PR #22 design-package merge); branch `feature/n44a-ruins-foundation`
+
+### Summary
+Implements slice N4.4-A of the merged N4.4 pre-production design package (PR #22), per its documented defaults:
+- **New component** `scripts/narrative/PrologueRuinsEnvironment.gd`: placeholder ruin zones (exterior → interior passage → hidden chamber), one-way zone-state machine with the chamber-reveal trigger, hidden-until-revealed altar group with the labelled crown continuity placeholder, two identical U2-placeholder mark glyphs; D6 atomic fail-closed build (the proven `PrologueMarkInspectables` pattern; no production test seam).
+- **Chain extension** (`PrologueShell.gd` + `PrologueExplorationStage.gd` + `PrologueBeats.gd`): pl_04 completion/skip activates pl_05 (no pl_05 dialogue — Beat 05 is environmental storytelling only); the authored band extends east (`ROAD_MAX_X` 800 → 2200, camera limits extend, containment guarantee unchanged); the stage's ONE `ruins_altar_reached` request records pl_05 exactly once at the altar threshold and activates pl_06 DORMANT (segment stays live — the slice-A terminal state); the per-beat skip chain extends (O6 documented default: pl_04 skip → pl_05, pl_05 skip → dormant pl_06; pl_06 skip NOT implemented — O4/N4.4-D scope); status texts for pl_05/pl_06; the N4.2 fallback text corrected to stop claiming "later beats are not implemented".
+- **Demonstrated-defect fix:** a skip landing between the recognition opening and the next gated poll could leak the visible `[E] Inspect` prompt into pl_05 — `set_active_beat` now hides the inspection prompt on every non-pl_04 beat change (regression-tested).
+- **Tests:** new `tests/test_n44a_ruins_foundation.gd` (96 checks: component D6 matrix + zone machine, full pl_01→pl_06-dormant flow, exactly-once altar boundary, wrong-beat rejection, cancel/unload/failed-setup, camera containment + camera-independent UI at the east bound, skip chain, byte-exact real files, input hygiene); N4.2/N43A/N43B/N43C expectation updates to the documented N4.4-A contract (all listed in the report; no assertion weakening — N43C's A-scenario EXTENDS to the altar, +10 checks); registered in `tests/run_all.sh` + CI.
+- **Evidence:** 10 consecutive N44A suite runs exit 0; full `run_all.sh` ALL SUITES PASSED (N4.2 113, N43A 111, N43B 193, N43C 186, N44A 96, verifier 256); windowed visual pass `scripts/tools/n44a_visual_pass.gd` — 9 screenshots + contact sheets reviewed (entry, exterior, interior, chamber reveal, altar approach, dormant boundary, camera-independent UI).
+- **Owner decision status:** O6 remains OPEN — the implemented pl_04-skip behavior is the documented default and the PR requests owner confirmation; O1/O2/O3/O4/O5/O7/O8 and U2/U4/U5 untouched (labelled placeholders only).
+
+**Report:** `docs/narrative/N44A_IMPLEMENTATION_REPORT.md` (scope, traceability, defects, verification, N4.4-B handoff, findings).
+
+---
+
 ## [2026-11-18] N4.4 Pre-Production: Forgotten Ruins & Crown's Call design package
 
 **Type:** Documentation only (planning/design; no production code, scene, test, asset, or configuration changes; N4.4 NOT implemented)
