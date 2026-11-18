@@ -247,7 +247,7 @@ func _check_terminal_state(shell: Control, label: String, stage_emitted: bool) -
 	_check(String(shell.call("active_exploration_beat")) == "" and bool(shell.call("n43_segment_complete")), "%s: the shell ended the segment at the N4.3 boundary" % label)
 	_check(explorer != null and not explorer.is_input_enabled() and not explorer.is_physics_processing(), "%s: the explorer is input-disabled and frozen" % label)
 	_check(inspectables != null and not inspectables.prompt().visible, "%s: the inspection prompt is hidden" % label)
-	var status: Label = shell.get_node_or_null("CenterContainer/VBoxContainer/StatusLabel") as Label
+	var status: Label = shell.get_node_or_null("UICanvasLayer/CenterContainer/VBoxContainer/StatusLabel") as Label
 	_check(status != null and status.text.contains("N4.3"), "%s: the boundary status is shown" % label)
 
 
