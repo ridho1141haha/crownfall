@@ -206,12 +206,25 @@ func skip_sequence() -> void:
 ## hidden so the shell returns to its idle screen. An active exploration
 ## segment is torn down the same way: cancellation is NOT a skip, so nothing
 ## is recorded, and the stage-owned actor lock is released deterministically.
+##
+## N4.3-B ORDERING CONTRACT: the exploration segment is aborted BEFORE the
+## runner cleanup. SequenceRunner._cleanup() closes the SHARED DialoguePanel
+## unconditionally as part of its own bookkeeping — if that close ran first,
+## a waiting exploration coroutine (the N4.3-B recognition line) would resume
+## while every stage guard is still disarmed, take its NORMAL-completion path,
+## emit the completion request, and record a beat the user just CANCELLED
+## (planning: cancel is never a skip). teardown() bumps the dialogue
+## generation and arms the torn-down flag FIRST, so the resumed await always
+## observes stale state and returns without emitting. The N4.3-A intro line
+## had the same exposure with no consequence (its normal path only restores
+## input); the recognition path records, so the shell must arm the guard
+## before any shared-panel close.
 func cancel_sequence() -> void:
+	_abort_exploration_segment(true)
 	if _runner != null:
 		_runner.cancel()
 	_current_beat_id = ""
 	_hide_stage()
-	_abort_exploration_segment(true)
 
 
 ## Starts the Prologue content chain: plays the first uncompleted authored
@@ -385,6 +398,7 @@ func _begin_exploration_segment() -> void:
 		_set_boundary_status()
 		return
 	stage.exploration_handoff_reached.connect(_on_exploration_handoff_reached)
+	stage.mark_inspection_completed.connect(_on_mark_inspection_completed)
 	_exploration_beat = PrologueBeats.PL_03_WANDERER
 	_set_exploration_status(PrologueBeats.PL_03_WANDERER)
 	stage.begin_beat(PrologueBeats.PL_03_WANDERER)
@@ -423,6 +437,29 @@ func _activate_exploration_beat(beat_id: String) -> void:
 	if _exploration_stage != null:
 		_exploration_stage.set_active_beat(beat_id)
 	_set_exploration_status(beat_id)
+
+
+## The stage's ONE pl_04 completion request (N4.3-B: two distinct marks
+## inspected, the recognition line completed normally). The shell validates
+## the request against the ACTIVE beat and records the completion exactly
+## once; duplicate, inactive-beat, or post-exit requests are ignored — and a
+## duplicate record is already a rejected no-op in _record_exploration_beat.
+## The terminal sequence mirrors the pl_04 skip exactly (defined N4.3
+## boundary, no pl_05 fabrication).
+func _on_mark_inspection_completed() -> void:
+	if _exit_started or _exploration_stage == null:
+		return
+	if _exploration_beat != PrologueBeats.PL_04_REPEATED_MARK:
+		# A request for an inactive beat is never accepted (late duplicate,
+		# torn-down stage, or a beat that already moved on).
+		return
+	if not _record_exploration_beat(PrologueBeats.PL_04_REPEATED_MARK):
+		return
+	if _exploration_stage != null:
+		_exploration_stage.end_segment()
+	_exploration_beat = ""
+	_n43_segment_ended = true
+	_set_n43_boundary_status()
 
 
 ## Narrow Prologue-specific per-beat Skip path (N4.3 planning, DECIDED): not a
@@ -480,10 +517,12 @@ func _set_exploration_status(beat_id: String) -> void:
 		if beat_id == PrologueBeats.PL_03_WANDERER:
 			detail.text = "Walk the road (A/D or arrow keys) and reach the far end to continue. Nothing records Prologue completion."
 		else:
-			# No Skip-UI claim: the per-beat skip is a scripted/API path only
-			# in N4.3-A (no button or input binding is planned or shipped
-			# here), so the UI names only what the player actually has.
-			detail.text = "Mark inspection is not implemented yet (N4.3-B). The development exit remains available."
+			# N4.3-B: pl_04 IS interactive now — inspection polls the existing
+			# interact action behind the stage's prompt/range gates, and two
+			# distinct marks trigger the recognition. The per-beat skip stays
+			# a scripted/API path only (no button or input binding here), so
+			# the UI names only what the player actually has.
+			detail.text = "Inspect the marked objects (press E when the prompt appears): two distinct marks reveal the recognition. The development exit remains available."
 
 
 ## Defined N4.3 boundary presentation (pl_04 skip): mirrors the N4.2 boundary.

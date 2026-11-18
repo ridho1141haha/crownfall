@@ -7,6 +7,37 @@ This changelog records repository changes that actually occurred. Planned featur
 
 ---
 
+## [2026-11-17] N4.3-B: Repeated Mark Inspection (slices B1 + B2 + B3)
+
+**Type:** Feature implementation (N4.3-B only — N4.3-C integration/regression is NOT started)
+**Engine Verified:** `Godot 4.7.2.stable` (headless suites + windowed Xvfb visual pass; full `tests/run_all.sh` ALL SUITES PASSED; static verifier PASS)
+
+### Summary
+1. **B1 — Inspectable set.** New `scripts/narrative/PrologueMarkInspectables.gd`: the three authored placeholder mark objects (identical two-rect placeholder glyph; only the tint varies with the surface condition — mark design U2 and placements U4 stay OPEN), a fail-closed atomic `build()` (validate the whole authored table → construct props/glyph/prompt under a non-tree staging parent → verify every node → commit; any failure frees partials and leaves the component empty, D6), the nearest-in-range query, idempotent per-id inspection state (D1), and the shared provisional `[E] Inspect` prompt (U5). The stage builds the component during setup BEFORE the actor (a failed build fails setup → the shell falls back to its idle boundary) and renders the props as pl_03 scenery; prompt visibility is driven per physics frame in pl_04 behind the presentation gates.
+2. **B2 — Interaction, recognition, completion.** The stage polls the existing `interact` action (physical E, `project.godot` unchanged) in its pl_04 physics branch behind the FULL D5 gate (active beat pl_04 · not torn down · segment not ended · movement input enabled · panel not open · stage lock not held · eligible object in range · `interact` just pressed); a first inspection is silent (no dialogue/notification — owner decision D1), repeats are no-ops, and two DISTINCT objects open the approved Story Design Beat 04 recognition line ("I've seen this mark before..." / "Why does it keep appearing?", `PrologueBeats.exploration_recognition_lines()`, data only) through the existing DialoguePanel with the stage-owned lock and the same generation-guard discipline as the intro line. A one-shot `mark_inspection_completed` request is emitted only after a normal close (record-after-dialogue ordering); `PrologueShell._on_mark_inspection_completed()` validates the ACTIVE exploration beat, records `pl_04_repeated_mark` exactly once, and ends the segment at the same defined boundary as the skip. The pl_04 detail label no longer claims "Mark inspection is not implemented yet".
+3. **B3 — Registration, regression, CI, visual verification, docs.** The new suite is registered in `tests/run_all.sh` and `.github/workflows/godot-ci.yml`; the full regression + static verifier are green; a windowed (Xvfb, 1280x720) visual pass captured 12/12 contract checks with screenshots (prompt at range / follows nearest object / hidden out of range / absent during pl_03 / actor stationary under a held movement key during the recognition / boundary reached).
+
+### Production fix (found by the new suite, fixed in `PrologueShell.cancel_sequence()`)
+`cancel_sequence()` now aborts the exploration segment BEFORE the runner cleanup. `SequenceRunner._cleanup()` closes the shared DialoguePanel unconditionally as part of its own bookkeeping — with the previous order, a cancellation during the N4.3-B recognition dialogue resumed the waiting coroutine while every stage guard was still disarmed, so the coroutine took its normal-completion path, emitted the completion request, and the shell recorded pl_04 for a beat the user had just CANCELLED (planning: cancel is never a skip). `teardown()` now arms the dialogue-generation/torn-down guards before any shared-panel close, so a cancelled recognition can never record anything. (The N4.3-A intro line had the same exposure with no recording consequence — its normal path only restores input.)
+
+### Key Changes
+- `scripts/narrative/PrologueMarkInspectables.gd` (+ `.uid`): new component (authored table, D6 validation, atomic build, three factory methods, range query, per-id state, shared prompt).
+- `scripts/narrative/PrologueExplorationStage.gd`: inspectable build in `setup()` (fail-closed, before the actor); `_physics_process` dispatches pl_03/pl_04 (pl_03 handoff semantics unchanged); pl_04 branch = prompt gating + full-D5 interact polling + two-distinct recognition trigger; `mark_inspection_completed` one-shot signal; prompt hidden on `end_segment`/`teardown`.
+- `scripts/narrative/PrologueShell.gd`: `_on_mark_inspection_completed()` handler + signal connection; pl_04 detail label updated; `cancel_sequence()` ordering fix (documented in-place).
+- `scripts/narrative/PrologueBeats.gd`: `exploration_recognition_lines()` (approved candidate text verbatim; `SequenceRunner` still never sees exploration beats).
+- `tests/test_n43b_mark_inspection.gd` (+ `.uid`): new suite — D6 validation matrix, H9/H9a/H9b atomic construction failures, range/prompt/state units, pl_03-unchanged regression, H1/H3/H4/H5/H6/H7a/H7b/H8/H10 (scenarios A–D with separate E/A/R observables)/H11/H14, byte-exact real-file hygiene.
+- `tests/run_all.sh`, `.github/workflows/godot-ci.yml`: N43B suite registered.
+- Docs status sync: `docs/narrative/N4_3_PLANNING.md`, `docs/narrative/NARRATIVE_RUNTIME_TECHNICAL_DESIGN.md`, `docs/NARRATIVE_IMPLEMENTATION_ROADMAP.md`, `docs/narrative/PROLOGUE_PRODUCTION_BREAKDOWN.md`.
+
+### Verified
+- `tests/test_n43b_mark_inspection.gd`: **PASS: All 191 N43B Mark Inspection checks … 0 failures** (exit 0; two consecutive runs for stability).
+- Full `tests/run_all.sh`: **ALL SUITES PASSED** (exit 0, 19 entries); static verifier PASS (all repository integrity/scene-graph/CI-lock checks).
+- Regression: N43A 106, N42 113, N41 87, SequenceRunner 60, DialoguePanel 41 — all exit 0.
+- Windowed visual verification (Xvfb, 1280x720): **PASS: All 12 N43B visual checks … 0 failures** with six screenshots. Note: the shell's status/detail labels render camera-transformed during exploration (pre-existing N4.3-A behavior — the exploration camera transforms the shell's canvas-layer-0 UI); the label CONTENT was verified programmatically and no UI file changed in this slice.
+- Real `user://player_profile.json` / `user://save_slot_0.json` byte-exact unchanged (suite hygiene checks).
+
+---
+
 ## [2026-11-17] N4.3-A review fixes (camera visible-area containment, Skip-UI wording, direct-unload regression)
 
 **Type:** Review-fix pass on the N4.3-A slice (three review findings; no scope change — still N4.3-A only, no N4.3-B/C)
