@@ -131,6 +131,15 @@ var _stage_caption_label: Label = null
 ## Optional extra cue observer (headless tests now, audio later; same style
 ## as the _exit_transition hook).
 var _cue_observer: Callable = Callable()
+## N4.4-C shell-stage crown awakening handoff state (per-run, dies with shell).
+## N4.4-D installs the vision starter via set_awakening_vision_starter(); while
+## unset in N4.4-C, handoffs reject cleanly so the actor never locks permanently.
+var _awakening_vision_starter: Callable = Callable()
+var _awakening_handoff_active: bool = false
+var _awakening_handoff_generation: int = 0
+var _crown_awakening_requests_received: int = 0
+var _crown_awakening_acceptances: int = 0
+var _crown_awakening_rejections: int = 0
 
 
 func _ready() -> void:
@@ -397,6 +406,30 @@ func exploration_stage() -> PrologueExplorationStage:
 	return _exploration_stage
 
 
+func set_awakening_vision_starter(starter: Callable) -> void:
+	_awakening_vision_starter = starter
+
+
+func is_awakening_handoff_active() -> bool:
+	return _awakening_handoff_active
+
+
+func awakening_handoff_generation() -> int:
+	return _awakening_handoff_generation
+
+
+func crown_awakening_requests_received() -> int:
+	return _crown_awakening_requests_received
+
+
+func crown_awakening_acceptances() -> int:
+	return _crown_awakening_acceptances
+
+
+func crown_awakening_rejections() -> int:
+	return _crown_awakening_rejections
+
+
 ## Exploration is the production default; headless suites may restore the N4.2
 ## terminal-boundary behavior via the Engine meta injection convention.
 func _exploration_enabled() -> bool:
@@ -425,6 +458,8 @@ func _begin_exploration_segment() -> void:
 	stage.exploration_handoff_reached.connect(_on_exploration_handoff_reached)
 	stage.mark_inspection_completed.connect(_on_mark_inspection_completed)
 	stage.ruins_altar_reached.connect(_on_ruins_altar_reached)
+	stage.crown_awakening_requested.connect(_on_crown_awakening_requested)
+	stage.set_awakening_handoff_handler(Callable(self, "_handle_crown_awakening_handoff"))
 	_exploration_beat = PrologueBeats.PL_03_WANDERER
 	_set_exploration_status(PrologueBeats.PL_03_WANDERER)
 	stage.begin_beat(PrologueBeats.PL_03_WANDERER)
@@ -506,6 +541,46 @@ func _on_ruins_altar_reached() -> void:
 	_activate_exploration_beat(PrologueBeats.PL_06_CROWNS_CALL)
 
 
+func _on_crown_awakening_requested(generation: int) -> void:
+	_crown_awakening_requests_received += 1
+	if _exit_started or _n43_segment_ended or _exploration_stage == null or not is_instance_valid(_exploration_stage):
+		return
+	if _exploration_beat != PrologueBeats.PL_06_CROWNS_CALL:
+		_exploration_stage.reject_crown_awakening(generation, false)
+		return
+	if not _exploration_stage.is_awakening_generation_current(generation):
+		return
+
+
+func _handle_crown_awakening_handoff(generation: int) -> bool:
+	if _exit_started or _n43_segment_ended or _exploration_stage == null or not is_instance_valid(_exploration_stage):
+		_crown_awakening_rejections += 1
+		return false
+	if _exploration_beat != PrologueBeats.PL_06_CROWNS_CALL:
+		_crown_awakening_rejections += 1
+		return false
+	if _awakening_handoff_active:
+		_crown_awakening_rejections += 1
+		return false
+	if _state != null and _state.is_completed(PrologueBeats.PL_06_CROWNS_CALL):
+		_crown_awakening_rejections += 1
+		return false
+	if not _exploration_stage.is_awakening_generation_current(generation):
+		_crown_awakening_rejections += 1
+		return false
+	if not _awakening_vision_starter.is_valid():
+		_crown_awakening_rejections += 1
+		push_warning("[PrologueShell] crown awakening handoff rejected: N4.4-D vision sequence is not wired yet")
+		return false
+	if not bool(_awakening_vision_starter.call(generation)):
+		_crown_awakening_rejections += 1
+		return false
+	_awakening_handoff_active = true
+	_awakening_handoff_generation = generation
+	_crown_awakening_acceptances += 1
+	return true
+
+
 ## Narrow Prologue-specific per-beat Skip path (N4.3 planning, DECIDED): not a
 ## global shortcut, not SequenceRunner.skip (exploration beats are not runner
 ## runs), and never a full-Prologue skip. The skip chain follows the
@@ -553,6 +628,8 @@ func skip_current_exploration_beat() -> bool:
 ## safe even when the actor or stage was already freed (stage.teardown() is
 ## freed-safe). update_status refreshes the idle status text on cancellation.
 func _abort_exploration_segment(update_status: bool) -> void:
+	_awakening_handoff_active = false
+	_awakening_handoff_generation = 0
 	if _exploration_stage == null:
 		return
 	_exploration_stage.teardown()

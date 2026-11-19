@@ -185,7 +185,7 @@ func _test_stage_d5_gate_and_rejection_retry() -> void:
 	panel.queue_free()
 
 
-func _test_shell_cancel_unload_and_ownership() -> void:
+func _load_shell_at_pl05() -> Dictionary:
 	Engine.set_meta("crownfall_prologue_autostart", false)
 	Engine.set_meta("crownfall_prologue_exploration", true)
 	_check(change_scene_to_file("res://scenes/narrative/PrologueShell.tscn") == OK, "loads PrologueShell")
@@ -196,7 +196,7 @@ func _test_shell_cancel_unload_and_ownership() -> void:
 			break
 		await process_frame
 	if not _check(shell != null, "PrologueShell active"):
-		return
+		return {"ok": false}
 	shell.call("start_prologue")
 	await process_frame
 	shell.call("skip_sequence")
@@ -212,26 +212,65 @@ func _test_shell_cancel_unload_and_ownership() -> void:
 	var stage: PrologueExplorationStage = shell.call("exploration_stage") as PrologueExplorationStage
 	shell.call("skip_current_exploration_beat")
 	shell.call("skip_current_exploration_beat")
+	return {"ok": stage != null, "shell": shell, "stage": stage}
+
+
+func _test_shell_cancel_unload_and_ownership() -> void:
+	var s1: Dictionary = await _load_shell_at_pl05()
+	if not bool(s1.get("ok", false)):
+		return
+	var shell: Control = s1["shell"] as Control
+	var stage: PrologueExplorationStage = s1["stage"] as PrologueExplorationStage
 	var explorer: PrologueExplorer = stage.explorer()
 	var ruins: PrologueRuinsEnvironment = stage.ruins()
 	var state: NarrativeState = shell.call("narrative_state") as NarrativeState
 
+	# Wrong beat (pl_05) handoff request is rejected by shell.
+	_check(not bool(shell.call("_handle_crown_awakening_handoff", 1)), "shell rejects crown handoff during pl_05")
+	_check(not bool(shell.call("is_awakening_handoff_active")) and int(shell.call("crown_awakening_rejections")) == 1, "wrong-beat rejection tracked without activating handoff")
+
+	# Natural pl_05 -> pl_06 progression remains unchanged.
 	explorer.position.x = PrologueRuinsEnvironment.INTERIOR_END_X + 20.0
+	await physics_frame
 	await physics_frame
 	explorer.position.x = PrologueRuinsEnvironment.ALTAR_X
 	await physics_frame
+	await physics_frame
 	_check(String(shell.call("active_exploration_beat")) == PrologueBeats.PL_06_CROWNS_CALL and state.completed_count() == 5, "pl_05 recorded once and pl_06 active")
 
-	var s_gens: Array[int] = []
-	stage.crown_awakening_requested.connect(func(g: int) -> void: s_gens.append(g))
+	# Default N4.4-C shell (no N4.4-D vision starter) rejects cleanly so player is NEVER stuck locked.
 	await physics_frame
 	_check(ruins.is_crown_prompt_visible(), "shell flow shows crown prompt in pl_06")
 	await _pulse_interact()
-	_check(s_gens.size() == 1 and stage.is_awakening_armed() and stage.is_awakening_locked(), "shell flow arms awakening and locks actor")
-	_check(state.completed_count() == 5 and not bool(state.is_completed(PrologueBeats.PL_06_CROWNS_CALL)), "N4.4-C never records pl_06 completion")
+	_check(int(shell.call("crown_awakening_requests_received")) == 1 and int(shell.call("crown_awakening_rejections")) == 2, "default shell receives and rejects unwired N4.4-D handoff")
+	_check(not bool(shell.call("is_awakening_handoff_active")) and not stage.is_awakening_locked() and not stage.is_awakening_armed() and stage.is_input_enabled(), "default shell rejection releases lock, restores input, and never leaves actor stuck")
+	_check(not ruins.is_crown_consumed() and state.completed_count() == 5 and not bool(state.is_completed(PrologueBeats.PL_06_CROWNS_CALL)), "default rejection permits retry and records no pl_06 completion")
 
+	# Installed N4.4-D seam: first call rejects (retry allowed), second call accepts.
+	var starter_calls: Array[int] = []
+	shell.call("set_awakening_vision_starter", func(g: int) -> bool:
+		starter_calls.append(g)
+		return starter_calls.size() >= 2
+	)
+	await physics_frame
+	await _pulse_interact()
+	_check(starter_calls.size() == 1 and not bool(shell.call("is_awakening_handoff_active")) and not stage.is_awakening_locked() and stage.is_input_enabled(), "starter rejection releases actor lock and permits retry")
+	await physics_frame
+	await _pulse_interact()
+	var active_gen: int = int(shell.call("awakening_handoff_generation"))
+	_check(starter_calls.size() == 2 and bool(shell.call("is_awakening_handoff_active")) and active_gen == starter_calls[1] and int(shell.call("crown_awakening_acceptances")) == 1, "retry accepts current generation in active pl_06")
+	_check(stage.is_awakening_armed() and stage.is_awakening_locked() and state.completed_count() == 5 and not bool(state.is_completed(PrologueBeats.PL_06_CROWNS_CALL)), "accepted handoff holds lock without recording pl_06")
+
+	# Duplicate and stale/invalid generations are rejected.
+	_check(not bool(shell.call("_handle_crown_awakening_handoff", active_gen)), "duplicate active-generation handoff is rejected")
+	_check(not bool(shell.call("_handle_crown_awakening_handoff", active_gen - 1)) and not bool(shell.call("_handle_crown_awakening_handoff", 0)), "stale and invalid generations are rejected")
+	_check(int(shell.call("crown_awakening_acceptances")) == 1, "acceptances remain 1 after duplicate/stale rejections")
+
+	# Cancel invalidates pending generation, clears shell handoff state, releases lock, records nothing.
 	shell.call("cancel_sequence")
-	_check(stage.is_torn_down() and not stage.is_awakening_armed() and not stage.is_awakening_locked() and not stage.is_awakening_generation_current(s_gens[0]), "cancel_sequence disarms awakening, releases lock, invalidates generation")
-	_check(not ruins.is_crown_prompt_visible() and state.completed_count() == 5, "cancel hides prompt and records nothing")
+	_check(not bool(shell.call("is_awakening_handoff_active")) and int(shell.call("awakening_handoff_generation")) == 0, "cancel_sequence clears shell handoff state")
+	_check(stage.is_torn_down() and not stage.is_awakening_armed() and not stage.is_awakening_locked() and not stage.is_awakening_generation_current(active_gen), "cancel_sequence tears down stage and invalidates generation")
+	_check(not bool(shell.call("_handle_crown_awakening_handoff", active_gen)), "post-cancel handoff request is rejected")
+	_check(not ruins.is_crown_prompt_visible() and state.completed_count() == 5 and not bool(state.is_completed(PrologueBeats.PL_06_CROWNS_CALL)), "cancel hides prompt and records no pl_06 completion")
 	Engine.remove_meta("crownfall_prologue_autostart")
 	Engine.remove_meta("crownfall_prologue_exploration")
