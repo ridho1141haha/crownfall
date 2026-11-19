@@ -24,6 +24,31 @@ const SAVE_MALFORMED_NULL_IRON: String = "user://test_phase2_malformed_null_iron
 const SAVE_ROUNDTRIP_PATH: String = "user://test_phase2_roundtrip.json"
 const SAVE_IRON_ROUNDTRIP_PATH: String = "user://test_phase2_iron_roundtrip.json"
 
+## Round-2 save isolation (review P1): live sessions created by these suites
+## can emit default-path autosaves (e.g. the ISLAND_CLEARED shipwreck path),
+## which previously wrote the developer's real user://save_slot_0.json when
+## the suite ran against the normal user data dir. Following the 3A suite's
+## architecture: without the child env key the script is the PARENT (it only
+## snapshots the real autosave slot byte-exact, spawns itself as a child whose
+## HOME/XDG_DATA_HOME point at a fresh temp base, relays the child output,
+## verifies the real slot stayed byte-exact, and removes the temp base with a
+## strictly guarded rm); with the key it is the CHILD and a fail-closed
+## sandbox gate proves — before ANY session or save work — that user:// really
+## resolved inside the sandbox (the user:// root is cached at process startup,
+## so the env must be set BEFORE the process launches; it is never trusted
+## in-process). PLATFORM: Linux-only by design (guarded rm -rf cleanup); any
+## other platform is an explicit counted SKIP (exit 2), never a fake PASS.
+## Audit round 3: the parent verdict requires the child exit 0 AND every
+## parent-level proof clean (quit() only flags the exit — it cannot stop or
+## override a recorded failure); slot existence and content are proven
+## separately; the temp base is created exclusively (never reused) and must
+## canonicalize to itself (readlink -m), and the child gate also proves
+## containment on canonicalized paths (symlink-proof).
+const TEMP_BASE_PREFIX: String = "/tmp/phase2_iso_"
+const ENV_CHILD: String = "PHASE2_ISOLATED_CHILD"
+const ENV_TMP: String = "PHASE2_ISOLATED_TMP"
+const ENV_NORMAL: String = "PHASE2_NORMAL_USER_DIR"
+
 var _failures: int = 0
 var _checks: int = 0
 
@@ -729,6 +754,22 @@ func _test_malformed_facts_skip_progression_migration() -> bool:
 
 
 func _init() -> void:
+	# Round-2 isolation entry point: parent/child split, platform SKIP, and a
+	# fail-closed sandbox gate before any session or save work (see the
+	# contract above the consts).
+	if OS.get_name() != "Linux":
+		print("SKIP: test_progression_phase2_era_correction is Linux-only by design (isolated sandbox + rm-based cleanup); not executing on %s" % OS.get_name())
+		quit(2)
+		return
+	if OS.get_environment(ENV_CHILD) == "1":
+		if not _sandbox_gate(OS.get_environment(ENV_TMP), OS.get_environment(ENV_NORMAL)):
+			return
+		_run_all_suites()
+	else:
+		_run_parent_wrapper()
+
+
+func _run_all_suites() -> void:
 	var suite_names: Array[String] = [
 		"Fresh Start & Stone Age Path", "Shipwreck Vessel Readiness & Era Lock",
 		"Iron Age Eldergrove Gate", "Legacy Migration Policy",
@@ -755,3 +796,159 @@ func _init() -> void:
 		return
 	print("PASS: All %d Phase 2 Era Correction Checks completed with 0 failures across %d suites." % [_checks, suites.size()])
 	quit(0)
+
+
+func _sandbox_gate(claimed_tmp: String, normal_dir: String) -> bool:
+	# CHILD: fail-closed sandbox gate — EVERY isolation condition is proven
+	# BEFORE any session or save work (same contract as the 3A suite).
+	var user_dir: String = OS.get_user_data_dir().simplify_path()
+	var claimed_base: String = claimed_tmp.simplify_path()
+	var slot_global: String = ProjectSettings.globalize_path(SaveManager.DEFAULT_SAVE_PATH).simplify_path()
+	var conditions: Array = [
+		[claimed_base != "" and claimed_base.is_absolute_path() and claimed_base.begins_with(TEMP_BASE_PREFIX),
+			"iso: claimed temp base is a self-generated absolute phase2_iso path (%s)" % claimed_base],
+		[normal_dir != "", "iso: normal user dir marker provided"],
+		[normal_dir != "" and user_dir != normal_dir.simplify_path(),
+			"iso: process user data dir differs from the normal user data dir"],
+		[_is_descendant_of(user_dir, claimed_base),
+			"iso: process user data dir is a TRUE descendant of the claimed temp base (%s)" % user_dir],
+		[_is_descendant_of(slot_global, claimed_base),
+			"iso: default autosave path is a TRUE descendant of the claimed temp base (%s)" % slot_global],
+		[_is_descendant_of(_canonicalize(user_dir), _canonicalize(claimed_base)),
+			"iso: canonicalized user data dir is a TRUE descendant of the canonicalized temp base (symlink-proof)"],
+		[not FileAccess.file_exists(SaveManager.DEFAULT_SAVE_PATH),
+			"iso: sandbox starts with NO pre-existing autosave slot"],
+	]
+	var problems: PackedStringArray = PackedStringArray()
+	for cond: Array in conditions:
+		if not bool(cond[0]):
+			problems.append(String(cond[1]))
+	if not problems.is_empty():
+		for p: String in problems:
+			print("TEST FAILURE: sandbox gate: %s" % p)
+		print("TEST FAILURE: Phase 2 sandbox gate refused the run — no session or save work attempted")
+		quit(1)
+		return false
+	for cond: Array in conditions:
+		print("PHASE2|ISO|ok: %s" % String(cond[1]))
+	print("PHASE2|GATE|ok — sandbox proven valid; proceeding to the suites")
+	return true
+
+
+func _is_descendant_of(child_path: String, base_path: String) -> bool:
+	# TRUE-descendant containment (lexical normalize + component boundary),
+	# never a bare string prefix; empty/root bases contain nothing.
+	var child: String = child_path.simplify_path()
+	var base: String = base_path.simplify_path()
+	if base == "" or base == "/":
+		return false
+	if child == base:
+		return true
+	return child.begins_with(base + "/")
+
+
+func _run_parent_wrapper() -> void:
+	# PARENT: never performs session/save work. Structural isolation comes from
+	# re-executing this script as a child with a throwaway user data dir; the
+	# real autosave slot's EXISTENCE and CONTENT are proven unchanged before
+	# vs. after the child runs (audit round 3, F4: separately).
+	var normal_user_dir: String = OS.get_user_data_dir()
+	print("PHASE2|PARENT|normal user data dir (startup): %s" % normal_user_dir)
+	var real_save: String = SaveManager.DEFAULT_SAVE_PATH
+	var had_real_save: bool = FileAccess.file_exists(real_save)
+	var real_bytes: PackedByteArray = FileAccess.get_file_as_bytes(real_save) if had_real_save else PackedByteArray()
+	var temp_base: String = "%s%d_%d" % [TEMP_BASE_PREFIX, OS.get_process_id(), Time.get_ticks_usec()]
+	# F5 (audit round 3): exclusive creation + canonical validation — a
+	# pre-existing or planted entry is never reused, and a symlink anywhere
+	# on the base path aborts the parent before the child is spawned.
+	if not _make_exclusive_base(temp_base):
+		printerr("TEST FAILURE [test_progression_phase2]: parent refused a non-exclusive or non-canonical temp base (%s)" % temp_base)
+		quit(1)
+		return
+	var child_out: Array = []
+	var exit_code: int = _run_child_process(temp_base, temp_base, normal_user_dir, child_out)
+	for line: Variant in child_out:
+		print(str(line))
+	var had_after_save: bool = FileAccess.file_exists(real_save)
+	var after_bytes: PackedByteArray = FileAccess.get_file_as_bytes(real_save) if had_after_save else PackedByteArray()
+	_check(had_real_save == had_after_save, "parent: real autosave slot EXISTENCE unchanged before vs after the isolated run")
+	_check(real_bytes == after_bytes, "parent: real autosave slot byte-exact unchanged across the isolated run (%s)" % ProjectSettings.globalize_path(real_save))
+	_check(_rmrf_guarded(temp_base), "parent: temporary isolated user data removed")
+	# F1 (audit round 3): the parent verdict requires BOTH the child verdict
+	# AND every parent-level proof. quit() does not stop the current function
+	# in Godot 4 — it only flags the exit — so a failing _check() above can
+	# never be silently overridden by the success branch.
+	if exit_code == 0 and _failures == 0:
+		print("PASS: Phase 2 parent wrapper — isolated child exit 0, all parent checks clean (%d checks)" % _checks)
+		quit(0)
+	else:
+		printerr("TEST FAILURE [test_progression_phase2]: parent wrapper (child_exit=%d, parent_failures=%d)" % [exit_code, _failures])
+		quit(1)
+
+
+func _run_child_process(home_base: String, claimed_tmp: String, normal_dir: String, out: Array) -> int:
+	# Godot 4.7.2 has no OS.execute_with_env, so the env is set on THIS
+	# process before the launch and restored afterwards; the child's user://
+	# root is derived from that env at ITS startup (cached — see 3A evidence).
+	var orig_home: String = OS.get_environment("HOME")
+	var orig_xdg: String = OS.get_environment("XDG_DATA_HOME")
+	var orig_xdg_cache: String = OS.get_environment("XDG_CACHE_HOME")
+	DirAccess.make_dir_recursive_absolute(home_base.path_join("xdg"))
+	OS.set_environment("HOME", home_base)
+	OS.set_environment("XDG_DATA_HOME", home_base.path_join("xdg"))
+	OS.set_environment("XDG_CACHE_HOME", home_base.path_join("xdg-cache"))
+	OS.set_environment(ENV_CHILD, "1")
+	OS.set_environment(ENV_TMP, claimed_tmp)
+	OS.set_environment(ENV_NORMAL, normal_dir)
+	var exit_code: int = OS.execute(OS.get_executable_path(), [
+		"--headless",
+		"--path", ProjectSettings.globalize_path("res://"),
+		"--script", "res://tests/test_progression_phase2_era_correction.gd",
+	], out, true)
+	OS.set_environment("HOME", orig_home)
+	OS.set_environment("XDG_DATA_HOME", orig_xdg)
+	OS.set_environment("XDG_CACHE_HOME", orig_xdg_cache)
+	OS.set_environment(ENV_CHILD, "")
+	OS.set_environment(ENV_TMP, "")
+	OS.set_environment(ENV_NORMAL, "")
+	return exit_code
+
+
+func _canonicalize(path: String) -> String:
+	# F5 (audit round 3): resolve symlinks for EVERY path component via GNU
+	# readlink -m (also works for not-yet-existing tails). An empty string
+	# means resolution failed — callers must treat that as fail-closed.
+	var out: Array = []
+	var rc: int = OS.execute("readlink", ["-m", "--", path], out, true)
+	if rc != 0 or out.is_empty():
+		return ""
+	var resolved: String = String(out[0]).strip_edges()
+	if resolved.contains("\n"):
+		resolved = resolved.split("\n")[0]
+	return resolved if resolved.is_absolute_path() else ""
+
+
+func _make_exclusive_base(base: String) -> bool:
+	# F5 (audit round 3): exclusive creation plus canonical validation. A
+	# pre-existing directory/file at the self-generated path (collision or a
+	# planted symlink) is NEVER reused; after creation the path must resolve
+	# to itself (no symlink component anywhere). Any failure returns false
+	# and the parent aborts before spawning the child.
+	if base.is_empty() or not base.is_absolute_path() or not base.begins_with(TEMP_BASE_PREFIX):
+		return false
+	if DirAccess.dir_exists_absolute(base) or FileAccess.file_exists(base):
+		return false
+	if DirAccess.make_dir_recursive_absolute(base) != OK or not DirAccess.dir_exists_absolute(base):
+		return false
+	var resolved: String = _canonicalize(base)
+	return resolved != "" and resolved == base
+
+
+func _rmrf_guarded(target: String) -> bool:
+	# Linux-only, strictly guarded removal of a self-generated temp base:
+	# only absolute paths under this suite's own prefix are ever touched.
+	if not target.is_absolute_path() or not target.begins_with(TEMP_BASE_PREFIX) or not DirAccess.dir_exists_absolute(target):
+		return false
+	var rm_out: Array = []
+	var rm_rc: int = OS.execute("rm", ["-rf", "--", target], rm_out, false)
+	return rm_rc == 0 and not DirAccess.dir_exists_absolute(target)
