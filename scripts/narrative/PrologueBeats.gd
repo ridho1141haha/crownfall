@@ -50,6 +50,8 @@ const PL_04_REPEATED_MARK: String = "pl_04_repeated_mark"
 const PL_05_FORGOTTEN_RUINS: String = "pl_05_forgotten_ruins"
 const PL_06_CROWNS_CALL: String = "pl_06_crowns_call"
 const PL_06_VISION_SEQUENCE_ID: String = "pl_06_vision"
+const PL_07_UNFINISHED_JOURNEY: String = "pl_07_unfinished_journey"
+const PL_08_SHIPWRECK: String = "pl_08_shipwreck"
 
 ## Presentation speaker for adult Monarch (exploration internal lines).
 const MONARCH: String = "Monarch"
@@ -74,6 +76,11 @@ const CUE_PL06_VISION_SYMBOL: String = "stage_pl06_vision_symbol"
 const CUE_PL06_VISION_FADING_LIGHT: String = "stage_pl06_vision_fading_light"
 const CUE_PL06_VISION_DESTRUCTION: String = "stage_pl06_vision_destruction"
 const CUE_PL06_AWAKENING: String = "stage_pl06_awakening"
+const CUE_PL07_DEPARTURE: String = "stage_pl07_departure"
+const CUE_PL07_OPEN_SEA: String = "stage_pl07_open_sea"
+const CUE_PL08_STORM_GATHERS: String = "stage_pl08_storm_gathers"
+const CUE_PL08_SHIPWRECK: String = "stage_pl08_shipwreck"
+const CUE_PL08_FADE_OUT: String = "stage_pl08_fade_out"
 
 const VISION_FRAGMENT_IDS: Array[String] = [
 	"vision_ancient_kingdom",
@@ -203,6 +210,40 @@ static func vision_sequence() -> Dictionary:
 	}
 
 
+## N4.5-A pl_07 Unfinished Journey sequence (existing allowlisted ops only).
+static func voyage_sequence() -> Dictionary:
+	return {
+		"id": PL_07_UNFINISHED_JOURNEY,
+		"skip_allowed": true,
+		"steps": [
+			{"op": "lock_control"},
+			{"op": "play_cue", "cue_id": CUE_PL07_DEPARTURE},
+			{"op": "wait", "seconds": 0.25},
+			{"op": "play_cue", "cue_id": CUE_PL07_OPEN_SEA},
+			{"op": "wait", "seconds": 0.3},
+			{"op": "finish"},
+		],
+	}
+
+
+## N4.5-A pl_08 Shipwreck sequence (existing allowlisted ops only).
+static func shipwreck_sequence() -> Dictionary:
+	return {
+		"id": PL_08_SHIPWRECK,
+		"skip_allowed": true,
+		"steps": [
+			{"op": "lock_control"},
+			{"op": "play_cue", "cue_id": CUE_PL08_STORM_GATHERS},
+			{"op": "wait", "seconds": 0.25},
+			{"op": "play_cue", "cue_id": CUE_PL08_SHIPWRECK},
+			{"op": "wait", "seconds": 0.3},
+			{"op": "play_cue", "cue_id": CUE_PL08_FADE_OUT},
+			{"op": "wait", "seconds": 0.2},
+			{"op": "finish"},
+		],
+	}
+
+
 ## Placeholder caption for a stage cue id (labelled placeholder; unknown ids
 ## fall back to a generic labelled caption so nothing unlabelled can show).
 static func stage_caption(cue_id: String) -> String:
@@ -227,6 +268,16 @@ static func stage_caption(cue_id: String) -> String:
 			return "[Placeholder art] Fragmented vision — a fading golden light"
 		CUE_PL06_VISION_DESTRUCTION:
 			return "[Placeholder art] Fragmented vision — interrupted images of collapse, cut short"
+		CUE_PL07_DEPARTURE:
+			return "[Placeholder art] Leaving the forgotten ruins behind — the search continues"
+		CUE_PL07_OPEN_SEA:
+			return "[Placeholder art] At sea — an uncharted course into open waters"
+		CUE_PL08_STORM_GATHERS:
+			return "[Placeholder art] Dark clouds gather — a sudden storm overtakes the ship"
+		CUE_PL08_SHIPWRECK:
+			return "[Placeholder art] Waves break across the deck — the vessel loses control"
+		CUE_PL08_FADE_OUT:
+			return "[Placeholder art] The wreck vanishes into darkness"
 		CUE_PL06_AWAKENING:
 			return "[Placeholder art] Faint golden resonance — recalling the childhood light, brief and uncontrolled"
 		_:

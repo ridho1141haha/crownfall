@@ -290,3 +290,6 @@ This section reflects the source baseline after N4.2 / PR #15 (`539f8564`). It d
 ---
 
 **END OF DOCUMENT**
+
+### N4.5-A Status Update (2026-11-19)
+- **N4.5-A: Voyage & Shipwreck (`IMPLEMENTED`)** — Implemented `pl_07_unfinished_journey` -> `pl_08_shipwreck` -> N4.5-A terminal boundary in `PrologueBeats.gd` and `PrologueShell.gd` with `tests/test_n45a_voyage_shipwreck.gd` registered in `tests/run_all.sh` and `.github/workflows/godot-ci.yml`. See `docs/narrative/N45A_IMPLEMENTATION_REPORT.md`. `pl_09` Forgotten Shore landing and `PlayerProfile.mark_prologue_completed()` remain unimplemented (N4.5-B scope); destination, ship origin, and storm cause remain OPEN.

@@ -258,6 +258,13 @@ jobs:
           ! grep -E "(SCRIPT ERROR:|Parser Error:|TEST FAILURE:)" /tmp/godot_n44_full_flow.log
           grep -q "PASS: All .* N44 Full Flow" /tmp/godot_n44_full_flow.log
 
+      - name: Run N45A Voyage & Shipwreck Tests
+        run: |
+          set -o pipefail
+          godot --headless --script res://tests/test_n45a_voyage_shipwreck.gd 2>&1 | tee /tmp/godot_n45a.log
+          ! grep -E "(SCRIPT ERROR:|Parser Error:|TEST FAILURE:)" /tmp/godot_n45a.log
+          grep -q "PASS: All .* N45A Voyage Shipwreck" /tmp/godot_n45a.log
+
       - name: Run N44 Step 3A Shrine Autosave Tests
         run: |
           set -o pipefail

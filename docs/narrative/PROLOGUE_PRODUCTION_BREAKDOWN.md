@@ -170,3 +170,6 @@ Keep N4 incremental. Each slice is a separate PR with one coherent responsibilit
 ## 6. Test criteria per beat (summary)
 
 Every beat must pass: plays exactly once per run in order; skip/cancel per policy restores control; no dialogue/sequence input leaks into movement or world commands; completion is recorded exactly once; scene transitions happen at most once; no `SCRIPT ERROR`/`Parser Error` in logs; windowed inspection confirms framing, text readability, and control handoff (pl_09).
+
+### N4.5-A Status Update (2026-11-19)
+- **N4.5-A: Voyage & Shipwreck (`IMPLEMENTED`)** — Implemented `pl_07_unfinished_journey` -> `pl_08_shipwreck` -> N4.5-A terminal boundary in `PrologueBeats.gd` and `PrologueShell.gd` with `tests/test_n45a_voyage_shipwreck.gd` registered in `tests/run_all.sh` and `.github/workflows/godot-ci.yml`. See `docs/narrative/N45A_IMPLEMENTATION_REPORT.md`. `pl_09` Forgotten Shore landing and `PlayerProfile.mark_prologue_completed()` remain unimplemented (N4.5-B scope); destination, ship origin, and storm cause remain OPEN.
