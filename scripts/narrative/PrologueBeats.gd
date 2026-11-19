@@ -65,6 +65,52 @@ const CUE_PL01_RUINS: String = "stage_pl01_ruins"
 const CUE_PL02_CHILDHOOD: String = "stage_pl02_childhood"
 const CUE_PL02_RESONANCE: String = "stage_pl02_resonance"
 
+## N4.4-B: canonical R12 vision data only. These are data accessors;
+## they do not activate pl_06 or execute a vision sequence.
+const CUE_PL06_VISION_KINGDOM: String = "stage_pl06_vision_kingdom"
+const CUE_PL06_VISION_SILHOUETTE: String = "stage_pl06_vision_silhouette"
+const CUE_PL06_VISION_SYMBOL: String = "stage_pl06_vision_symbol"
+const CUE_PL06_VISION_FADING_LIGHT: String = "stage_pl06_vision_fading_light"
+const CUE_PL06_VISION_DESTRUCTION: String = "stage_pl06_vision_destruction"
+const CUE_PL06_AWAKENING: String = "stage_pl06_awakening"
+
+const VISION_FRAGMENT_IDS: Array[String] = [
+	"vision_ancient_kingdom",
+	"vision_ruler_silhouette",
+	"vision_recurring_symbol",
+	"vision_fading_light",
+	"vision_interrupted_destruction",
+]
+
+## Provisional only: OPEN owner decision O5. Never wired to UI/input in N4.4-B.
+const ALTAR_PROMPT_PROPOSAL_TEXT: String = "[E] Touch the crown"
+
+const _VISION_FRAGMENTS: Array[Dictionary] = [
+	{"id": "vision_ancient_kingdom", "cue_id": CUE_PL06_VISION_KINGDOM, "subject": "ancient kingdom", "caption": "[Placeholder art] Fragmented vision — an unnamed ancient kingdom in brief flashes"},
+	{"id": "vision_ruler_silhouette", "cue_id": CUE_PL06_VISION_SILHOUETTE, "subject": "ruler's silhouette", "caption": "[Placeholder art] Fragmented vision — an unidentifiable ruler's silhouette"},
+	{"id": "vision_recurring_symbol", "cue_id": CUE_PL06_VISION_SYMBOL, "subject": "recurring symbol", "caption": "[Placeholder art] Fragmented vision — the recurring symbol"},
+	{"id": "vision_fading_light", "cue_id": CUE_PL06_VISION_FADING_LIGHT, "subject": "fading light", "caption": "[Placeholder art] Fragmented vision — a fading golden light"},
+	{"id": "vision_interrupted_destruction", "cue_id": CUE_PL06_VISION_DESTRUCTION, "subject": "interrupted destruction", "caption": "[Placeholder art] Fragmented vision — interrupted images of collapse, cut short"},
+]
+
+const _R13_PATTERNS: Array[String] = [
+	"(?i)\\bking\\b",
+	"(?i)\\bqueen\\b",
+	"(?i)\\bemperor\\b",
+	"(?i)\\bdynasty\\b",
+	"(?i)\\bbloodline\\b",
+	"(?i)\\bheir\\b",
+	"(?i)\\beclipse\\b.*\\bcaus(e|ed|ing)\\b",
+	"(?i)\\bcaus(e|ed|ing)\\b.*\\beclipse\\b",
+	"(?i)\\bforged\\b.*\\bcrown\\b",
+	"(?i)\\borigin\\b.*\\bcrown\\b",
+	"(?i)\\bcrown\\b.*\\borigin\\b",
+	"(?i)\\bgrant(s|ed|ing)?\\b.*\\bpower\\b",
+	"(?i)\\bsource\\b.*\\bpower\\b",
+	"(?i)\\bpower\\s+source\\b",
+	"(?i)\\bpower\\b.*\\bsource\\b",
+]
+
 
 ## Returns the authored sequence for a beat id, deep-copied so callers can
 ## never mutate the authored content. Unknown ids return {}.
@@ -144,8 +190,113 @@ static func stage_caption(cue_id: String) -> String:
 			return "[Placeholder art] Childhood memory — an old stone wall"
 		CUE_PL02_RESONANCE:
 			return "[Placeholder art] Thin golden light in the stone cracks — brief, uncontrolled"
+		CUE_PL06_VISION_KINGDOM:
+			return "[Placeholder art] Fragmented vision — an unnamed ancient kingdom in brief flashes"
+		CUE_PL06_VISION_SILHOUETTE:
+			return "[Placeholder art] Fragmented vision — an unidentifiable ruler's silhouette"
+		CUE_PL06_VISION_SYMBOL:
+			return "[Placeholder art] Fragmented vision — the recurring symbol"
+		CUE_PL06_VISION_FADING_LIGHT:
+			return "[Placeholder art] Fragmented vision — a fading golden light"
+		CUE_PL06_VISION_DESTRUCTION:
+			return "[Placeholder art] Fragmented vision — interrupted images of collapse, cut short"
+		CUE_PL06_AWAKENING:
+			return "[Placeholder art] Faint golden resonance — recalling the childhood light, brief and uncontrolled"
 		_:
 			return "[Placeholder stage] %s" % cue_id
+
+
+## Returns a deep copy of the canonical five R12 fragments.
+static func vision_fragments() -> Array[Dictionary]:
+	var result: Array[Dictionary] = []
+	for fragment: Dictionary in _VISION_FRAGMENTS:
+		result.append(fragment.duplicate(true))
+	return result
+
+
+## Awakening is a separate cue, never a sixth R12 vision fragment.
+static func awakening_cue_entry() -> Dictionary:
+	return {
+		"cue_id": CUE_PL06_AWAKENING,
+		"caption": stage_caption(CUE_PL06_AWAKENING),
+	}
+
+
+## Fail-closed R12 schema and R13 lore fence. Regex is a regression guard;
+## semantic lore approval remains a human owner-review responsibility.
+static func validate_vision_fragments(fragments: Variant) -> Dictionary:
+	var errors: Array[String] = []
+	if typeof(fragments) != TYPE_ARRAY:
+		errors.append("Vision fragments must be an Array")
+		return {"ok": false, "errors": errors}
+	var raw: Array = fragments as Array
+	if raw.size() != VISION_FRAGMENT_IDS.size():
+		errors.append("Vision fragments must contain exactly five entries")
+		return {"ok": false, "errors": errors}
+
+	var expected_cues: Dictionary = {
+		"vision_ancient_kingdom": CUE_PL06_VISION_KINGDOM,
+		"vision_ruler_silhouette": CUE_PL06_VISION_SILHOUETTE,
+		"vision_recurring_symbol": CUE_PL06_VISION_SYMBOL,
+		"vision_fading_light": CUE_PL06_VISION_FADING_LIGHT,
+		"vision_interrupted_destruction": CUE_PL06_VISION_DESTRUCTION,
+	}
+	var allowed_keys: Array[String] = ["id", "cue_id", "subject", "caption"]
+	var seen_ids: Dictionary = {}
+	var seen_cues: Dictionary = {}
+	for index: int in range(raw.size()):
+		if typeof(raw[index]) != TYPE_DICTIONARY:
+			errors.append("vision_fragments[%d] must be a Dictionary" % index)
+			continue
+		var item: Dictionary = raw[index] as Dictionary
+		var valid_keys: bool = true
+		for key: Variant in item.keys():
+			if String(key) not in allowed_keys:
+				errors.append("vision_fragments[%d] has unknown key '%s'" % [index, String(key)])
+				valid_keys = false
+		if not valid_keys:
+			continue
+		for key: String in allowed_keys:
+			if not item.has(key):
+				errors.append("vision_fragments[%d] is missing '%s'" % [index, key])
+		if not item.has_all(allowed_keys):
+			continue
+		if typeof(item["id"]) != TYPE_STRING or typeof(item["cue_id"]) != TYPE_STRING \
+				or typeof(item["subject"]) != TYPE_STRING or typeof(item["caption"]) != TYPE_STRING:
+			errors.append("vision_fragments[%d] fields must all be Strings" % index)
+			continue
+		var fragment_id: String = String(item["id"])
+		var cue_id: String = String(item["cue_id"])
+		var subject: String = String(item["subject"])
+		var caption: String = String(item["caption"])
+		if fragment_id.strip_edges().is_empty() or fragment_id.length() > NarrativeData.MAX_ID_LENGTH:
+			errors.append("vision_fragments[%d] id must be 1-%d characters" % [index, NarrativeData.MAX_ID_LENGTH])
+		if not VISION_FRAGMENT_IDS.has(fragment_id):
+			errors.append("vision_fragments[%d] has unknown id '%s'" % [index, fragment_id])
+		if seen_ids.has(fragment_id):
+			errors.append("vision_fragments[%d] duplicates id '%s'" % [index, fragment_id])
+		seen_ids[fragment_id] = true
+		if cue_id.strip_edges().is_empty() or cue_id.length() > NarrativeData.MAX_ID_LENGTH:
+			errors.append("vision_fragments[%d] cue_id must be 1-%d characters" % [index, NarrativeData.MAX_ID_LENGTH])
+		if seen_cues.has(cue_id):
+			errors.append("vision_fragments[%d] duplicates cue_id '%s'" % [index, cue_id])
+		seen_cues[cue_id] = true
+		if expected_cues.has(fragment_id) and cue_id != String(expected_cues[fragment_id]):
+			errors.append("vision_fragments[%d] cue_id does not match id '%s'" % [index, fragment_id])
+		if subject.strip_edges().is_empty() or subject.length() > NarrativeData.MAX_TEXT_LENGTH:
+			errors.append("vision_fragments[%d] subject must be 1-%d characters" % [index, NarrativeData.MAX_TEXT_LENGTH])
+		if caption.strip_edges().is_empty() or not caption.begins_with("[Placeholder art]") or caption.length() > NarrativeData.MAX_TEXT_LENGTH:
+			errors.append("vision_fragments[%d] caption must be labelled placeholder text of at most %d characters" % [index, NarrativeData.MAX_TEXT_LENGTH])
+		var content: String = subject + " " + caption
+		for pattern: String in _R13_PATTERNS:
+			var regex := RegEx.new()
+			if regex.compile(pattern) != OK:
+				errors.append("R13 validator pattern failed to compile: %s" % pattern)
+				break
+			if regex.search(content) != null:
+				errors.append("vision_fragments[%d] violates R13 content fence" % index)
+				break
+	return {"ok": errors.is_empty(), "errors": errors}
 
 
 ## The authored beats. Data only — nothing here executes anything.
