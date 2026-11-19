@@ -235,7 +235,7 @@ The skip path is a distinct completion path (exactly-once rules §5.5-3); whethe
 **Option A** (consistency + proven machinery); B only if the owner wants the peak protected.
 
 ### Owner approval
-OPEN — slice D implements A's behavior as the default and flags the PR for this decision.
+**APPROVED (owner ruling, 2026-11-19 — Option A):** per-beat skip allowed at any point during `pl_06`, including during vision playback and post-vision dialogue; terminates sequence safely, releases locks, hides overlay/prompt, records `pl_06` once, never starts `pl_07`.
 
 ---
 

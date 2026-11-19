@@ -238,13 +238,14 @@ func _test_shell_cancel_unload_and_ownership() -> void:
 	await physics_frame
 	_check(String(shell.call("active_exploration_beat")) == PrologueBeats.PL_06_CROWNS_CALL and state.completed_count() == 5, "pl_05 recorded once and pl_06 active")
 
-	# Default N4.4-C shell (no N4.4-D vision starter) rejects cleanly so player is NEVER stuck locked.
+	# Rejecting vision starter releases lock and permits retry cleanly.
+	shell.call("set_awakening_vision_starter", func(_g: int) -> bool: return false)
 	await physics_frame
 	_check(ruins.is_crown_prompt_visible(), "shell flow shows crown prompt in pl_06")
 	await _pulse_interact()
-	_check(int(shell.call("crown_awakening_requests_received")) == 1 and int(shell.call("crown_awakening_rejections")) == 2, "default shell receives and rejects unwired N4.4-D handoff")
-	_check(not bool(shell.call("is_awakening_handoff_active")) and not stage.is_awakening_locked() and not stage.is_awakening_armed() and stage.is_input_enabled(), "default shell rejection releases lock, restores input, and never leaves actor stuck")
-	_check(not ruins.is_crown_consumed() and state.completed_count() == 5 and not bool(state.is_completed(PrologueBeats.PL_06_CROWNS_CALL)), "default rejection permits retry and records no pl_06 completion")
+	_check(int(shell.call("crown_awakening_requests_received")) == 1 and int(shell.call("crown_awakening_rejections")) == 2, "rejecting starter receives and rejects handoff cleanly")
+	_check(not bool(shell.call("is_awakening_handoff_active")) and not stage.is_awakening_locked() and not stage.is_awakening_armed() and stage.is_input_enabled(), "starter rejection releases lock, restores input, and never leaves actor stuck")
+	_check(not ruins.is_crown_consumed() and state.completed_count() == 5 and not bool(state.is_completed(PrologueBeats.PL_06_CROWNS_CALL)), "rejection permits retry and records no pl_06 completion")
 
 	# Installed N4.4-D seam: first call rejects (retry allowed), second call accepts.
 	var starter_calls: Array[int] = []

@@ -102,6 +102,8 @@ var _reveal_active: bool = false
 var _reveal_alpha: float = 0.0
 var _crown_prompt: Label = null
 var _crown_consumed: bool = false
+var _vision_backdrop: ColorRect = null
+var _vision_caption: Label = null
 
 
 func _ready() -> void:
@@ -188,6 +190,8 @@ func build(road_min_x: float, road_max_x: float, ground_y: float, view_top: floa
 		_reveal_root = null
 		_reveal_veil = null
 		_crown_prompt = null
+		_vision_backdrop = null
+		_vision_caption = null
 	return _valid
 
 
@@ -518,6 +522,25 @@ func _create_chamber_reveal_layer() -> CanvasLayer:
 	root_control.add_child(bottom_bar)
 	layer_node.add_child(root_control)
 	layer_node.visible = false
+	var vision_bg := ColorRect.new()
+	vision_bg.name = "VisionBackdrop"
+	vision_bg.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	vision_bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	vision_bg.color = Color(0.02, 0.015, 0.035, 0.94)
+	vision_bg.visible = false
+	var vision_lbl := Label.new()
+	vision_lbl.name = "VisionCaption"
+	vision_lbl.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_WIDE)
+	vision_lbl.offset_top = -120.0
+	vision_lbl.offset_bottom = -64.0
+	vision_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	vision_lbl.add_theme_font_size_override("font_size", 20)
+	vision_lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	vision_lbl.visible = false
+	vision_bg.add_child(vision_lbl)
+	root_control.add_child(vision_bg)
+	_vision_backdrop = vision_bg
+	_vision_caption = vision_lbl
 	_reveal_root = root_control
 	_reveal_veil = veil
 	return layer_node
@@ -560,6 +583,7 @@ func teardown() -> void:
 		_reveal_veil.color.a = 0.0
 	if _reveal_layer != null and is_instance_valid(_reveal_layer):
 		_reveal_layer.visible = false
+	hide_vision_overlay()
 	if _crown_prompt != null and is_instance_valid(_crown_prompt):
 		_crown_prompt.visible = false
 
@@ -580,3 +604,31 @@ func _create_crown_prompt(ground_y: float) -> Label:
 	label.position = Vector2(altar_x() - 70.0, ground_y - CROWN_PROMPT_HEIGHT_ABOVE_GROUND)
 	label.visible = false
 	return label
+
+
+func show_vision_cue(cue_id: String) -> void:
+	if not _valid or _torn_down:
+		return
+	if _reveal_layer != null and is_instance_valid(_reveal_layer):
+		_reveal_layer.visible = true
+	if _vision_backdrop != null and is_instance_valid(_vision_backdrop):
+		_vision_backdrop.visible = true
+	if _vision_caption != null and is_instance_valid(_vision_caption):
+		_vision_caption.text = PrologueBeats.stage_caption(cue_id)
+		_vision_caption.visible = true
+
+
+func hide_vision_overlay() -> void:
+	if _vision_backdrop != null and is_instance_valid(_vision_backdrop):
+		_vision_backdrop.visible = false
+	if _vision_caption != null and is_instance_valid(_vision_caption):
+		_vision_caption.visible = false
+		_vision_caption.text = ""
+
+
+func is_vision_overlay_visible() -> bool:
+	return _vision_backdrop != null and is_instance_valid(_vision_backdrop) and _vision_backdrop.visible
+
+
+func vision_caption_text() -> String:
+	return _vision_caption.text if _vision_caption != null and is_instance_valid(_vision_caption) else ""

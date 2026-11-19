@@ -795,7 +795,8 @@ func _process(_delta: float) -> bool:
 			_check(bool(state.is_completed(BEAT_05)) and state.completed_count() == 5, "B4: pl_05 Skip records pl_05 exactly once")
 			_check(String(shell.call("active_exploration_beat")) == BEAT_06 and not bool(shell.call("n43_segment_complete")), "B4: pl_05 Skip activates DORMANT pl_06 (segment stays live)")
 			_check(stage != null and not stage.altar_request_emitted(), "B4: the skips record through the shell — the stage never emitted the altar request")
-			_check(not shell.call("skip_current_exploration_beat") and state.completed_count() == 5, "B4: pl_06 Skip is not implemented in N4.4-A (rejected, records nothing)")
+			_check(shell.call("skip_current_exploration_beat") and state.completed_count() == 6 and bool(state.is_completed(BEAT_06)) and bool(shell.call("n43_segment_complete")), "B4: pl_06 Skip records pl_06 once and ends at N4.4 boundary (O4 Option A)")
+			_check(not shell.call("skip_current_exploration_beat") and state.completed_count() == 6, "B4: duplicate pl_06 Skip is rejected (never starts pl_07)")
 			_check(shell.call("request_main_menu_return") and _shell_exits.size() == 1 and String(_shell_exits[0]) == MAIN_MENU_SCENE, "B4: the development exit transitions exactly once from the dormant pl_06 state")
 			change_scene_to_file(MAIN_SCENE)
 			_stage = 25
@@ -848,7 +849,8 @@ func _process(_delta: float) -> bool:
 			_check(bool(state.is_completed(BEAT_04)) and state.completed_count() == 4 and String(shell.call("active_exploration_beat")) == BEAT_05, "B5: the Skip records pl_04 exactly once and activates pl_05 (O6 documented default)")
 			_check(inspectables.distinct_inspected_count() == 1 and not _recognition_seen and _inspection_emissions == 0, "B5: the partial inspection never opened the recognition and emitted no completion request")
 			_check(shell.call("skip_current_exploration_beat") and String(shell.call("active_exploration_beat")) == BEAT_06 and state.completed_count() == 5, "B5: the follow-up pl_05 Skip records pl_05 once and activates DORMANT pl_06")
-			_check(not shell.call("skip_current_exploration_beat") and state.completed_count() == 5, "B5: pl_06 Skip is not implemented in N4.4-A (rejected, records nothing)")
+			_check(shell.call("skip_current_exploration_beat") and state.completed_count() == 6 and bool(state.is_completed(BEAT_06)) and bool(shell.call("n43_segment_complete")), "B5: pl_06 Skip records pl_06 once and ends at N4.4 boundary (O4 Option A)")
+			_check(not shell.call("skip_current_exploration_beat") and state.completed_count() == 6, "B5: duplicate pl_06 Skip is rejected (never starts pl_07)")
 			_check(shell.call("request_main_menu_return") and _shell_exits.size() == 1 and String(_shell_exits[0]) == MAIN_MENU_SCENE, "B5: the development exit transitions exactly once")
 			change_scene_to_file(MAIN_SCENE)
 			_stage = 29

@@ -58,6 +58,7 @@ signal mark_inspection_completed()
 ## table: exit condition "Reach altar"), NOT the N4.4-C crown interaction.
 signal ruins_altar_reached()
 signal crown_awakening_requested(generation: int)
+signal crown_awakening_completed()
 
 ## Authored stage layout (labelled placeholders; zoom 1.5 on a 1280x720
 ## viewport shows an 853x480 world band, so the band actually pans).
@@ -114,6 +115,7 @@ var _altar_request_emitted: bool = false
 ## for a beat that already moved on.
 var _dialogue_generation: int = 0
 var _awakening_armed: bool = false
+var _crown_completion_emitted: bool = false
 var _awakening_generation: int = 0
 var _awakening_handoff_handler: Callable = Callable()
 
@@ -466,11 +468,39 @@ func _begin_crown_awakening() -> void:
 			reject_crown_awakening(gen, true)
 
 
+func crown_completion_emitted() -> bool:
+	return _crown_completion_emitted
+
+
+func present_post_vision_dialogue(generation: int) -> void:
+	if not is_awakening_generation_current(generation):
+		return
+	if _ruins != null and is_instance_valid(_ruins):
+		_ruins.hide_vision_overlay()
+	var lines: Array[Dictionary] = PrologueBeats.exploration_post_vision_lines()
+	if lines.is_empty() or _panel == null or not is_instance_valid(_panel):
+		return
+	_panel.open_lines(lines)
+	await _panel.dialogue_finished
+	if generation != _awakening_generation or not _awakening_armed or _active_beat != PrologueBeats.PL_06_CROWNS_CALL or _torn_down or _segment_ended:
+		return
+	_awakening_generation += 1
+	_awakening_armed = false
+	if _awakening_lock != null:
+		_awakening_lock.unlock()
+	if _crown_completion_emitted:
+		return
+	_crown_completion_emitted = true
+	crown_awakening_completed.emit()
+
+
 func _invalidate_awakening_state() -> void:
 	_awakening_generation += 1
 	_awakening_armed = false
 	if _awakening_lock != null:
 		_awakening_lock.unlock()
+	if _ruins != null and is_instance_valid(_ruins):
+		_ruins.hide_vision_overlay()
 
 
 ## pl_04 per-frame logic (N4.3-B): prompt visibility follows the nearest

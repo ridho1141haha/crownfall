@@ -49,6 +49,7 @@ const PL_03_WANDERER: String = "pl_03_wanderer"
 const PL_04_REPEATED_MARK: String = "pl_04_repeated_mark"
 const PL_05_FORGOTTEN_RUINS: String = "pl_05_forgotten_ruins"
 const PL_06_CROWNS_CALL: String = "pl_06_crowns_call"
+const PL_06_VISION_SEQUENCE_ID: String = "pl_06_vision"
 
 ## Presentation speaker for adult Monarch (exploration internal lines).
 const MONARCH: String = "Monarch"
@@ -174,6 +175,32 @@ static func exploration_recognition_lines() -> Array[Dictionary]:
 		{"speaker": MONARCH, "text": "I've seen this mark before..."},
 		{"speaker": MONARCH, "text": "Why does it keep appearing?"},
 	]
+
+
+## Approved R15 post-vision dialogue lines (verbatim, in order).
+static func exploration_post_vision_lines() -> Array[Dictionary]:
+	return [
+		{"speaker": MONARCH, "text": "What... was that?"},
+		{"speaker": MONARCH, "text": "I've never seen those places before."},
+	]
+
+
+## N4.4-D presentation-only vision sequence (existing allowlisted ops only).
+static func vision_sequence() -> Dictionary:
+	var steps: Array[Dictionary] = [
+		{"op": "lock_control"},
+		{"op": "play_cue", "cue_id": CUE_PL06_AWAKENING},
+		{"op": "wait", "seconds": 0.15},
+	]
+	for fragment: Dictionary in _VISION_FRAGMENTS:
+		steps.append({"op": "play_cue", "cue_id": String(fragment["cue_id"])})
+		steps.append({"op": "wait", "seconds": 0.12})
+	steps.append({"op": "finish"})
+	return {
+		"id": PL_06_VISION_SEQUENCE_ID,
+		"skip_allowed": true,
+		"steps": steps,
+	}
 
 
 ## Placeholder caption for a stage cue id (labelled placeholder; unknown ids

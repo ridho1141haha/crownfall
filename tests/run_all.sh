@@ -175,6 +175,7 @@ run_godot "N43C full flow" "--script res://tests/test_n43c_full_flow.gd" "PASS: 
 run_godot "N44A ruins foundation" "--script res://tests/test_n44a_ruins_foundation.gd" "PASS: All .* N44A Ruins Foundation"
 run_godot "N44B chamber presentation" "--script res://tests/test_n44b_chamber_presentation.gd" "PASS: All .* N44B Chamber Presentation"
 run_godot "N44C crown interaction" "--script res://tests/test_n44c_crown_interaction.gd" "PASS: All .* N44C Crown Interaction"
+run_godot "N44D vision sequence" "--script res://tests/test_n44d_vision_sequence.gd" "PASS: All .* N44D Vision Sequence"
 run_godot "N44 Step3 shrine autosave" "--script res://tests/test_n44_step3a_shrine_autosave.gd" "PASS: All .* N44 Step3 3A"
 run_godot "N44 Step3 world_time types" "--script res://tests/test_n44_step3b_world_time_types.gd" "PASS: All .* N44 Step3 3B"
 run_godot "N44 Step3 rollback era" "--script res://tests/test_n44_step3c_rollback_era.gd" "PASS: All .* N44 Step3 3C"
