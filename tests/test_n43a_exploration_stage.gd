@@ -536,8 +536,8 @@ func _process(_delta: float) -> bool:
 			_check(String(shell.call("active_exploration_beat")) == BEAT_06 and not bool(shell.call("n43_segment_complete")), "pl_05 Skip activates DORMANT pl_06 (segment stays live)")
 			_check(stage != null and not stage.altar_request_emitted(), "the skip records through the shell — the stage never emitted the altar request")
 			_check(stage == null or not stage.is_dialogue_locked(), "no stage-owned actor lock is held in dormant pl_06")
-			_check(not shell.call("skip_current_exploration_beat"), "pl_06 Skip is not implemented in N4.4-A (rejected)")
-			_check(state.completed_count() == 5, "the rejected Skip records nothing")
+			_check(shell.call("skip_current_exploration_beat") and bool(state.is_completed(BEAT_06)) and bool(shell.call("n43_segment_complete")), "pl_06 Skip records pl_06 once and ends at N4.4 boundary (O4 Option A)")
+			_check(not shell.call("skip_current_exploration_beat") and state.completed_count() == 6, "duplicate pl_06 Skip is rejected and records nothing")
 			var profile_fixture: String = FileAccess.get_file_as_string(PROFILE_FALSE)
 			_check(profile_fixture == JSON.stringify({"schema_version": 1, "prologue_completed_once": false}, "\t"), "Skip never touches the player profile fixture (no completion flag)")
 			_stage = 16
