@@ -57,6 +57,7 @@ signal mark_inspection_completed()
 ## records; reaching the altar is the pl_05 completion boundary (runtime beat
 ## table: exit condition "Reach altar"), NOT the N4.4-C crown interaction.
 signal ruins_altar_reached()
+signal crown_awakening_requested(generation: int)
 
 ## Authored stage layout (labelled placeholders; zoom 1.5 on a 1280x720
 ## viewport shows an 853x480 world band, so the band actually pans).
@@ -94,6 +95,7 @@ var _inspectables: PrologueMarkInspectables = null
 ## road). Null only before setup or after a failed build (fail-closed).
 var _ruins: PrologueRuinsEnvironment = null
 var _dialogue_lock: PlayerControlLock = null
+var _awakening_lock: PlayerControlLock = null
 var _active_beat: String = ""
 var _built: bool = false
 var _torn_down: bool = false
@@ -111,6 +113,9 @@ var _altar_request_emitted: bool = false
 ## invalidate the presentation so a resumed await can never re-enable input
 ## for a beat that already moved on.
 var _dialogue_generation: int = 0
+var _awakening_armed: bool = false
+var _awakening_generation: int = 0
+var _awakening_handoff_handler: Callable = Callable()
 
 
 ## Builds the environment and the dedicated explorer. Fail-closed and atomic:
@@ -126,6 +131,7 @@ func setup(panel: DialoguePanel, explorer_texture: Texture2D) -> bool:
 		return false
 	_panel = panel
 	_dialogue_lock = PlayerControlLock.new()
+	_awakening_lock = PlayerControlLock.new()
 	_build_environment()
 	# N4.4-A (D6): the ruins environment is built fail-closed BEFORE the
 	# inspectables and the actor — a failed build fails the whole setup, so
@@ -210,6 +216,8 @@ func set_active_beat(beat_id: String) -> void:
 		# (e.g. a skip that lands between the recognition opening and the next
 		# gated poll would otherwise carry a visible "[E] Inspect" into pl_05).
 		_inspectables.set_prompt_target("")
+	if beat_id != PrologueBeats.PL_06_CROWNS_CALL and _ruins != null and is_instance_valid(_ruins):
+		_ruins.set_crown_prompt_visible(false)
 	if beat_id != PrologueBeats.PL_03_WANDERER:
 		_explorer.set_input_enabled(true)
 
@@ -238,6 +246,7 @@ func end_segment() -> void:
 	if _segment_ended:
 		return
 	_segment_ended = true
+	_invalidate_awakening_state()
 	close_active_dialogue()
 	if _inspectables != null and is_instance_valid(_inspectables):
 		_inspectables.set_prompt_target("")
@@ -258,6 +267,7 @@ func teardown() -> void:
 	_torn_down = true
 	# Invalidate the dialogue coroutine first so a resumed await observes the
 	# torn-down state and never re-enables input for a dead segment.
+	_invalidate_awakening_state()
 	close_active_dialogue()
 	if _inspectables != null and is_instance_valid(_inspectables):
 		_inspectables.set_prompt_target("")
@@ -284,6 +294,44 @@ func active_beat() -> String:
 
 func is_dialogue_locked() -> bool:
 	return _dialogue_lock != null and _dialogue_lock.is_locked()
+
+
+func is_awakening_locked() -> bool:
+	return _awakening_lock != null and _awakening_lock.is_locked()
+
+
+func is_actor_locked() -> bool:
+	return is_dialogue_locked() or is_awakening_locked()
+
+
+func is_awakening_armed() -> bool:
+	return _awakening_armed
+
+
+func awakening_generation() -> int:
+	return _awakening_generation
+
+
+func is_awakening_generation_current(generation: int) -> bool:
+	return _awakening_armed and not _torn_down and not _segment_ended and generation == _awakening_generation
+
+
+func set_awakening_handoff_handler(handler: Callable) -> void:
+	_awakening_handoff_handler = handler
+
+
+func reject_crown_awakening(generation: int, allow_retry: bool = true) -> bool:
+	if not _awakening_armed or generation != _awakening_generation or _torn_down or _segment_ended:
+		return false
+	_awakening_generation += 1
+	_awakening_armed = false
+	if _awakening_lock != null:
+		_awakening_lock.unlock()
+	if allow_retry and _ruins != null and is_instance_valid(_ruins):
+		_ruins.release_crown_interaction_for_retry()
+	if _explorer != null and is_instance_valid(_explorer) and not is_dialogue_locked():
+		_explorer.set_input_enabled(true)
+	return true
 
 
 func is_input_enabled() -> bool:
@@ -338,6 +386,8 @@ func _physics_process(_delta: float) -> void:
 		_process_pl_04()
 	elif _active_beat == PrologueBeats.PL_05_FORGOTTEN_RUINS:
 		_process_pl_05()
+	elif _active_beat == PrologueBeats.PL_06_CROWNS_CALL:
+		_process_pl_06()
 
 
 ## Exploration condition: the handoff area completes pl_03 when the actor
@@ -375,6 +425,52 @@ func _process_pl_05() -> void:
 	if _explorer.position.x >= _ruins.altar_x():
 		_altar_request_emitted = true
 		ruins_altar_reached.emit()
+
+
+func _process_pl_06() -> void:
+	if _ruins == null or not _ruins.is_valid() or _ruins.is_torn_down():
+		return
+	if _explorer == null or not is_instance_valid(_explorer):
+		return
+	if _awakening_armed or not is_input_enabled() or is_actor_locked() or (_panel != null and is_instance_valid(_panel) and _panel.is_open()):
+		_ruins.set_crown_prompt_visible(false)
+		return
+	var eligible: bool = _ruins.is_crown_eligible(_explorer.position.x)
+	_ruins.set_crown_prompt_visible(eligible)
+	if not eligible:
+		return
+	if not Input.is_action_just_pressed("interact"):
+		return
+	if not _ruins.consume_crown_interaction():
+		return
+	_begin_crown_awakening()
+
+
+func _begin_crown_awakening() -> void:
+	_awakening_generation += 1
+	var gen: int = _awakening_generation
+	_awakening_armed = true
+	if _ruins != null and is_instance_valid(_ruins):
+		_ruins.set_crown_prompt_visible(false)
+	if _awakening_lock != null and _explorer != null and is_instance_valid(_explorer):
+		_awakening_lock.lock(_explorer)
+	if _explorer != null and is_instance_valid(_explorer):
+		_explorer.set_input_enabled(false)
+		_explorer.freeze()
+	crown_awakening_requested.emit(gen)
+	if gen != _awakening_generation or not _awakening_armed or _torn_down or _segment_ended:
+		return
+	if _awakening_handoff_handler.is_valid():
+		var accepted: bool = bool(_awakening_handoff_handler.call(gen))
+		if not accepted:
+			reject_crown_awakening(gen, true)
+
+
+func _invalidate_awakening_state() -> void:
+	_awakening_generation += 1
+	_awakening_armed = false
+	if _awakening_lock != null:
+		_awakening_lock.unlock()
 
 
 ## pl_04 per-frame logic (N4.3-B): prompt visibility follows the nearest

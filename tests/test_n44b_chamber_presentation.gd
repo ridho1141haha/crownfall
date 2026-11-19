@@ -134,7 +134,7 @@ func _test_ruins_lifecycle() -> void:
 	var staging := ruins.get_child(0) as Node2D
 	_check(staging.get_node_or_null("ZonePolish") != null and staging.get_node_or_null("ChamberRevealLayer") == layer, "zone polish and reveal layer stay inside the single staging child")
 	_check(reveal_root.get_node_or_null("RevealLetterboxTop") != null and reveal_root.get_node_or_null("RevealLetterboxBottom") != null, "both persistent letterbox bars are present")
-	_check(ruins.find_children("*", "Label", true, false).is_empty() and ruins.find_children("*", "Button", true, false).is_empty(), "ruins presentation contains no prompt UI or interaction controls")
+	_check(not ruins.is_crown_prompt_visible() and ruins.find_children("*", "Button", true, false).is_empty(), "ruins presentation keeps the N4.4-C crown prompt hidden until pl_06 and contains no buttons")
 	_check(veil != null and veil.mouse_filter == Control.MOUSE_FILTER_IGNORE and veil.anchor_right == 1.0 and veil.anchor_bottom == 1.0, "veil is full-rect and ignores mouse input")
 	var altar := ruins.altar_group()
 	ruins.update_explorer_x(PrologueRuinsEnvironment.INTERIOR_END_X)

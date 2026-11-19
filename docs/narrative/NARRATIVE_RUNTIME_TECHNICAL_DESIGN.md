@@ -104,6 +104,8 @@ Explicitly excluded (no arbitrary script execution, no eval, no JSON-driven GDSc
 
 ### Guards — DECIDED
 
+- **N4.4-C crown interaction handshake (`PrologueRuinsEnvironment` + `PrologueExplorationStage`):** `pl_06` crown eligibility requires chamber reveal, range (`CROWN_INTERACT_RANGE_X`), non-consumed state, and the full D5 gate. Contact acquires `_awakening_lock`, bumps `_awakening_generation`, arms awakening without emitting `pl_06` completion, and emits `crown_awakening_requested(generation)`; rejected starts release locks and permit retry behind generation guards; `pl_05` stays prompt-free (R6).
+
 - Data is schema-validated before playback; unknown ops/fields fail closed at load.
 - Completion emits `sequence_completed` **exactly once** per run (guarded by `NarrativeState`).
 - `SequenceRunner.skip()` remains a per-sequence runtime operation: it closes dialogue, executes pending `change_scene` at most once, restores control, then completes exactly once. Whole-Prologue Skip is a separate New Game menu decision: hidden on the first-ever playthrough and offered only after `PlayerProfile.prologue_completed_once` is true. Individual beat/cutscene skip flags remain content-level N4 decisions.

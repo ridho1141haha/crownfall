@@ -86,6 +86,9 @@ const GLYPH_VERTICAL_SIZE: Vector2 = Vector2(3.0, 12.0)
 const GLYPH_VERTICAL_OFFSET: Vector2 = Vector2(-1.5, -6.0)
 const GLYPH_HORIZONTAL_SIZE: Vector2 = Vector2(10.0, 3.0)
 const GLYPH_HORIZONTAL_OFFSET: Vector2 = Vector2(-5.0, -1.5)
+const CROWN_INTERACT_RANGE_X: float = 64.0
+const CROWN_PROMPT_HEIGHT_ABOVE_GROUND: float = 56.0
+const CROWN_PROMPT_COLOR: Color = Color(0.95, 0.9, 0.75, 1.0)
 
 var _valid: bool = false
 var _zone_state: int = ZONE_EXTERIOR
@@ -97,6 +100,8 @@ var _reveal_root: Control = null
 var _reveal_veil: ColorRect = null
 var _reveal_active: bool = false
 var _reveal_alpha: float = 0.0
+var _crown_prompt: Label = null
+var _crown_consumed: bool = false
 
 
 func _ready() -> void:
@@ -167,6 +172,12 @@ func build(road_min_x: float, road_max_x: float, ground_y: float, view_top: floa
 		else:
 			staging.add_child(_reveal_layer)
 	if ok:
+		_crown_prompt = _create_crown_prompt(ground_y)
+		if _crown_prompt == null:
+			ok = false
+		else:
+			staging.add_child(_crown_prompt)
+	if ok:
 		# Commit: every node verified non-null — the construction goes live.
 		add_child(staging)
 		_valid = true
@@ -176,6 +187,7 @@ func build(road_min_x: float, road_max_x: float, ground_y: float, view_top: floa
 		_reveal_layer = null
 		_reveal_root = null
 		_reveal_veil = null
+		_crown_prompt = null
 	return _valid
 
 
@@ -220,6 +232,47 @@ func altar_x() -> float:
 ## The committed altar group (test observability; presentation only).
 func altar_group() -> Node2D:
 	return _altar_group
+
+
+func is_crown_eligible(at_x: float) -> bool:
+	if not _valid or _torn_down or not _chamber_revealed or _crown_consumed:
+		return false
+	return absf(at_x - altar_x()) <= CROWN_INTERACT_RANGE_X
+
+
+func set_crown_prompt_visible(show_prompt: bool) -> void:
+	if _crown_prompt == null or not is_instance_valid(_crown_prompt):
+		return
+	if not _valid or _torn_down or not _chamber_revealed or _crown_consumed:
+		_crown_prompt.visible = false
+		return
+	_crown_prompt.visible = show_prompt
+
+
+func is_crown_prompt_visible() -> bool:
+	return _crown_prompt != null and is_instance_valid(_crown_prompt) and _crown_prompt.visible
+
+
+func crown_prompt() -> Label:
+	return _crown_prompt
+
+
+func consume_crown_interaction() -> bool:
+	if not _valid or _torn_down or not _chamber_revealed or _crown_consumed:
+		return false
+	_crown_consumed = true
+	set_crown_prompt_visible(false)
+	return true
+
+
+func release_crown_interaction_for_retry() -> void:
+	if not _valid or _torn_down:
+		return
+	_crown_consumed = false
+
+
+func is_crown_consumed() -> bool:
+	return _crown_consumed
 
 
 ## Advances the one-way zone state from the explorer's x. Backtracking west
@@ -507,7 +560,23 @@ func teardown() -> void:
 		_reveal_veil.color.a = 0.0
 	if _reveal_layer != null and is_instance_valid(_reveal_layer):
 		_reveal_layer.visible = false
+	if _crown_prompt != null and is_instance_valid(_crown_prompt):
+		_crown_prompt.visible = false
 
 
 func _exit_tree() -> void:
 	teardown()
+
+
+func _create_crown_prompt(ground_y: float) -> Label:
+	var label := Label.new()
+	label.name = "CrownInteractPrompt"
+	label.text = PrologueBeats.ALTAR_PROMPT_PROPOSAL_TEXT
+	label.custom_minimum_size = Vector2(140.0, 0.0)
+	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	label.add_theme_font_size_override("font_size", 10)
+	label.add_theme_color_override("font_color", CROWN_PROMPT_COLOR)
+	label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	label.position = Vector2(altar_x() - 70.0, ground_y - CROWN_PROMPT_HEIGHT_ABOVE_GROUND)
+	label.visible = false
+	return label
