@@ -1282,7 +1282,7 @@ func _process(_delta: float) -> bool:
 				return false
 			var st := _stage_node(shell)
 			var explorer := _explorer_of(shell)
-			_check(not explorer.is_input_enabled() and not st.is_actor_locked() and explorer.velocity == Vector2.ZERO and st.is_segment_ended(), "Shell E: actor frozen and locks released at N4.4 boundary")
+			_check(not explorer.is_input_enabled() and not st.is_actor_locked() and not explorer.is_physics_processing() and st.is_segment_ended(), "Shell E: actor frozen and locks released at N4.4 boundary")
 			_go_main(86)
 			return false
 		86:
