@@ -190,3 +190,20 @@ jobs:
           godot --headless --script res://tests/test_n44b_chamber_presentation.gd 2>&1 | tee /tmp/godot_n44b.log
           ! grep -E "(SCRIPT ERROR:|Parser Error:|TEST FAILURE:)" /tmp/godot_n44b.log
           grep -q "PASS: All .* N44B Chamber Presentation" /tmp/godot_n44b.log
+
+      - name: Run N44B Windowed Visual Pass (Xvfb)
+        run: |
+          set -o pipefail
+          sudo apt-get update
+          sudo apt-get install -y xvfb
+          mkdir -p /tmp/crownfall_n44b_visual
+          N44B_VISUAL_DIR=/tmp/crownfall_n44b_visual xvfb-run -a -s "-screen 0 1280x720x24" godot --rendering-method gl_compatibility --script res://scripts/tools/n44b_visual_pass.gd 2>&1 | tee /tmp/godot_n44b_visual.log
+          ! grep -E "(SCRIPT ERROR:|Parser Error:|N44B VISUAL PASS FAILED)" /tmp/godot_n44b_visual.log
+          test "$(find /tmp/crownfall_n44b_visual -maxdepth 1 -name '*.png' | wc -l)" -eq 11
+
+      - name: Upload N44B Visual Evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: n44b-visual-evidence
+          path: /tmp/crownfall_n44b_visual/*.png
+          if-no-files-found: error
