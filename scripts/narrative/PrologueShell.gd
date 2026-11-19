@@ -113,6 +113,7 @@ var _exit_started: bool = false
 var _state: NarrativeState = null
 var _panel: DialoguePanel = null
 var _runner: SequenceRunner = null
+var _vision_runner: SequenceRunner = null
 ## N4.2 chain state (per-run, dies with the scene like all shell runtime).
 var _current_beat_id: String = ""
 var _prologue_reached_end: bool = false
@@ -173,6 +174,18 @@ func _initialize_runtime() -> bool:
 	_runner.sequence_completed.connect(_on_runner_sequence_completed)
 	_runner.sequence_failed.connect(_on_runner_sequence_failed)
 	add_child(_runner)
+	_vision_runner = SequenceRunner.new()
+	_vision_runner.configure(
+		NarrativeState.new(),
+		_panel,
+		self,
+		Callable(self, "_on_sequence_cue"),
+		Callable(self, "_on_sequence_scene_transition"),
+		[]
+	)
+	_vision_runner.sequence_completed.connect(_on_vision_runner_completed)
+	_vision_runner.sequence_failed.connect(_on_vision_runner_failed)
+	add_child(_vision_runner)
 	_stage_backdrop = get_node_or_null("StageBackdrop") as ColorRect
 	_stage_caption_label = get_node_or_null("StageBackdrop/StageCaption") as Label
 	return true
@@ -199,8 +212,12 @@ func sequence_runner() -> SequenceRunner:
 	return _runner
 
 
+func vision_runner() -> SequenceRunner:
+	return _vision_runner
+
+
 func is_sequence_running() -> bool:
-	return _runner != null and _runner.is_running()
+	return (_runner != null and _runner.is_running()) or (_vision_runner != null and _vision_runner.is_running())
 
 
 func completed_sequence_count() -> int:
@@ -227,6 +244,9 @@ func play_sequence(sequence: Dictionary) -> bool:
 ## Skipping an authored beat still completes it exactly once (skip_allowed),
 ## and the chain handler advances to the next beat on that completion.
 func skip_sequence() -> void:
+	if _exploration_beat == PrologueBeats.PL_06_CROWNS_CALL and _vision_runner != null and _vision_runner.is_running():
+		skip_current_exploration_beat()
+		return
 	if _runner != null:
 		_runner.skip()
 
@@ -251,6 +271,8 @@ func skip_sequence() -> void:
 ## before any shared-panel close.
 func cancel_sequence() -> void:
 	_abort_exploration_segment(true)
+	if _vision_runner != null:
+		_vision_runner.cancel()
 	if _runner != null:
 		_runner.cancel()
 	_current_beat_id = ""
@@ -460,6 +482,7 @@ func _begin_exploration_segment() -> void:
 	stage.ruins_altar_reached.connect(_on_ruins_altar_reached)
 	stage.crown_awakening_requested.connect(_on_crown_awakening_requested)
 	stage.set_awakening_handoff_handler(Callable(self, "_handle_crown_awakening_handoff"))
+	stage.crown_awakening_completed.connect(_on_crown_awakening_completed)
 	_exploration_beat = PrologueBeats.PL_03_WANDERER
 	_set_exploration_status(PrologueBeats.PL_03_WANDERER)
 	stage.begin_beat(PrologueBeats.PL_03_WANDERER)
@@ -568,17 +591,87 @@ func _handle_crown_awakening_handoff(generation: int) -> bool:
 	if not _exploration_stage.is_awakening_generation_current(generation):
 		_crown_awakening_rejections += 1
 		return false
-	if not _awakening_vision_starter.is_valid():
+	if _awakening_vision_starter.is_valid():
+		if not bool(_awakening_vision_starter.call(generation)):
+			_crown_awakening_rejections += 1
+			return false
+		_awakening_handoff_active = true
+		_awakening_handoff_generation = generation
+		_crown_awakening_acceptances += 1
+		return true
+	if not _start_pl06_vision_sequence(generation):
 		_crown_awakening_rejections += 1
-		push_warning("[PrologueShell] crown awakening handoff rejected: N4.4-D vision sequence is not wired yet")
 		return false
-	if not bool(_awakening_vision_starter.call(generation)):
-		_crown_awakening_rejections += 1
+	_crown_awakening_acceptances += 1
+	return true
+
+
+func _start_pl06_vision_sequence(generation: int) -> bool:
+	if _vision_runner == null or _vision_runner.is_running():
+		return false
+	var seq: Dictionary = PrologueBeats.vision_sequence()
+	if seq.is_empty() or not NarrativeData.validate_sequence(seq):
 		return false
 	_awakening_handoff_active = true
 	_awakening_handoff_generation = generation
-	_crown_awakening_acceptances += 1
+	if not _vision_runner.play(seq):
+		_awakening_handoff_active = false
+		_awakening_handoff_generation = 0
+		return false
 	return true
+
+
+func _on_vision_runner_completed(sequence_id: String) -> void:
+	if sequence_id != PrologueBeats.PL_06_VISION_SEQUENCE_ID:
+		return
+	if _exit_started or _n43_segment_ended or not _awakening_handoff_active:
+		return
+	if _exploration_stage == null or not is_instance_valid(_exploration_stage):
+		return
+	if _exploration_beat != PrologueBeats.PL_06_CROWNS_CALL:
+		return
+	if not _exploration_stage.is_awakening_generation_current(_awakening_handoff_generation):
+		return
+	_exploration_stage.present_post_vision_dialogue(_awakening_handoff_generation)
+
+
+func _on_vision_runner_failed(_sequence_id: String, _reason: String) -> void:
+	var failed_gen: int = _awakening_handoff_generation
+	_awakening_handoff_active = false
+	_awakening_handoff_generation = 0
+	if _exploration_stage != null and is_instance_valid(_exploration_stage):
+		_exploration_stage.reject_crown_awakening(failed_gen, true)
+
+
+func _on_crown_awakening_completed() -> void:
+	if _exit_started or _n43_segment_ended or _exploration_stage == null:
+		return
+	if _exploration_beat != PrologueBeats.PL_06_CROWNS_CALL:
+		return
+	if not _record_exploration_beat(PrologueBeats.PL_06_CROWNS_CALL):
+		return
+	_finish_n44_boundary()
+
+
+func _finish_n44_boundary() -> void:
+	_awakening_handoff_active = false
+	_awakening_handoff_generation = 0
+	_n43_segment_ended = true
+	_exploration_beat = ""
+	if _exploration_stage != null and is_instance_valid(_exploration_stage):
+		_exploration_stage.end_segment()
+	if _vision_runner != null and _vision_runner.is_running():
+		_vision_runner.cancel()
+	_set_n44_boundary_status()
+
+
+func _set_n44_boundary_status() -> void:
+	var status: Label = get_node_or_null("UICanvasLayer/CenterContainer/VBoxContainer/StatusLabel") as Label
+	if status != null:
+		status.text = "N4.4 Prologue exploration complete (pl_01-pl_06). Later beats (pl_07+) are not implemented yet."
+	var detail: Label = get_node_or_null("UICanvasLayer/CenterContainer/VBoxContainer/DetailLabel") as Label
+	if detail != null:
+		detail.text = "No scene transition happens here and nothing records Prologue completion. Use the development exit to return to the menu."
 
 
 ## Narrow Prologue-specific per-beat Skip path (N4.3 planning, DECIDED): not a
@@ -603,10 +696,15 @@ func skip_current_exploration_beat() -> bool:
 		return false
 	var beat: String = _exploration_beat
 	if beat != PrologueBeats.PL_03_WANDERER and beat != PrologueBeats.PL_04_REPEATED_MARK \
-			and beat != PrologueBeats.PL_05_FORGOTTEN_RUINS:
+			and beat != PrologueBeats.PL_05_FORGOTTEN_RUINS and beat != PrologueBeats.PL_06_CROWNS_CALL:
 		return false
 	if not _record_exploration_beat(beat):
 		return false
+	if beat == PrologueBeats.PL_06_CROWNS_CALL:
+		# O4 Option A (APPROVED): invalidate stage generation BEFORE closing panel so
+		# skip never passes through the normal crown_awakening_completed emission edge.
+		_finish_n44_boundary()
+		return true
 	if _exploration_stage != null:
 		_exploration_stage.close_active_dialogue()
 	if beat == PrologueBeats.PL_03_WANDERER:
@@ -697,6 +795,11 @@ func _set_cancelled_exploration_status() -> void:
 func _on_sequence_cue(cue_id: String) -> void:
 	if _cue_observer.is_valid():
 		_cue_observer.call(cue_id)
+	if _awakening_handoff_active and _exploration_stage != null and is_instance_valid(_exploration_stage):
+		var ruins := _exploration_stage.ruins()
+		if ruins != null and is_instance_valid(ruins):
+			ruins.show_vision_cue(cue_id)
+		return
 	if _stage_backdrop != null and _stage_caption_label != null:
 		_stage_caption_label.text = PrologueBeats.stage_caption(cue_id)
 		_stage_backdrop.visible = true

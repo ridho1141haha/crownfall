@@ -244,6 +244,13 @@ jobs:
           ! grep -E "(SCRIPT ERROR:|Parser Error:|TEST FAILURE:)" /tmp/godot_n44c.log
           grep -q "PASS: All .* N44C Crown Interaction" /tmp/godot_n44c.log
 
+      - name: Run N44D Vision Sequence Tests
+        run: |
+          set -o pipefail
+          godot --headless --script res://tests/test_n44d_vision_sequence.gd 2>&1 | tee /tmp/godot_n44d.log
+          ! grep -E "(SCRIPT ERROR:|Parser Error:|TEST FAILURE:)" /tmp/godot_n44d.log
+          grep -q "PASS: All .* N44D Vision Sequence" /tmp/godot_n44d.log
+
       - name: Run N44 Step 3A Shrine Autosave Tests
         run: |
           set -o pipefail

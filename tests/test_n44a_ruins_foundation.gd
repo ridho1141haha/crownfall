@@ -585,7 +585,8 @@ func _process(_delta: float) -> bool:
 				return false
 			_check(state.completed_count() == 5 and bool(state.is_completed(BEAT_05)), "shell B: the skip chain records pl_03+pl_04+pl_05 exactly once each (no pl_06 recording)")
 			_check(_altar_emissions == 0 and stage != null and not stage.altar_request_emitted(), "shell B: the skips record through the shell — the stage NEVER emitted the altar request (15-frame settle)")
-			_check(not shell.call("skip_current_exploration_beat") and state.completed_count() == 5, "shell B: pl_06 Skip is NOT implemented in N4.4-A (rejected, records nothing)")
+			_check(shell.call("skip_current_exploration_beat") and state.completed_count() == 6 and bool(state.is_completed(BEAT_06)) and bool(shell.call("n43_segment_complete")), "shell B: pl_06 Skip records pl_06 once and ends at N4.4 boundary (O4 Option A)")
+			_check(not shell.call("skip_current_exploration_beat") and state.completed_count() == 6, "shell B: duplicate pl_06 Skip is rejected (never starts pl_07)")
 			_check(shell.call("request_main_menu_return") and _shell_exits.size() == 1 and String(_shell_exits[0]) == MAIN_SCENE, "shell B: the development exit transitions exactly once from dormant pl_06")
 			change_scene_to_file(MAIN_SCENE)
 			_stage = 17
