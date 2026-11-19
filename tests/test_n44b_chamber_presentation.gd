@@ -125,6 +125,10 @@ func _test_ruins_lifecycle() -> void:
 	var layer := ruins.reveal_layer()
 	var veil := ruins.reveal_veil()
 	_check(layer != null and layer.layer == 0 and not layer.visible, "reveal CanvasLayer starts hidden on layer zero")
+	if layer == null or veil == null:
+		_check(false, "built ruins exposes reveal layer and veil references")
+		ruins.queue_free()
+		return
 	var reveal_root := layer.get_node("RevealRoot") as Control
 	_check(reveal_root != null and reveal_root.mouse_filter == Control.MOUSE_FILTER_IGNORE, "reveal root ignores mouse input")
 	_check(veil != null and veil.mouse_filter == Control.MOUSE_FILTER_IGNORE and veil.anchor_right == 1.0 and veil.anchor_bottom == 1.0, "veil is full-rect and ignores mouse input")
@@ -148,6 +152,23 @@ func _test_ruins_lifecycle() -> void:
 	ruins.teardown()
 	_check(ruins.is_torn_down() and not ruins.is_reveal_overlay_visible(), "repeated teardown is idempotent")
 	ruins.queue_free()
+
+	var mid_fade := _new_ruins(PrologueRuinsEnvironment.new())
+	await process_frame
+	_check(_build_ruins(mid_fade), "mid-fade teardown fixture builds")
+	mid_fade.update_explorer_x(PrologueRuinsEnvironment.INTERIOR_END_X)
+	mid_fade.call("_process", 0.2)
+	var mid_veil := mid_fade.reveal_veil()
+	_check(mid_veil != null and mid_veil.color.a > 0.0, "mid-fade fixture has a partially visible veil")
+	mid_fade.teardown()
+	_check(is_equal_approx(mid_veil.color.a, 0.0) and not mid_fade.is_reveal_overlay_visible() and not mid_fade.is_processing(), "mid-fade teardown immediately resets alpha, hides overlay, and stops processing")
+	mid_fade.call("_process", 1.0)
+	_check(is_equal_approx(mid_veil.color.a, 0.0) and not mid_fade.is_reveal_overlay_visible(), "post-teardown process calls cannot restore reveal visuals")
+	var emitted: Array[int] = []
+	mid_fade.zone_state_changed.connect(func(state: int) -> void: emitted.append(state))
+	mid_fade.update_explorer_x(PrologueRuinsEnvironment.INTERIOR_END_X)
+	_check(emitted.is_empty() and mid_fade.is_chamber_revealed(), "updates after teardown emit no signals or mutate zone state")
+	mid_fade.queue_free()
 
 
 func _test_stage_forwarding() -> void:
