@@ -32,6 +32,7 @@ func _run() -> void:
 	_test_vision_data()
 	await _test_ruins_lifecycle()
 	await _test_stage_forwarding()
+	await _test_shell_cancel_forwarding()
 	if _failures == 0:
 		print("PASS: All %d N44B Chamber Presentation checks completed with 0 failures." % _checks)
 		quit(0)
@@ -175,3 +176,58 @@ func _test_stage_forwarding() -> void:
 	_check(ruins_before_reveal.is_torn_down(), "repeated stage teardown remains idempotent")
 	stage_before_reveal.queue_free()
 	panel.free()
+
+
+
+func _test_shell_cancel_forwarding() -> void:
+	Engine.set_meta("crownfall_prologue_autostart", false)
+	Engine.set_meta("crownfall_prologue_exploration", true)
+	var scene_error: Error = change_scene_to_file("res://scenes/narrative/PrologueShell.tscn")
+	_check(scene_error == OK, "shell integration test requests the real PrologueShell scene")
+	var shell: Control = null
+	for _i: int in range(1800):
+		if current_scene != null and current_scene.name == "PrologueShell":
+			shell = current_scene as Control
+			break
+		await process_frame
+	if shell == null:
+		_check(false, "real PrologueShell becomes active for cancellation integration")
+		return
+	_check(bool(shell.call("start_prologue")), "real shell starts the authored opening sequence")
+	await process_frame
+	shell.call("skip_sequence")
+	for _i: int in range(1800):
+		if String(shell.call("current_beat_id")) == "pl_02_faint_resonance":
+			break
+		await process_frame
+	_check(String(shell.call("current_beat_id")) == "pl_02_faint_resonance", "first sequence skip advances to pl_02")
+	shell.call("skip_sequence")
+	for _i: int in range(1800):
+		if bool(shell.call("in_exploration")):
+			break
+		await process_frame
+	_check(bool(shell.call("in_exploration")), "second sequence skip enters the real exploration stage")
+	var stage: PrologueExplorationStage = shell.call("exploration_stage") as PrologueExplorationStage
+	if stage == null:
+		_check(false, "shell owns a live exploration stage")
+		return
+	_check(stage.skip_current_exploration_beat(), "real stage advances from pl_03 to pl_04")
+	_check(stage.skip_current_exploration_beat(), "real stage advances from pl_04 to pl_05")
+	var explorer := stage.explorer()
+	var ruins := stage.ruins()
+	_check(explorer != null and ruins != null, "real shell stage owns explorer and ruins")
+	if explorer == null or ruins == null:
+		return
+	explorer.position.x = 1790.0
+	await physics_frame
+	explorer.position.x = 1820.0
+	await physics_frame
+	_check(ruins.is_reveal_overlay_visible() and ruins.reveal_veil().color.a > 0.0, "real pl_05 threshold activates the reveal before shell cancellation")
+	shell.call("cancel_sequence")
+	_check(shell.call("exploration_stage") == null and stage.is_torn_down(), "public shell.cancel_sequence tears down and detaches its stage reference")
+	_check(ruins.is_torn_down() and not ruins.is_reveal_overlay_visible() and is_equal_approx(ruins.reveal_veil().color.a, 0.0), "shell cancellation forwards teardown to the actual stage-owned ruins instance")
+	_check(not ruins.is_processing() and ruins.altar_group().visible, "shell cancellation stops reveal processing and preserves static altar geometry")
+	shell.call("cancel_sequence")
+	_check(ruins.is_torn_down() and not ruins.is_reveal_overlay_visible(), "repeated public shell cancellation is idempotent")
+	Engine.remove_meta("crownfall_prologue_autostart")
+	Engine.remove_meta("crownfall_prologue_exploration")
