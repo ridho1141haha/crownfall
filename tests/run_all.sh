@@ -173,6 +173,7 @@ run_godot "N43A exploration stage" "--script res://tests/test_n43a_exploration_s
 run_godot "N43B mark inspection" "--script res://tests/test_n43b_mark_inspection.gd" "PASS: All .* N43B Mark Inspection"
 run_godot "N43C full flow" "--script res://tests/test_n43c_full_flow.gd" "PASS: All .* N43C Full Flow"
 run_godot "N44A ruins foundation" "--script res://tests/test_n44a_ruins_foundation.gd" "PASS: All .* N44A Ruins Foundation"
+run_godot "N44B chamber presentation" "--script res://tests/test_n44b_chamber_presentation.gd" "PASS: All .* N44B Chamber Presentation"
 run_godot "N44 Step3 shrine autosave" "--script res://tests/test_n44_step3a_shrine_autosave.gd" "PASS: All .* N44 Step3 3A"
 run_godot "N44 Step3 world_time types" "--script res://tests/test_n44_step3b_world_time_types.gd" "PASS: All .* N44 Step3 3B"
 run_godot "N44 Step3 rollback era" "--script res://tests/test_n44_step3c_rollback_era.gd" "PASS: All .* N44 Step3 3C"
