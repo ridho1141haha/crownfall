@@ -38,7 +38,7 @@ jobs:
           echo "Detected Godot version: ${ACTUAL_VERSION}"
           echo "${ACTUAL_VERSION}" | grep -E "^4\.7\.2\."
 
-      - name: Initialize CI Sandbox & Run Sandbox Gate (Step 3)
+      - name: Initialize CI Sandbox (Step 3)
         run: |
           set -euo pipefail
           RUNNER_SANDBOX_BASE="$(mktemp -d /tmp/step3_runner_iso_XXXXXXXX)"
@@ -75,16 +75,20 @@ jobs:
             echo "RUNNER_SANDBOX_BASE=${RUNNER_SANDBOX_BASE}"
           } >> "${GITHUB_ENV}"
           trap - EXIT
-          godot --headless --script res://tests/test_runner_sandbox_gate.gd 2>&1 | tee /tmp/godot_sandbox_gate.log
-          ! grep -E "(SCRIPT ERROR:|Parser Error:|TEST FAILURE:)" /tmp/godot_sandbox_gate.log
-          ! grep -q "^SKIP:" /tmp/godot_sandbox_gate.log
-          grep -q "PASS: runner sandbox gate" /tmp/godot_sandbox_gate.log
 
       - name: Verify Project Import & Parser
         run: |
           set -o pipefail
           godot --headless --import 2>&1 | tee /tmp/godot_import.log
           ! grep -E "(SCRIPT ERROR:|Parser Error:|TEST FAILURE:)" /tmp/godot_import.log
+
+      - name: Run Runner Sandbox Gate (Step 3)
+        run: |
+          set -o pipefail
+          godot --headless --script res://tests/test_runner_sandbox_gate.gd 2>&1 | tee /tmp/godot_sandbox_gate.log
+          ! grep -E "(SCRIPT ERROR:|Parser Error:|TEST FAILURE:)" /tmp/godot_sandbox_gate.log
+          ! grep -q "^SKIP:" /tmp/godot_sandbox_gate.log
+          grep -q "PASS: runner sandbox gate" /tmp/godot_sandbox_gate.log
 
       - name: Run Standalone World Clock Test
         run: |
