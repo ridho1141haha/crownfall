@@ -100,7 +100,7 @@ var _reveal_alpha: float = 0.0
 
 
 func _ready() -> void:
-\tset_process(false)
+	set_process(false)
 
 
 ## Validates and builds the whole ruins environment atomically. Returns true
