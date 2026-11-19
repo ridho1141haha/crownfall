@@ -38,6 +38,48 @@ jobs:
           echo "Detected Godot version: ${ACTUAL_VERSION}"
           echo "${ACTUAL_VERSION}" | grep -E "^4\.7\.2\."
 
+      - name: Initialize CI Sandbox & Run Sandbox Gate (Step 3)
+        run: |
+          set -euo pipefail
+          RUNNER_SANDBOX_BASE="$(mktemp -d /tmp/step3_runner_iso_XXXXXXXX)"
+          cleanup_init_sandbox() {
+            case "${RUNNER_SANDBOX_BASE:-}" in
+              /tmp/step3_runner_iso_*)
+                local canon
+                canon="$(readlink -m -- "${RUNNER_SANDBOX_BASE}" 2>/dev/null || true)"
+                if [ "${canon}" = "${RUNNER_SANDBOX_BASE}" ] && [ -d "${RUNNER_SANDBOX_BASE}" ]; then
+                  rm -rf -- "${RUNNER_SANDBOX_BASE}"
+                fi
+                ;;
+            esac
+          }
+          trap cleanup_init_sandbox EXIT
+          case "${RUNNER_SANDBOX_BASE}" in
+            /tmp/step3_runner_iso_*) ;;
+            *) echo "Unexpected sandbox path: ${RUNNER_SANDBOX_BASE}"; exit 1 ;;
+          esac
+          SANDBOX_CANON="$(readlink -m -- "${RUNNER_SANDBOX_BASE}")"
+          if [ "${SANDBOX_CANON}" != "${RUNNER_SANDBOX_BASE}" ]; then
+            echo "Sandbox base does not canonicalize to itself: ${RUNNER_SANDBOX_BASE} -> ${SANDBOX_CANON}"
+            exit 1
+          fi
+          HOME="${RUNNER_SANDBOX_BASE}/home"
+          XDG_DATA_HOME="${RUNNER_SANDBOX_BASE}/xdg-data"
+          XDG_CACHE_HOME="${RUNNER_SANDBOX_BASE}/xdg-cache"
+          mkdir -p "${HOME}" "${XDG_DATA_HOME}" "${XDG_CACHE_HOME}"
+          export HOME XDG_DATA_HOME XDG_CACHE_HOME RUNNER_SANDBOX_BASE
+          {
+            echo "HOME=${HOME}"
+            echo "XDG_DATA_HOME=${XDG_DATA_HOME}"
+            echo "XDG_CACHE_HOME=${XDG_CACHE_HOME}"
+            echo "RUNNER_SANDBOX_BASE=${RUNNER_SANDBOX_BASE}"
+          } >> "${GITHUB_ENV}"
+          trap - EXIT
+          godot --headless --script res://tests/test_runner_sandbox_gate.gd 2>&1 | tee /tmp/godot_sandbox_gate.log
+          ! grep -E "(SCRIPT ERROR:|Parser Error:|TEST FAILURE:)" /tmp/godot_sandbox_gate.log
+          ! grep -q "^SKIP:" /tmp/godot_sandbox_gate.log
+          grep -q "PASS: runner sandbox gate" /tmp/godot_sandbox_gate.log
+
       - name: Verify Project Import & Parser
         run: |
           set -o pipefail
@@ -191,6 +233,27 @@ jobs:
           ! grep -E "(SCRIPT ERROR:|Parser Error:|TEST FAILURE:)" /tmp/godot_n44b.log
           grep -q "PASS: All .* N44B Chamber Presentation" /tmp/godot_n44b.log
 
+      - name: Run N44 Step 3A Shrine Autosave Tests
+        run: |
+          set -o pipefail
+          godot --headless --script res://tests/test_n44_step3a_shrine_autosave.gd 2>&1 | tee /tmp/godot_n44_step3a.log
+          ! grep -E "(SCRIPT ERROR:|Parser Error:|TEST FAILURE:)" /tmp/godot_n44_step3a.log
+          grep -q "PASS: All .* N44 Step3 3A" /tmp/godot_n44_step3a.log
+
+      - name: Run N44 Step 3B World Time Types Tests
+        run: |
+          set -o pipefail
+          godot --headless --script res://tests/test_n44_step3b_world_time_types.gd 2>&1 | tee /tmp/godot_n44_step3b.log
+          ! grep -E "(SCRIPT ERROR:|Parser Error:|TEST FAILURE:)" /tmp/godot_n44_step3b.log
+          grep -q "PASS: All .* N44 Step3 3B" /tmp/godot_n44_step3b.log
+
+      - name: Run N44 Step 3C Rollback Era Tests
+        run: |
+          set -o pipefail
+          godot --headless --script res://tests/test_n44_step3c_rollback_era.gd 2>&1 | tee /tmp/godot_n44_step3c.log
+          ! grep -E "(SCRIPT ERROR:|Parser Error:|TEST FAILURE:)" /tmp/godot_n44_step3c.log
+          grep -q "PASS: All .* N44 Step3 3C" /tmp/godot_n44_step3c.log
+
       - name: Run N44B Windowed Visual Pass (Xvfb)
         run: |
           set -o pipefail
@@ -212,3 +275,21 @@ jobs:
         run: |
           set -o pipefail
           bash tests/run_all.sh 2>&1 | tee /tmp/crownfall_run_all.log
+      - name: Cleanup CI Sandbox
+        if: always()
+        run: |
+          if [ -z "${RUNNER_SANDBOX_BASE:-}" ]; then
+            exit 0
+          fi
+          case "${RUNNER_SANDBOX_BASE}" in
+            /tmp/step3_runner_iso_*)
+              SANDBOX_CANON="$(readlink -m -- "${RUNNER_SANDBOX_BASE}" || true)"
+              if [ "${SANDBOX_CANON}" = "${RUNNER_SANDBOX_BASE}" ] && [ -d "${RUNNER_SANDBOX_BASE}" ]; then
+                rm -rf -- "${RUNNER_SANDBOX_BASE}"
+              fi
+              ;;
+            *)
+              echo "Refusing to remove unexpected RUNNER_SANDBOX_BASE: ${RUNNER_SANDBOX_BASE}"
+              exit 1
+              ;;
+          esac
