@@ -232,8 +232,8 @@ func _test_shell_cancel_forwarding() -> void:
 	if stage == null:
 		_check(false, "shell owns a live exploration stage")
 		return
-	_check(stage.skip_current_exploration_beat(), "real stage advances from pl_03 to pl_04")
-	_check(stage.skip_current_exploration_beat(), "real stage advances from pl_04 to pl_05")
+	_check(bool(shell.call("skip_current_exploration_beat")), "real shell advances from pl_03 to pl_04")
+	_check(bool(shell.call("skip_current_exploration_beat")), "real shell advances from pl_04 to pl_05")
 	var explorer := stage.explorer()
 	var ruins := stage.ruins()
 	_check(explorer != null and ruins != null, "real shell stage owns explorer and ruins")
