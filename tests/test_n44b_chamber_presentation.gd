@@ -131,6 +131,10 @@ func _test_ruins_lifecycle() -> void:
 		return
 	var reveal_root := layer.get_node("RevealRoot") as Control
 	_check(reveal_root != null and reveal_root.mouse_filter == Control.MOUSE_FILTER_IGNORE, "reveal root ignores mouse input")
+	var staging := ruins.get_child(0) as Node2D
+	_check(staging.get_node_or_null("ZonePolish") != null and staging.get_node_or_null("ChamberRevealLayer") == layer, "zone polish and reveal layer stay inside the single staging child")
+	_check(reveal_root.get_node_or_null("RevealLetterboxTop") != null and reveal_root.get_node_or_null("RevealLetterboxBottom") != null, "both persistent letterbox bars are present")
+	_check(ruins.find_children("*", "Label", true, false).is_empty() and ruins.find_children("*", "Button", true, false).is_empty(), "ruins presentation contains no prompt UI or interaction controls")
 	_check(veil != null and veil.mouse_filter == Control.MOUSE_FILTER_IGNORE and veil.anchor_right == 1.0 and veil.anchor_bottom == 1.0, "veil is full-rect and ignores mouse input")
 	var altar := ruins.altar_group()
 	ruins.update_explorer_x(PrologueRuinsEnvironment.INTERIOR_END_X)
@@ -178,9 +182,14 @@ func _test_stage_forwarding() -> void:
 	var texture := ImageTexture.create_from_image(image)
 	var stage := PrologueExplorationStage.new()
 	get_root().add_child(stage)
-	_check(stage.setup(panel, texture), "real exploration stage builds with an in-memory test texture")
+	var stage_built: bool = stage.setup(panel, texture)
+	_check(stage_built, "real exploration stage builds with an in-memory test texture")
+	if not stage_built or stage.ruins() == null:
+		stage.queue_free()
+		panel.free()
+		return
 	var ruins := stage.ruins()
-	_check(ruins != null and ruins.is_valid(), "stage owns the committed ruins component")
+	_check(ruins.is_valid(), "stage owns the committed ruins component")
 	stage.end_segment()
 	_check(ruins.is_torn_down() and not ruins.is_reveal_overlay_visible(), "end_segment forwards teardown to its real ruins child")
 	stage.end_segment()
@@ -189,7 +198,12 @@ func _test_stage_forwarding() -> void:
 
 	var stage_before_reveal := PrologueExplorationStage.new()
 	get_root().add_child(stage_before_reveal)
-	_check(stage_before_reveal.setup(panel, texture), "second real exploration stage builds")
+	var second_built: bool = stage_before_reveal.setup(panel, texture)
+	_check(second_built, "second real exploration stage builds")
+	if not second_built or stage_before_reveal.ruins() == null:
+		stage_before_reveal.queue_free()
+		panel.free()
+		return
 	var ruins_before_reveal := stage_before_reveal.ruins()
 	stage_before_reveal.teardown()
 	_check(ruins_before_reveal.is_torn_down(), "stage teardown forwards before any reveal")
@@ -236,8 +250,8 @@ func _test_shell_cancel_forwarding() -> void:
 	_check(bool(shell.call("skip_current_exploration_beat")), "real shell advances from pl_04 to pl_05")
 	var explorer := stage.explorer()
 	var ruins := stage.ruins()
-	_check(explorer != null and ruins != null, "real shell stage owns explorer and ruins")
-	if explorer == null or ruins == null:
+	_check(explorer != null and ruins != null and ruins.reveal_veil() != null and ruins.altar_group() != null, "real shell stage owns explorer, ruins, veil, and altar")
+	if explorer == null or ruins == null or ruins.reveal_veil() == null or ruins.altar_group() == null:
 		return
 	explorer.position.x = 1790.0
 	await physics_frame
