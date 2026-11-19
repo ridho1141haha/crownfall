@@ -106,3 +106,6 @@ flowchart TD
 - B before C/D: freezing the vision fragment data early prevents re-work in the handshake (C) and completion (D) slices, and gives the owner a concrete, reviewable vision storyboard before the emotional-peak code lands.
 - D before E: integration tests the real sequence, not scaffolding.
 - E mirrors N4.3-C so the stabilization discipline is unchanged.
+
+### Slice E Status Update (2026-11-19)
+- **N4.4-E: Full-flow integration & regression (`IMPLEMENTED`)** — Added `tests/test_n44_full_flow.gd` (Shells A–E), registered it in `tests/run_all.sh` and `.github/workflows/godot-ci.yml`, and documented full verification in `docs/narrative/N44E_IMPLEMENTATION_REPORT.md`. Unresolved owner decisions (`O1–O3`, `O5`, `O7–O8`, `U2`, `U4`, `U5`) remain OPEN.

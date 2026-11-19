@@ -271,10 +271,10 @@ func skip_sequence() -> void:
 ## before any shared-panel close.
 func cancel_sequence() -> void:
 	_abort_exploration_segment(true)
-	if _vision_runner != null:
-		_vision_runner.cancel()
 	if _runner != null:
 		_runner.cancel()
+	if _vision_runner != null and _vision_runner.is_running():
+		_vision_runner.cancel()
 	_current_beat_id = ""
 	_hide_stage()
 
