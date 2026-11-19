@@ -244,6 +244,8 @@ func end_segment() -> void:
 	if _explorer != null and is_instance_valid(_explorer):
 		_explorer.set_input_enabled(false)
 		_explorer.freeze()
+	if _ruins != null and is_instance_valid(_ruins):
+		_ruins.teardown()
 
 
 ## Cancellation/exit/scene-unload cleanup — explicitly NOT a skip: nothing is
@@ -262,6 +264,8 @@ func teardown() -> void:
 	if _explorer != null and is_instance_valid(_explorer):
 		_explorer.set_input_enabled(false)
 		_explorer.freeze()
+	if _ruins != null and is_instance_valid(_ruins):
+		_ruins.teardown()
 
 
 func _exit_tree() -> void:

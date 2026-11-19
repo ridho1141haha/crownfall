@@ -201,3 +201,37 @@ Failed-setup fallback (any zone/prop build failure): the segment falls back to t
 - Every APPROVED row in §2.3 cites Story Design / runtime table / breakdown.
 - Every PROPOSED row lands in [N44_OWNER_DECISIONS.md](N44_OWNER_DECISIONS.md) or is deferred to the roadmap slices.
 - Architecture, tests, and slices consume **only** the APPROVED/DERIVED rows; PROPOSED rows are parameterized behind decisions so implementation can proceed on labelled placeholders.
+
+
+## N4.4-B implementation status — 2026-11-19
+
+Owner-approved N4.4-B Rev 4 implementation is on branch
+`feat/n44-4b-chamber-presentation`, based on
+`04f5d8e535fdbe94ece303f72bd79a737ee8b237`.
+
+- **B1:** Five canonical R12 fragments, separate awakening cue, deep-copy
+  accessors, caption mappings, and fail-closed R13 validator are implemented.
+  R13 matching is case-insensitive and covers both `source ... power` and
+  `power ... source` word orders.
+- **B2:** Code-built ZonePolish and ChamberRevealLayer, delta-driven veil fade,
+  persistent letterbox bars, and idempotent teardown are implemented.
+  PrologueExplorationStage forwards segment-end and teardown cleanup.
+- **B3:** Only the provisional `ALTAR_PROMPT_PROPOSAL_TEXT` constant is added;
+  no prompt UI, input polling, or crown interaction is wired.
+- **B4:** N44B tests are registered in `tests/run_all.sh` and GitHub Actions.
+  CI run #122 passed the 77-check N44B suite with 0 failures, and the Xvfb
+  visual harness captured all 11 expected screenshots. CI run #123 also
+  completed successfully on the current branch head.
+- **B5:** The 11-image artifact `n44b-visual-evidence` was downloaded and
+  manually inspected. It shows the five exploration states and six labelled
+  storyboard placeholder states; no final art or vision-sequence execution
+  is implied.
+
+**Remaining validation:** the aggregate `bash tests/run_all.sh` command has
+not been executed. The current inspection environment has no Godot executable
+or checkout of the repository, so this specific runner cannot be launched
+locally here. CI's individual suites have passed, but this is not represented
+as an aggregate-runner pass.
+
+This status records implementation and verification evidence only. It is not
+an owner acceptance or merge approval. O2, O3, and O5 remain OPEN.
