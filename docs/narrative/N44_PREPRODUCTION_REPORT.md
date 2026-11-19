@@ -201,3 +201,26 @@ Failed-setup fallback (any zone/prop build failure): the segment falls back to t
 - Every APPROVED row in §2.3 cites Story Design / runtime table / breakdown.
 - Every PROPOSED row lands in [N44_OWNER_DECISIONS.md](N44_OWNER_DECISIONS.md) or is deferred to the roadmap slices.
 - Architecture, tests, and slices consume **only** the APPROVED/DERIVED rows; PROPOSED rows are parameterized behind decisions so implementation can proceed on labelled placeholders.
+
+
+## N4.4-B implementation status — 2026-11-19
+
+Owner-approved N4.4-B Rev 4 plan is being implemented on branch
+`feat/n44-4b-chamber-presentation`, based on
+`04f5d8e535fdbe94ece303f72bd79a737ee8b237`.
+
+- B1 vision data, separate awakening cue, and fail-closed R13 validator have
+  been added to `PrologueBeats.gd`. R13 includes both `source ... power`
+  and `power ... source` patterns with case-insensitive matching.
+- B2 code-built zone polish, chamber reveal veil/letterbox layer, and
+  idempotent ruins teardown have been added. The exploration stage forwards
+  both segment-end and teardown cleanup to its owned ruins component.
+- B3 adds only the provisional O5 prompt constant; no prompt UI or interaction
+  polling is wired.
+- B4 test registration is being added to the full runner and GitHub Actions.
+- B5 visual harness has been added. Its 11-image capture and manual inspection
+  have **NOT YET BEEN RUN**.
+
+This is an implementation-in-progress note, not acceptance evidence. Godot
+4.7.2 runtime tests, full suite, integrity verification, Xvfb screenshots,
+and manual image review remain pending.
