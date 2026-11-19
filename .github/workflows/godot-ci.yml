@@ -207,3 +207,8 @@ jobs:
           name: n44b-visual-evidence
           path: /tmp/crownfall_n44b_visual/*.png
           if-no-files-found: error
+
+      - name: Run aggregate test runner
+        run: |
+          set -o pipefail
+          bash tests/run_all.sh 2>&1 | tee /tmp/crownfall_run_all.log
