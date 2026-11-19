@@ -217,9 +217,12 @@ Owner-approved N4.4-B Rev 4 plan is being implemented on branch
   both segment-end and teardown cleanup to its owned ruins component.
 - B3 adds only the provisional O5 prompt constant; no prompt UI or interaction
   polling is wired.
-- B4 test registration is being added to the full runner and GitHub Actions.
-- B5 visual harness has been added. Its 11-image capture and manual inspection
-  have **NOT YET BEEN RUN**.
+- B4 test suite is registered in both `tests/run_all.sh` and GitHub Actions.
+  GitHub Actions run #121 passed the repository integrity verifier, Godot 4.7.2
+  import/parser, all existing suites, N44A, and N44B (74 checks, 0 failures).
+- B5 visual harness has been added and a windowed Xvfb capture step now runs in
+  CI. The 11-image capture and manual inspection remain pending until run #122
+  completes and its artifact is reviewed.
 
 This is an implementation-in-progress note, not acceptance evidence. Godot
 4.7.2 runtime tests, full suite, integrity verification, Xvfb screenshots,
