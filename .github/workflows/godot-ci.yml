@@ -183,3 +183,10 @@ jobs:
           godot --headless --script res://tests/test_n44a_ruins_foundation.gd 2>&1 | tee /tmp/godot_n44a.log
           ! grep -E "(SCRIPT ERROR:|Parser Error:|TEST FAILURE:)" /tmp/godot_n44a.log
           grep -q "PASS: All .* N44A Ruins Foundation" /tmp/godot_n44a.log
+
+      - name: Run N44B Chamber Presentation Tests
+        run: |
+          set -o pipefail
+          godot --headless --script res://tests/test_n44b_chamber_presentation.gd 2>&1 | tee /tmp/godot_n44b.log
+          ! grep -E "(SCRIPT ERROR:|Parser Error:|TEST FAILURE:)" /tmp/godot_n44b.log
+          grep -q "PASS: All .* N44B Chamber Presentation" /tmp/godot_n44b.log
