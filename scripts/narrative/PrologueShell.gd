@@ -141,6 +141,15 @@ var _awakening_handoff_generation: int = 0
 var _crown_awakening_requests_received: int = 0
 var _crown_awakening_acceptances: int = 0
 var _crown_awakening_rejections: int = 0
+var _voyage_runner: SequenceRunner = null
+var _voyage_generation: int = 0
+var _voyage_beat_id: String = ""
+var _voyage_active: bool = false
+var _n45a_boundary_reached: bool = false
+var _voyage_overlay_layer: CanvasLayer = null
+var _voyage_backdrop: ColorRect = null
+var _voyage_caption: Label = null
+var _voyage_sequence_provider: Callable = Callable()
 
 
 func _ready() -> void:
@@ -186,6 +195,12 @@ func _initialize_runtime() -> bool:
 	_vision_runner.sequence_completed.connect(_on_vision_runner_completed)
 	_vision_runner.sequence_failed.connect(_on_vision_runner_failed)
 	add_child(_vision_runner)
+	_voyage_runner = SequenceRunner.new()
+	_voyage_runner.configure(NarrativeState.new(), _panel, self, Callable(self, "_on_sequence_cue"), Callable(self, "_on_voyage_scene_transition_rejected"), [])
+	_voyage_runner.sequence_completed.connect(_on_voyage_runner_completed)
+	_voyage_runner.sequence_failed.connect(_on_voyage_runner_failed)
+	add_child(_voyage_runner)
+	_build_voyage_overlay()
 	_stage_backdrop = get_node_or_null("StageBackdrop") as ColorRect
 	_stage_caption_label = get_node_or_null("StageBackdrop/StageCaption") as Label
 	return true
@@ -217,7 +232,7 @@ func vision_runner() -> SequenceRunner:
 
 
 func is_sequence_running() -> bool:
-	return (_runner != null and _runner.is_running()) or (_vision_runner != null and _vision_runner.is_running())
+	return (_runner != null and _runner.is_running()) or (_vision_runner != null and _vision_runner.is_running()) or (_voyage_runner != null and _voyage_runner.is_running())
 
 
 func completed_sequence_count() -> int:
@@ -244,6 +259,9 @@ func play_sequence(sequence: Dictionary) -> bool:
 ## Skipping an authored beat still completes it exactly once (skip_allowed),
 ## and the chain handler advances to the next beat on that completion.
 func skip_sequence() -> void:
+	if _voyage_active and _voyage_runner != null and _voyage_runner.is_running():
+		_voyage_runner.skip()
+		return
 	if _exploration_beat == PrologueBeats.PL_06_CROWNS_CALL and _vision_runner != null and _vision_runner.is_running():
 		skip_current_exploration_beat()
 		return
@@ -271,6 +289,7 @@ func skip_sequence() -> void:
 ## before any shared-panel close.
 func cancel_sequence() -> void:
 	_abort_exploration_segment(true)
+	_abort_voyage_segment(true)
 	if _runner != null:
 		_runner.cancel()
 	if _vision_runner != null and _vision_runner.is_running():
@@ -795,6 +814,9 @@ func _set_cancelled_exploration_status() -> void:
 func _on_sequence_cue(cue_id: String) -> void:
 	if _cue_observer.is_valid():
 		_cue_observer.call(cue_id)
+	if _voyage_active and (cue_id.begins_with("stage_pl07_") or cue_id.begins_with("stage_pl08_")):
+		_show_voyage_cue(cue_id)
+		return
 	if _awakening_handoff_active and _exploration_stage != null and is_instance_valid(_exploration_stage):
 		var ruins := _exploration_stage.ruins()
 		if ruins != null and is_instance_valid(ruins):
@@ -879,9 +901,218 @@ func _begin_exit(scene_path: String, cancel_running_sequence: bool) -> bool:
 	# not a skip: nothing is recorded). Idempotent — the dev exit already
 	# aborted the segment through cancel_sequence above.
 	_abort_exploration_segment(false)
+	_abort_voyage_segment(false)
 	if _exit_transition.is_valid():
 		_exit_transition.call(scene_path)
 		return true
 	if is_inside_tree() and get_tree() != null:
 		get_tree().change_scene_to_file(scene_path)
 	return true
+
+# --- N4.5-A: Voyage (pl_07) & Shipwreck (pl_08) ---
+
+func voyage_runner() -> SequenceRunner:
+	return _voyage_runner
+
+
+func is_voyage_active() -> bool:
+	return _voyage_active
+
+
+func active_voyage_beat() -> String:
+	return _voyage_beat_id
+
+
+func voyage_generation() -> int:
+	return _voyage_generation
+
+
+func n45a_boundary_reached() -> bool:
+	return _n45a_boundary_reached
+
+
+func is_voyage_overlay_visible() -> bool:
+	return _voyage_overlay_layer != null and is_instance_valid(_voyage_overlay_layer) and _voyage_overlay_layer.visible
+
+
+func voyage_caption_text() -> String:
+	return _voyage_caption.text if _voyage_caption != null and is_instance_valid(_voyage_caption) else ""
+
+
+func voyage_overlay_layer() -> CanvasLayer:
+	return _voyage_overlay_layer
+
+
+func set_voyage_sequence_provider(provider: Callable) -> void:
+	_voyage_sequence_provider = provider
+
+
+func _build_voyage_overlay() -> void:
+	var layer := CanvasLayer.new()
+	layer.name = "VoyageOverlayLayer"
+	layer.layer = 0
+	layer.follow_viewport_enabled = false
+	layer.visible = false
+	var root_ctrl := Control.new()
+	root_ctrl.name = "VoyageRoot"
+	root_ctrl.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	root_ctrl.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var bg := ColorRect.new()
+	bg.name = "VoyageBackdrop"
+	bg.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	bg.color = Color(0.03, 0.06, 0.11, 0.96)
+	var lbl := Label.new()
+	lbl.name = "VoyageCaption"
+	lbl.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_WIDE)
+	lbl.offset_top = -120.0
+	lbl.offset_bottom = -64.0
+	lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	lbl.add_theme_font_size_override("font_size", 20)
+	lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	bg.add_child(lbl)
+	root_ctrl.add_child(bg)
+	layer.add_child(root_ctrl)
+	add_child(layer)
+	_voyage_overlay_layer = layer
+	_voyage_backdrop = bg
+	_voyage_caption = lbl
+
+
+func _show_voyage_cue(cue_id: String) -> void:
+	if _voyage_overlay_layer == null or not is_instance_valid(_voyage_overlay_layer):
+		return
+	_voyage_overlay_layer.visible = true
+	if _voyage_backdrop != null and is_instance_valid(_voyage_backdrop):
+		match cue_id:
+			PrologueBeats.CUE_PL07_DEPARTURE:
+				_voyage_backdrop.color = Color(0.05, 0.07, 0.11, 0.96)
+			PrologueBeats.CUE_PL07_OPEN_SEA:
+				_voyage_backdrop.color = Color(0.04, 0.09, 0.16, 0.96)
+			PrologueBeats.CUE_PL08_STORM_GATHERS:
+				_voyage_backdrop.color = Color(0.06, 0.06, 0.09, 0.97)
+			PrologueBeats.CUE_PL08_SHIPWRECK:
+				_voyage_backdrop.color = Color(0.08, 0.05, 0.07, 0.98)
+			PrologueBeats.CUE_PL08_FADE_OUT:
+				_voyage_backdrop.color = Color(0.01, 0.01, 0.015, 1.0)
+	if _voyage_caption != null and is_instance_valid(_voyage_caption):
+		_voyage_caption.text = PrologueBeats.stage_caption(cue_id)
+
+
+func _hide_voyage_overlay() -> void:
+	if _voyage_overlay_layer != null and is_instance_valid(_voyage_overlay_layer):
+		_voyage_overlay_layer.visible = false
+	if _voyage_caption != null and is_instance_valid(_voyage_caption):
+		_voyage_caption.text = ""
+
+
+func _resolve_voyage_sequence(beat_id: String) -> Dictionary:
+	if _voyage_sequence_provider.is_valid():
+		var provided: Variant = _voyage_sequence_provider.call(beat_id)
+		return provided as Dictionary if provided is Dictionary else {}
+	if beat_id == PrologueBeats.PL_07_UNFINISHED_JOURNEY:
+		return PrologueBeats.voyage_sequence()
+	if beat_id == PrologueBeats.PL_08_SHIPWRECK:
+		return PrologueBeats.shipwreck_sequence()
+	return {}
+
+
+## Starts N4.5-A (pl_07 Unfinished Journey -> pl_08 Shipwreck -> N4.5-A boundary).
+## Valid only after the N4.4 boundary is reached with pl_06 completed.
+func start_voyage_sequence() -> bool:
+	if _exit_started or _voyage_active or _n45a_boundary_reached:
+		return false
+	if not _n43_segment_ended or _state == null:
+		return false
+	if not _state.is_completed(PrologueBeats.PL_06_CROWNS_CALL):
+		return false
+	if _state.is_completed(PrologueBeats.PL_07_UNFINISHED_JOURNEY):
+		return false
+	return _start_voyage_beat(PrologueBeats.PL_07_UNFINISHED_JOURNEY)
+
+
+func _start_voyage_beat(beat_id: String) -> bool:
+	if _voyage_runner == null or _voyage_runner.is_running():
+		return false
+	var seq: Dictionary = _resolve_voyage_sequence(beat_id)
+	if seq.is_empty() or not NarrativeData.validate_sequence(seq) or String(seq.get("id", "")) != beat_id:
+		return false
+	_voyage_generation += 1
+	_voyage_active = true
+	_voyage_beat_id = beat_id
+	if not _voyage_runner.play(seq):
+		_voyage_active = false
+		_voyage_beat_id = ""
+		_hide_voyage_overlay()
+		return false
+	return true
+
+
+func _record_voyage_beat(beat_id: String) -> bool:
+	if _state == null or _state.is_completed(beat_id):
+		return false
+	_state.mark_completed(beat_id)
+	return true
+
+
+func _on_voyage_runner_completed(sequence_id: String) -> void:
+	if _exit_started or not _voyage_active or _n45a_boundary_reached:
+		return
+	if sequence_id != _voyage_beat_id:
+		return
+	if sequence_id == PrologueBeats.PL_07_UNFINISHED_JOURNEY:
+		if not _record_voyage_beat(PrologueBeats.PL_07_UNFINISHED_JOURNEY):
+			return
+		if not _start_voyage_beat(PrologueBeats.PL_08_SHIPWRECK):
+			_abort_voyage_segment(false)
+		return
+	if sequence_id == PrologueBeats.PL_08_SHIPWRECK:
+		if not _record_voyage_beat(PrologueBeats.PL_08_SHIPWRECK):
+			return
+		_finish_n45a_boundary()
+
+
+func _on_voyage_runner_failed(_sequence_id: String, _reason: String) -> void:
+	_abort_voyage_segment(false)
+
+
+func _on_voyage_scene_transition_rejected(_scene_path: String) -> void:
+	# N4.5-A never transitions to Forgotten Shore (belongs to N4.5-B).
+	pass
+
+
+func _finish_n45a_boundary() -> void:
+	_voyage_generation += 1
+	_voyage_active = false
+	_voyage_beat_id = ""
+	_n45a_boundary_reached = true
+	_hide_voyage_overlay()
+	_set_n45a_boundary_status()
+
+
+func _set_n45a_boundary_status() -> void:
+	var status: Label = get_node_or_null("UICanvasLayer/CenterContainer/VBoxContainer/StatusLabel") as Label
+	if status != null:
+		status.text = "N4.5-A Prologue voyage complete (pl_01-pl_08). Forgotten Shore landing (pl_09) is not implemented yet."
+	var detail: Label = get_node_or_null("UICanvasLayer/CenterContainer/VBoxContainer/DetailLabel") as Label
+	if detail != null:
+		detail.text = "No scene transition happens here and nothing records Prologue completion. Use the development exit to return to the menu."
+
+
+func _abort_voyage_segment(update_status: bool) -> void:
+	var was_active: bool = _voyage_active
+	_voyage_generation += 1
+	_voyage_active = false
+	_voyage_beat_id = ""
+	_hide_voyage_overlay()
+	if _voyage_runner != null and _voyage_runner.is_running():
+		_voyage_runner.cancel()
+	if was_active and update_status and not _exit_started:
+		_set_cancelled_exploration_status()
+
+
+func _exit_tree() -> void:
+	_voyage_generation += 1
+	_voyage_active = false
+	_voyage_beat_id = ""
+	_hide_voyage_overlay()

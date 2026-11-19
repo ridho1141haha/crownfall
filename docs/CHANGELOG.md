@@ -7,6 +7,18 @@ This changelog records repository changes that actually occurred. Planned featur
 
 ---
 
+## [2026-11-19] N4.5-A: Voyage & Shipwreck (`pl_07` + `pl_08`)
+
+**Type:** Production milestone slice (N4.5-A; `pl_09` Forgotten Shore landing and `PlayerProfile.mark_prologue_completed()` remain N4.5-B scope)
+**Engine Verified:** `4.7.2.stable.official.ed1daf0bf` (`PASS: All 57 N45A Voyage Shipwreck checks completed with 0 failures.`; `bash tests/run_all.sh` `ALL SUITES PASSED`; `PASS: All 284 repository integrity, scene-graph, CI lock, and OD-01..OD-10 documentation checks succeeded!`)
+**Baseline:** `main` @ `933cf8e`; branch `feature/n45a-voyage-shipwreck`
+
+- Authored `pl_07_unfinished_journey` and `pl_08_shipwreck` in `scripts/narrative/PrologueBeats.gd` using only existing allowlisted `SequenceRunner` ops and labelled `[Placeholder art]` captions (destination, ship origin, and storm cause remain OPEN).
+- Wired dedicated `_voyage_runner` (empty `allowed_scenes`), camera-immune `VoyageOverlayLayer` (`MOUSE_FILTER_IGNORE`), `start_voyage_sequence()`, generation-guarded `pl_07 -> pl_08 -> N4.5-A boundary` chaining, and cancel/exit/unload cleanup in `scripts/narrative/PrologueShell.gd` without modifying N4.4 behavior.
+- Added `tests/test_n45a_voyage_shipwreck.gd`, registered it in `tests/run_all.sh` and `.github/workflows/godot-ci.yml`, and added `docs/narrative/N45A_IMPLEMENTATION_REPORT.md`.
+
+---
+
 ## [2026-11-19] N4.4-E closure verification evidence
 
 **Type:** Documentation & verification closure audit (no gameplay or production code changes)
