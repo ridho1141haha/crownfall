@@ -61,6 +61,8 @@ signal chamber_revealed()
 const EXTERIOR_END_X: float = 1400.0
 const INTERIOR_END_X: float = 1800.0
 const ALTAR_X: float = 2050.0
+const REVEAL_VEIL_START_ALPHA: float = 0.38
+const REVEAL_FADE_DURATION: float = 0.8
 
 ## Zone states (one-way; values are test observability, not persisted).
 const ZONE_EXTERIOR: int = 0
@@ -89,6 +91,16 @@ var _valid: bool = false
 var _zone_state: int = ZONE_EXTERIOR
 var _chamber_revealed: bool = false
 var _altar_group: Node2D = null
+var _torn_down: bool = false
+var _reveal_layer: CanvasLayer = null
+var _reveal_root: Control = null
+var _reveal_veil: ColorRect = null
+var _reveal_active: bool = false
+var _reveal_alpha: float = 0.0
+
+
+func _ready() -> void:
+\tset_process(false)
 
 
 ## Validates and builds the whole ruins environment atomically. Returns true
@@ -96,7 +108,7 @@ var _altar_group: Node2D = null
 ## component stays invalid and EMPTY (D6 fail-closed). Rejects a second
 ## successful build (the environment is built once per stage setup).
 func build(road_min_x: float, road_max_x: float, ground_y: float, view_top: float, view_bottom: float) -> bool:
-	if _valid:
+	if _valid or _torn_down:
 		return false
 	if not _validate_table(road_min_x, road_max_x, ground_y, view_top, view_bottom):
 		return false
@@ -143,17 +155,52 @@ func build(road_min_x: float, road_max_x: float, ground_y: float, view_top: floa
 			_altar_group.visible = false
 			staging.add_child(_altar_group)
 	if ok:
+		var zone_polish := _create_zone_polish(ground_y)
+		if zone_polish == null:
+			ok = false
+		else:
+			staging.add_child(zone_polish)
+	if ok:
+		_reveal_layer = _create_chamber_reveal_layer()
+		if _reveal_layer == null:
+			ok = false
+		else:
+			staging.add_child(_reveal_layer)
+	if ok:
 		# Commit: every node verified non-null — the construction goes live.
 		add_child(staging)
 		_valid = true
 	else:
 		staging.free()
 		_altar_group = null
+		_reveal_layer = null
+		_reveal_root = null
+		_reveal_veil = null
 	return _valid
 
 
 func is_valid() -> bool:
 	return _valid
+
+
+func is_torn_down() -> bool:
+	return _torn_down
+
+
+func is_reveal_overlay_visible() -> bool:
+	return _reveal_layer != null and is_instance_valid(_reveal_layer) and _reveal_layer.visible
+
+
+func is_reveal_active() -> bool:
+	return _reveal_active
+
+
+func reveal_layer() -> CanvasLayer:
+	return _reveal_layer
+
+
+func reveal_veil() -> ColorRect:
+	return _reveal_veil
 
 
 func zone_state() -> int:
@@ -179,7 +226,7 @@ func altar_group() -> Node2D:
 ## never un-reveals and never re-fires. No-op when invalid — the stage gates
 ## on is_valid() first, this stays defensive.
 func update_explorer_x(at_x: float) -> void:
-	if not _valid:
+	if not _valid or _torn_down:
 		return
 	var thresholds := _thresholds()
 	if _zone_state == ZONE_EXTERIOR and at_x >= float(thresholds["exterior_end"]):
@@ -188,8 +235,9 @@ func update_explorer_x(at_x: float) -> void:
 	if _zone_state == ZONE_INTERIOR_PASSAGE and at_x >= float(thresholds["interior_end"]):
 		_zone_state = ZONE_CHAMBER_REVEALED
 		_chamber_revealed = true
-		if _altar_group != null:
+		if _altar_group != null and is_instance_valid(_altar_group):
 			_altar_group.visible = true
+		_begin_chamber_reveal()
 		zone_state_changed.emit(_zone_state)
 		chamber_revealed.emit()
 
@@ -361,3 +409,105 @@ func _create_altar_group(ground_y: float) -> Node2D:
 	crown.size = Vector2(14.0, 7.0)
 	group.add_child(crown)
 	return group
+
+
+
+## Neutral, code-built stone accents. No text, names, or lore-bearing symbols.
+func _create_zone_polish(ground_y: float) -> Node2D:
+	var polish := Node2D.new()
+	polish.name = "ZonePolish"
+	var slab_specs: Array[Dictionary] = [
+		{"name": "ExteriorFloorSlab", "x": 930.0, "y": ground_y + 46.0, "w": 112.0, "h": 8.0},
+		{"name": "PassageFloorSlab", "x": 1510.0, "y": ground_y + 46.0, "w": 156.0, "h": 8.0},
+		{"name": "ChamberFloorSlab", "x": 1900.0, "y": ground_y + 46.0, "w": 190.0, "h": 8.0},
+		{"name": "PassageLintel", "x": 1450.0, "y": ground_y - 116.0, "w": 300.0, "h": 8.0},
+		{"name": "ChamberArchCap", "x": 1850.0, "y": ground_y - 128.0, "w": 300.0, "h": 8.0},
+	]
+	for spec: Dictionary in slab_specs:
+		var slab := ColorRect.new()
+		slab.name = String(spec["name"])
+		slab.color = Color(0.25, 0.24, 0.27, 1.0)
+		slab.position = Vector2(float(spec["x"]), float(spec["y"]))
+		slab.size = Vector2(float(spec["w"]), float(spec["h"]))
+		polish.add_child(slab)
+	return polish
+
+
+## Full-viewport, non-interactive presentation overlay on the world canvas.
+func _create_chamber_reveal_layer() -> CanvasLayer:
+	var layer_node := CanvasLayer.new()
+	layer_node.name = "ChamberRevealLayer"
+	layer_node.layer = 0
+	layer_node.follow_viewport_enabled = false
+	var root_control := Control.new()
+	root_control.name = "RevealRoot"
+	root_control.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	root_control.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var veil := ColorRect.new()
+	veil.name = "RevealVeil"
+	veil.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	veil.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	veil.color = Color(0.35, 0.28, 0.12, REVEAL_VEIL_START_ALPHA)
+	var top_bar := ColorRect.new()
+	top_bar.name = "RevealLetterboxTop"
+	top_bar.set_anchors_and_offsets_preset(Control.PRESET_TOP_WIDE)
+	top_bar.offset_bottom = 36.0
+	top_bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	top_bar.color = Color(0.02, 0.02, 0.03, 0.72)
+	var bottom_bar := ColorRect.new()
+	bottom_bar.name = "RevealLetterboxBottom"
+	bottom_bar.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_WIDE)
+	bottom_bar.offset_top = -36.0
+	bottom_bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	bottom_bar.color = Color(0.02, 0.02, 0.03, 0.72)
+	root_control.add_child(veil)
+	root_control.add_child(top_bar)
+	root_control.add_child(bottom_bar)
+	layer_node.add_child(root_control)
+	layer_node.visible = false
+	_reveal_root = root_control
+	_reveal_veil = veil
+	return layer_node
+
+
+func _begin_chamber_reveal() -> void:
+	if _torn_down or _reveal_active:
+		return
+	if _reveal_layer == null or not is_instance_valid(_reveal_layer):
+		return
+	if _reveal_veil == null or not is_instance_valid(_reveal_veil):
+		return
+	_reveal_active = true
+	_reveal_alpha = REVEAL_VEIL_START_ALPHA
+	_reveal_veil.color.a = _reveal_alpha
+	_reveal_layer.visible = true
+	set_process(true)
+
+
+func _process(delta: float) -> void:
+	if _torn_down or not _valid or not _reveal_active:
+		set_process(false)
+		return
+	_reveal_alpha = maxf(0.0, _reveal_alpha - (REVEAL_VEIL_START_ALPHA / REVEAL_FADE_DURATION) * maxf(delta, 0.0))
+	if _reveal_veil != null and is_instance_valid(_reveal_veil):
+		_reveal_veil.color.a = _reveal_alpha
+	if _reveal_alpha <= 0.0:
+		_reveal_active = false
+		set_process(false)
+
+
+func teardown() -> void:
+	if _torn_down:
+		return
+	_torn_down = true
+	_reveal_active = false
+	_reveal_alpha = 0.0
+	set_process(false)
+	if _reveal_veil != null and is_instance_valid(_reveal_veil):
+		_reveal_veil.color.a = 0.0
+	if _reveal_layer != null and is_instance_valid(_reveal_layer):
+		_reveal_layer.visible = false
+
+
+func _exit_tree() -> void:
+	teardown()
