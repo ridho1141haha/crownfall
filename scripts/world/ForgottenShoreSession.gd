@@ -60,6 +60,7 @@ var fx: ShoreFX = null
 var view: ShoreView = null
 var _stagger_cooldown: float = 0.0
 var _last_rejection_reason: String = ""
+var _last_rollback_failure_reason: String = ""
 var _signals_wired: bool = false
 var _last_saved_signature: int = 0
 
@@ -251,6 +252,13 @@ func _record_rejection(reason: String) -> void:
 
 func get_last_rejection_reason() -> String:
 	return _last_rejection_reason
+
+
+func get_last_rollback_failure_reason() -> String:
+	# Dedicated diagnostic slot for a FAILED rollback after a failed load.
+	# Kept separate from _last_rejection_reason so the original load-failure
+	# reason can never be overwritten by follow-up recovery diagnostics.
+	return _last_rollback_failure_reason
 
 
 func _resolve_target_for_actor(actor_x: float) -> Dictionary:
@@ -901,10 +909,9 @@ func _on_toggle_fast_clock() -> void:
 
 func _on_daylight_started(day_number: int) -> void:
 	pop_mgr.set_dusk_or_night_safety(false, building_mgr)
-	if day_number > 1:
-		shrine_offering_used_today = false
-	# NOTE: renewable refresh/regrow happen in _on_sunrise_reached (fires just before
-	# this), so the sunrise autosave captures refreshed node and tree states.
+	# NOTE: the day-N+1 Shrine Offering reset lives in _on_sunrise_reached (just
+	# before the autosave, P0.1) alongside the renewable refresh/regrow, so the
+	# sunrise autosave captures the refreshed node, tree and offering state.
 	feedback_message.emit("Day %d Daylight — Wood & Stone nodes refreshed! Expand Farms, Watchtower & Stone Wall." % day_number)
 
 
@@ -946,6 +953,12 @@ func _on_sunrise_reached(completed_day: int) -> void:
 	# (daylight_started fires after this signal, too late for the payload).
 	resource_mgr.refresh_renewable_nodes()
 	tree_mgr.regrow_all()
+	# P0.1: same convention as the renewables — the new day's Shrine Offering
+	# availability is reset HERE so the sunrise autosave records it. The old
+	# reset lived in _on_daylight_started, which fires after save_game_state
+	# below and let yesterday's flag persist through Continue (N44_STEP2
+	# reproduction report, Test A).
+	shrine_offering_used_today = false
 	_update_resource_node_visuals()
 	_update_forest_visuals()
 	pop_mgr.on_sunrise_refill()
@@ -1158,6 +1171,8 @@ func has_unsaved_progress() -> bool:
 
 
 func load_game_state(save_path: String = SaveManager.DEFAULT_SAVE_PATH) -> bool:
+	# The rollback verdict describes the CURRENT attempt only.
+	_last_rollback_failure_reason = ""
 	var res: Dictionary = save_mgr.load_state(save_path)
 	if not bool(res.get("ok", false)):
 		return false
@@ -1169,7 +1184,21 @@ func load_game_state(save_path: String = SaveManager.DEFAULT_SAVE_PATH) -> bool:
 	var snapshot: Dictionary = build_save_payload()
 	if not _apply_loaded_payload(data):
 		load_failed.emit("Failed to restore saved kingdom state — rolling back")
-		_apply_loaded_payload(snapshot)
+		# P0.2 + review round: a failing rollback used to be reported with a
+		# SECOND load_failed emission, but the sole subscriber
+		# (_record_rejection, FSS:208) is last-writer-wins — that second
+		# emission silently OVERWROTE the original failure reason the message
+		# above promises to keep standing. The repeated emission is therefore
+		# gone: the rollback verdict is recorded in its own dedicated slot
+		# (get_last_rollback_failure_reason()) while _last_rejection_reason
+		# keeps the ORIGINAL load failure verbatim, and a successful rollback
+		# stays silent (C1, 3C). The rollback-failure path itself IS
+		# deterministically injectable at runtime — not via payload content
+		# (the snapshot is valid by construction) but by placing an
+		# apply-invalid value into the live session state before the snapshot
+		# is taken; C4 (3C) covers it without any production test hook.
+		if not _apply_loaded_payload(snapshot):
+			_last_rollback_failure_reason = "Rollback failed — session state may be incomplete; the load failure reported above still stands"
 		_sync_all_presentations()
 		return false
 
@@ -1198,7 +1227,14 @@ func _apply_loaded_payload(data: Dictionary) -> bool:
 	shipwreck_stage = clampi(int(flags.get("shipwreck_stage", 0)), 0, 3)
 	portal_relic_looted = bool(flags.get("portal_relic_looted", false))
 	shrine_offering_used_today = bool(flags.get("shrine_offering_used_today", false))
-	era_mgr.apply_save_era(String(flags.get("era_id", "")))
+	# P0.2: the era restore bool is now inspected (it was ignored even though
+	# apply_save_era is fail-closed). Missing/empty era_id stays tolerated —
+	# migrate_payload backfills an inferred era for old saves before this point
+	# (SaveManager.gd:233-240, owner policy) — but a present era_id that fails
+	# to apply must fail the load instead of being silently dropped.
+	var era_id: String = String(flags.get("era_id", ""))
+	if era_id != "" and not era_mgr.apply_save_era(era_id):
+		return false
 	# Fakta progresi dipulihkan secara transaksional: payload invalid gagal
 	# di sini tanpa mutasi parsial, sehingga rollback snapshot di pemanggil
 	# tetap menjamin sesi tidak pernah berada di kondisi setengah-terpakai.

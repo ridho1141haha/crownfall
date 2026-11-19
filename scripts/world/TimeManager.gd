@@ -99,8 +99,18 @@ func to_save_dict() -> Dictionary:
 func apply_save_dict(data: Dictionary, restore_silent: bool = false) -> bool:
 	if not data.has("day_count") or not data.has("world_time") or not data.has("world_phase"):
 		return false
-	var day_val: int = int(data["day_count"])
+	# P1.2: defensive parity with SaveManager.validate_payload — never convert
+	# non-numeric world_time (composite types SCRIPT ERROR, strings/bools were
+	# silently coerced), reject non-finite time so internal callers cannot
+	# bypass the save-path guards, and keep the exact-int day_count convention.
+	if typeof(data["world_time"]) not in [TYPE_FLOAT, TYPE_INT]:
+		return false
+	if not EconomyLedger.is_exact_int_value(data["day_count"]):
+		return false
 	var time_val: float = float(data["world_time"])
+	if is_nan(time_val) or is_inf(time_val):
+		return false
+	var day_val: int = int(roundf(float(data["day_count"])))
 	var phase_str: String = String(data["world_phase"])
 	if day_val < 1 or time_val < 0.0:
 		return false

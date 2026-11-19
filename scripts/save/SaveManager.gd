@@ -301,6 +301,12 @@ func validate_payload(data: Variant) -> bool:
 	if not EconomyLedger.is_exact_int_value(dict["day_count"]) or int(roundf(float(dict["day_count"]))) < 1:
 		return false
 
+	# P1.2: only genuine numbers convert. Composite types (null/Array/Dictionary)
+	# used to hit an uncontrolled float() SCRIPT ERROR here and strings/booleans
+	# were silently coerced (N44_STEP2 report, Test B); real saves always
+	# serialize world_time as a JSON number, so they are rejected outright.
+	if typeof(dict["world_time"]) not in [TYPE_FLOAT, TYPE_INT]:
+		return false
 	var wt: float = float(dict["world_time"])
 	if is_nan(wt) or is_inf(wt) or wt < 0.0:
 		return false
