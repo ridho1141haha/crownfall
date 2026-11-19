@@ -79,7 +79,12 @@ func _run() -> void:
 	if not await _capture("03_chamber_reveal_framing"):
 		return
 	explorer.position.x = PrologueRuinsEnvironment.ALTAR_X
-	await _wait_frames(60)
+	# Wait for the fade's actual lifecycle state, not a fixed frame count:
+	# CI/Xvfb frame rates vary, so 60 frames can be shorter than 0.8 seconds.
+	var fade_wait_frames: int = 0
+	while ruins.is_reveal_active() and fade_wait_frames < MAX_WAIT_FRAMES:
+		await process_frame
+		fade_wait_frames += 1
 	if ruins.is_reveal_active() or not is_equal_approx(ruins.reveal_veil().color.a, 0.0) or not ruins.is_reveal_overlay_visible():
 		_fail("veil did not fade while letterbox overlay persisted")
 		return
