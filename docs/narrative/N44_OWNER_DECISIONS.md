@@ -391,3 +391,23 @@ OPEN.
 | O8 | Audio scope | No (silent) | No | silent placeholders |
 
 **Rule in force:** no OPEN item becomes canon through implementation; every default above is visibly labelled and revertible.
+
+
+---
+
+## N4.4-B implementation review-gate note — 2026-11-19
+
+The owner-approved Rev 4 implementation plan preserves the following decisions
+as OPEN; the implementation must not silently convert the placeholders into
+canon or add deferred runtime systems:
+
+- **O2 — Vision presentation language:** remains OPEN. N4.4-B uses labelled,
+  fullscreen placeholder captions only; no vision sequence is executed.
+- **O3 — Camera-focus operation (D9):** remains OPEN and deferred. No changes
+  to `SequenceRunner.gd` or `NarrativeData.gd`.
+- **O5 — Altar/crown prompt wording:** remains OPEN. The implementation adds
+  only the provisional `ALTAR_PROMPT_PROPOSAL_TEXT` constant
+  (`[E] Touch the crown`); no prompt node, input polling, or interaction
+  wiring is introduced.
+
+These notes record implementation scope, not a new owner decision.
