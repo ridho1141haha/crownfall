@@ -1,7 +1,7 @@
 # Crownfall — N5 Chapter I Implementation Roadmap
 
-**Status (updated 2026-11-20):** N5.0 and N5.1 are IMPLEMENTED & MERGED on `main` @ `90058ec47eeeef3a957f9c023446ab5ea5c32c4f`; N5.2 (`ch1_03_first_night`, with `ch1_04_after_dawn` folded in per `D-N5-02` Option A) is IMPLEMENTED on `feature/n52-first-night-resolution` (unmerged; see [`N52_IMPLEMENTATION_REPORT.md`](N52_IMPLEMENTATION_REPORT.md)). N5.3–N5.5 remain pending; `D-N5-05` remains OPEN/deferred.
-**Base `main` SHA audited:** `90058ec47eeeef3a957f9c023446ab5ea5c32c4f` (2026-11-20)
+**Status (updated 2026-11-20):** N5.0, N5.1, and N5.2 are IMPLEMENTED & MERGED on `main` @ `1285e133e746953eb4450e5bfb93837d0822565e`; N5.3 (optional Scientist & research beats) is IMPLEMENTED on `feature/n53-scientist-research-narrative` (unmerged; see [`N53_IMPLEMENTATION_REPORT.md`](N53_IMPLEMENTATION_REPORT.md)). N5.4–N5.5 remain pending; `D-N5-05` remains OPEN/deferred.
+**Base `main` SHA audited:** `1285e133e746953eb4450e5bfb93837d0822565e` (2026-11-20)
 **Owner decisions docket:** [`N5_OWNER_DECISIONS.md`](N5_OWNER_DECISIONS.md)
 **Candidate beat sheet (DRAFT / NON-CANON):** [`../CHAPTER_01_BEAT_SHEET.md`](../CHAPTER_01_BEAT_SHEET.md)
 
@@ -58,14 +58,14 @@ Every slice below is independently reviewable, preserves `SaveManager` schema v2
 - **Save/load & recovery:** Suppressed on Continue if `building_mgr.is_standing(WALL_ID)` or `day_count > 1`; wall destruction/rebuild never re-triggers.
 - **Dependencies:** N5.0 + owner approval of `D-N5-01` and `D-N5-03`.
 
-### Slice N5.2 — Mandatory First-Night Resolution (`ch1_03_first_night`; `ch1_04_after_dawn` folded in per `D-N5-02` Option A) — **IMPLEMENTED** on `feature/n52-first-night-resolution` (unmerged; see [`N52_IMPLEMENTATION_REPORT.md`](N52_IMPLEMENTATION_REPORT.md))
+### Slice N5.2 — Mandatory First-Night Resolution (`ch1_03_first_night`; `ch1_04_after_dawn` folded in) — **IMPLEMENTED & MERGED** on `main` @ `1285e13` (see [`N52_IMPLEMENTATION_REPORT.md`](N52_IMPLEMENTATION_REPORT.md))
 - **Objective:** Trigger exactly-once first-night resolution after Day 1 night ends, supporting both defense success (`survived=true`) and breach recovery (`ReignState.BREACH_PENALTY`) without soft-locking.
 - **Files likely to change:** `ChapterOneNarrativeAdapter.gd`, `ChapterOneBeats.gd`, `tests/test_n52_first_night_narrative.gd`, runner/CI.
 - **Authoritative state/signal:** `NightEncounterManager.night_encounter_resolved(survived, wall_held)` + `TimeManager.sunrise_reached(completed_day)`.
 - **Save/load & recovery:** Suppressed on Continue when `day_count >= 2`; sunrise autosave & breach recovery remain untouched.
 - **Dependencies:** N5.0 + owner approval of `D-N5-02`.
 
-### Slice N5.3 — Optional Scientist & Research Integration (`ch1_05_scientist`, `ch1_06_research`)
+### Slice N5.3 — Optional Scientist & Research Integration (`ch1_05_scientist`, `ch1_06_research`) — **IMPLEMENTED** on `feature/n53-scientist-research-narrative` (unmerged; see [`N53_IMPLEMENTATION_REPORT.md`](N53_IMPLEMENTATION_REPORT.md))
 - **Objective:** Wire optional discovery/recruitment (`SpecialistDomain`) and first-research (`ResearchManager`) beats without gating ship repair or inventing Scientist/Relic/Shrine lore.
 - **Files likely to change:** `ChapterOneNarrativeAdapter.gd`, `ChapterOneBeats.gd`, `tests/test_n53_scientist_research_narrative.gd`, runner/CI.
 - **Authoritative state/signal:** `SpecialistDomain.specialist_discovered`, `SpecialistDomain.specialist_recruited`, `ResearchManager.research_started`/`research_completed`, `ProgressionState` facts.
