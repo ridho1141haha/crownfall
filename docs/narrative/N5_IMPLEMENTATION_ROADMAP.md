@@ -43,7 +43,7 @@ All anchors below were verified directly against `scripts/world/ForgottenShoreSe
 
 Every slice below is independently reviewable, preserves `SaveManager` schema v2, avoids generic quest/event frameworks, and forbids firing narrative beats during silent save restoration.
 
-### Slice N5.0 — Chapter I Narrative Integration Boundary (Recommended First Coding PR)
+### Slice N5.0 — Chapter I Narrative Integration Boundary (**IMPLEMENTED** on `feature/n50-chapter1-narrative-boundary`, see [`N50_IMPLEMENTATION_REPORT.md`](N50_IMPLEMENTATION_REPORT.md))
 - **Objective:** Add a narrow, session-owned narrative observer (`scripts/narrative/ChapterOneNarrativeAdapter.gd`, instantiated by `ForgottenShoreSession`) wired to existing `DialoguePanel` + `NarrativeState` with a strict `restore_silent` guard during `load_game_state()`.
 - **Files likely to change:** new `scripts/narrative/ChapterOneNarrativeAdapter.gd`, minimal hook in `scripts/world/ForgottenShoreSession.gd`, new `tests/test_n50_chapter1_boundary.gd`, `tests/run_all.sh`, `.github/workflows/godot-ci.yml`.
 - **Authoritative state/signal:** `ForgottenShoreSession._is_restoring_save` (or `load_game_state` guard), `NarrativeState`.

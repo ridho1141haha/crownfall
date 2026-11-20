@@ -65,6 +65,8 @@ var _signals_wired: bool = false
 var _last_saved_signature: int = 0
 var _session_initialized: bool = false
 var _loaded_from_save_on_start: bool = false
+var chapter1_narrative: ChapterOneNarrativeAdapter = null
+var _chapter1_dialogue_panel: DialoguePanel = null
 
 @onready var time_manager: TimeManager = $TimeManager as TimeManager
 @onready var player: PlayerController = $Player as PlayerController
@@ -102,6 +104,7 @@ func _ready() -> void:
 	feedback_message.emit("Forgotten Shore: [A/D] Move | [E] Interact | [Q] Upgrade | [R] Recruit | [B] Build | [F] Repair | [T] 20x | [K] Save | [Esc] Pause")
 	var core_ready: bool = player != null and time_manager != null and building_mgr != null and pop_mgr != null and fx != null and view != null and slice_hud != null
 	_session_initialized = core_ready
+	_setup_chapter1_narrative_adapter()
 	if PrologueHandoffBridge.has_pending_intent():
 		PrologueHandoffBridge.acknowledge_destination_ready("res://scenes/world/ForgottenShore.tscn", _session_initialized, _loaded_from_save_on_start)
 
@@ -123,8 +126,28 @@ func _setup_pause_menu() -> void:
 
 
 func _exit_tree() -> void:
+	if chapter1_narrative != null:
+		chapter1_narrative.teardown()
 	if get_tree() != null:
 		get_tree().paused = false
+
+
+func _setup_chapter1_narrative_adapter() -> void:
+	if chapter1_narrative != null:
+		return
+	_chapter1_dialogue_panel = DialoguePanel.new()
+	add_child(_chapter1_dialogue_panel)
+	chapter1_narrative = ChapterOneNarrativeAdapter.new()
+	var deps: Dictionary = {
+		"player": player,
+		"time_manager": time_manager,
+		"building_mgr": building_mgr,
+		"night_mgr": night_mgr,
+		"progression": progression,
+		"dialogue_panel": _chapter1_dialogue_panel,
+	}
+	if chapter1_narrative.setup(deps, not _loaded_from_save_on_start) and not _loaded_from_save_on_start:
+		chapter1_narrative.activate()
 
 
 func _sync_resource_prompts_from_data() -> void:
@@ -1195,6 +1218,8 @@ func load_game_state(save_path: String = SaveManager.DEFAULT_SAVE_PATH) -> bool:
 	# Transaksional: snapshot state hidup saat ini SEBELUM ada mutasi. Jika
 	# langkah apply mana pun gagal, seluruh snapshot dipulihkan sehingga sesi
 	# tidak pernah berada di kondisi setengah-terpakai ("fresh reign" palsu).
+	if chapter1_narrative != null:
+		chapter1_narrative.begin_save_restore()
 	var snapshot: Dictionary = build_save_payload()
 	if not _apply_loaded_payload(data):
 		load_failed.emit("Failed to restore saved kingdom state — rolling back")
@@ -1214,10 +1239,14 @@ func load_game_state(save_path: String = SaveManager.DEFAULT_SAVE_PATH) -> bool:
 		if not _apply_loaded_payload(snapshot):
 			_last_rollback_failure_reason = "Rollback failed — session state may be incomplete; the load failure reported above still stands"
 		_sync_all_presentations()
+		if chapter1_narrative != null:
+			chapter1_narrative.end_save_restore(false)
 		return false
 
 	_sync_all_presentations()
 	_last_saved_signature = _unsaved_signature()
+	if chapter1_narrative != null:
+		chapter1_narrative.end_save_restore(true)
 	return true
 
 

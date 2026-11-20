@@ -279,6 +279,13 @@ jobs:
           ! grep -E "(SCRIPT ERROR:|Parser Error:|TEST FAILURE:)" /tmp/godot_n45c.log
           grep -q "PASS: All .* N45C Real Handoff Integration" /tmp/godot_n45c.log
 
+      - name: Run N50 Chapter I Narrative Boundary Tests
+        run: |
+          set -o pipefail
+          godot --headless --script res://tests/test_n50_chapter1_boundary.gd 2>&1 | tee /tmp/godot_n50.log
+          ! grep -E "(SCRIPT ERROR:|Parser Error:|TEST FAILURE:)" /tmp/godot_n50.log
+          grep -q "PASS: All .* N50 Chapter I Boundary" /tmp/godot_n50.log
+
       - name: Run N44 Step 3A Shrine Autosave Tests
         run: |
           set -o pipefail
