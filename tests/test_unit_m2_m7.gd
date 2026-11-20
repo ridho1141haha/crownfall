@@ -837,8 +837,9 @@ func _test_v141_forest_autochop_and_west_guard() -> bool:
 	for _st: int in range(3):
 		if not _check(bool(sess.execute_world_command("local", &"shipwreck", "shipwreck")["ok"]), "v1.4.2 Shipwreck repair stage command succeeds"):
 			return false
-	if not _check(sess.shipwreck_stage == 3 and bool(sess.execute_world_command("local", &"shipwreck", "shipwreck")["ok"]) and sess.reign_state == ForgottenShoreSession.ReignState.ISLAND_CLEARED, "v1.4.2 Shipwreck Stage 3 Set Sail sets ISLAND_CLEARED"):
+	if not _check(sess.shipwreck_stage == 3 and bool(sess.execute_world_command("local", &"shipwreck", "shipwreck")["ok"]) and sess.is_departure_in_progress() and EldergroveHandoffBridge.has_pending_intent() and sess.reign_state == ForgottenShoreSession.ReignState.ACTIVE, "N5.5 Shipwreck Stage 3 Set Sail begins Eldergrove departure handoff without premature ISLAND_CLEARED"):
 		return false
+	sess.cancel_voyage_transition("unit_test_cleanup")
 	sess.free()
 
 	print("PASS: v1.4.1/v1.4.2 Forest Chopping, Actionable Plot Selection, Strict Validation & Session Commands")

@@ -352,6 +352,13 @@ jobs:
           path: /tmp/crownfall_n44b_visual/*.png
           if-no-files-found: error
 
+      - name: Run N55 Eldergrove Handoff Tests
+        run: |
+          set -o pipefail
+          godot --headless --script res://tests/test_n55_eldergrove_handoff.gd 2>&1 | tee /tmp/godot_n55.log
+          ! grep -E "(SCRIPT ERROR:|Parser Error:|TEST FAILURE:)" /tmp/godot_n55.log
+          grep -q "PASS: All .* N55 Eldergrove Handoff" /tmp/godot_n55.log
+
       - name: Run aggregate test runner
         run: |
           set -o pipefail

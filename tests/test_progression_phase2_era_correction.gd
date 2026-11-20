@@ -207,8 +207,9 @@ func _test_shipwreck_vessel_readiness_and_era_lock() -> bool:
 	sess.era_mgr.era_changed.connect(func(eid: String, ename: String) -> void: era_changes.append(eid))
 	if not _check(_repair_ship_stage(sess), "Repeated Stage 3 interaction still succeeds (Set Sail path)"):
 		return false
-	if not _check(sess.reign_state == ForgottenShoreSession.ReignState.ISLAND_CLEARED, "Repeated Stage 3 interaction keeps the existing ISLAND_CLEARED behavior"):
+	if not _check(sess.is_departure_in_progress() and EldergroveHandoffBridge.has_pending_intent() and sess.reign_state == ForgottenShoreSession.ReignState.ACTIVE, "Repeated Stage 3 interaction begins Eldergrove departure handoff without premature ISLAND_CLEARED"):
 		return false
+	sess.cancel_voyage_transition("phase2_test_cleanup")
 	if not _check(sess.progression.fact_count() == 1 and era_changes.is_empty(), "Repeated vessel readiness duplicates neither facts nor era changes"):
 		return false
 

@@ -51,7 +51,7 @@
 - **Technical consequence:** Zero SaveManager schema changes; idempotency derived from authoritative gameplay state + in-session `NarrativeState`.
 - **Blocking status:** **Blocks N5.0** (defines save/load non-replay contract).
 
-## D-N5-05 — Eldergrove Forest arrival staging (`ch1_08_departure` / N5.5)
+## D-N5-05 — Eldergrove Forest arrival staging (`ch1_08_departure` / N5.5) — **APPROVED (2026-11-20, Option A)**
 - **Exact question:** What minimal arrival staging completes Chapter I when the player presses Set Sail on the repaired vessel?
 - **Why source inspection cannot resolve it:** `ForgottenShoreSession._on_player_interact_shipwreck()` currently sets `ReignState.ISLAND_CLEARED` and shows a victory banner; no voyage scene or Eldergrove Forest scene exists yet, and `ProgressionState.FACT_ELDERGROVE_REACHED` is defined but unrecorded.
 - **Bounded options:**
@@ -60,4 +60,4 @@
 - **Recommended default:** **Option A (deferred to N5.5)**.
 - **Player-facing consequence:** Cleanly fulfills the approved rule that Chapter I ends on Eldergrove arrival, not at Set Sail.
 - **Technical consequence:** Reuses the proven N4.5-C two-stage handoff pattern.
-- **Blocking status:** **Deferred — blocks N5.5 only** (does not block N5.0–N5.4).
+- **Blocking status:** **Resolved** — Option A approved 2026-11-20; implemented in Slice N5.5.
