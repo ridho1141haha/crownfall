@@ -7,6 +7,7 @@ const ELDERGROVE_SCENE: String = "res://scenes/world/EldergroveForest.tscn"
 const MAIN_SCENE: String = "res://scenes/main/Main.tscn"
 const TEST_DIR: String = "user://n55_test"
 const TEST_SAVE_PATH: String = "user://n55_test/save_slot_0.json"
+const TEST_SAVE_FAIL_PATH: String = "user://n55_test/save_slot_fail.json"
 const TEST_PROFILE_PATH: String = "user://n55_test/player_profile.json"
 const MAX_WAIT_FRAMES: int = 600
 
@@ -17,7 +18,12 @@ var _wait_frames: int = 0
 var _auth_progression: ProgressionState = null
 var _auth_era: EraProgressionManager = null
 var _saved_before: String = ""
+var _valid_base_payload: Dictionary = {}
 var _fact_signal_count: int = 0
+var _neg_progression: ProgressionState = null
+var _fail_progression: ProgressionState = null
+var _fail_era: EraProgressionManager = null
+var _fail_save_before: String = ""
 
 
 func _check(cond: bool, msg: String) -> bool:
@@ -42,7 +48,7 @@ func _cleanup() -> void:
 	for meta_key: String in ["crownfall_menu_save_path", "crownfall_profile_path", "crownfall_load_on_start"]:
 		if Engine.has_meta(meta_key):
 			Engine.remove_meta(meta_key)
-	for path: String in [TEST_SAVE_PATH, TEST_PROFILE_PATH]:
+	for path: String in [TEST_SAVE_PATH, TEST_SAVE_FAIL_PATH, TEST_PROFILE_PATH]:
 		_rm(path)
 		for suffix: String in [".tmp", ".old", ".bak", ".bak.tmp"]:
 			_rm(path + suffix)
@@ -122,15 +128,14 @@ func _process(_delta: float) -> bool:
 		_check(not session._on_player_interact_shipwreck(ForgottenShoreSession.SHIPWRECK_X), "Departure rejected when ship not fully repaired (no resources)")
 		_check(not EldergroveHandoffBridge.has_pending_intent(), "No handoff intent created when ship not repaired")
 
-		# Prepare repaired ship without Scientist or research
 		session.shipwreck_stage = 3
 		session.progression.record_fact(ProgressionState.FACT_FORGOTTEN_SHORE_VESSEL_READY)
-		# Verify N5.4 readiness dialogue remains intact if open and does not block Set Sail
 		var n54_was_open: bool = session._is_narrative_dialogue_busy()
 		_check(not session.progression.has_fact(ProgressionState.FACT_SCIENTIST_RECRUITED), "Scientist not recruited before departure test")
 		_check(session.research_mgr.get_completed_tech_ids().is_empty(), "No research completed before departure test")
 		_check(not session._on_player_interact_shipwreck(0.0), "Departure rejected when player outside interaction range")
 
+		_valid_base_payload = session.build_save_payload()
 		_check(session.save_game_state(TEST_SAVE_PATH), "Saved baseline Forgotten Shore state")
 		_saved_before = FileAccess.get_file_as_string(TEST_SAVE_PATH)
 
@@ -179,6 +184,9 @@ func _process(_delta: float) -> bool:
 		var arrival: EldergroveForestArrival = current_scene as EldergroveForestArrival
 		_check(arrival.is_initialization_valid(), "EldergroveForest validates initialization")
 		_check(arrival.is_handoff_acknowledged(), "EldergroveForest acknowledges one-shot handoff")
+		_check(arrival.is_runtime_milestone_recorded(), "EldergroveForest reports runtime milestone recorded")
+		_check(arrival.was_persisted_on_arrival(), "EldergroveForest reports durable arrival persistence succeeded")
+		_check(arrival.get_persistence_failure_reason().is_empty(), "No persistence failure reason on successful save")
 		_check(not EldergroveHandoffBridge.has_pending_intent(), "Pending handoff intent consumed after arrival")
 		_check(arrival.progression == _auth_progression, "EldergroveForest uses authoritative ProgressionState instance")
 		_check(_auth_progression.has_fact(ProgressionState.FACT_ELDERGROVE_REACHED), "FACT_ELDERGROVE_REACHED recorded after acknowledgement")
@@ -187,12 +195,21 @@ func _process(_delta: float) -> bool:
 		_check(arrival.is_player_control_restored(), "Player control restored after Eldergrove arrival")
 		_check(not paused, "SceneTree not paused after arrival")
 
+		# Verify actual SaveManager output by reloading the saved payload from disk
+		var sm_verify := SaveManager.new()
+		var loaded_after: Dictionary = sm_verify.load_state(TEST_SAVE_PATH)
+		_check(bool(loaded_after.get("ok", false)), "Reloading saved payload after arrival succeeds via SaveManager")
+		var loaded_pf: Dictionary = (loaded_after["data"] as Dictionary)["progression_flags"] as Dictionary
+		var loaded_facts: Array = loaded_pf.get("progression_facts", []) as Array
+		_check(loaded_facts.has(ProgressionState.FACT_ELDERGROVE_REACHED), "Reloaded save payload preserves FACT_ELDERGROVE_REACHED")
+		_check(String(loaded_pf.get("era_id", "")) == "iron_age", "Reloaded save payload preserves iron_age era_id")
+
 		var dup_ack: Dictionary = EldergroveHandoffBridge.acknowledge_destination_ready(ELDERGROVE_SCENE, true, 0)
 		_check(not bool(dup_ack.get("ok", true)), "Duplicate ack after arrival rejected")
 
+		# Stage 3: Load EldergroveForest without pending intent
 		EldergroveHandoffBridge.reset_for_tests()
-		var err2: Error = change_scene_to_file(ELDERGROVE_SCENE)
-		_check(err2 == OK, "Reloaded EldergroveForest without pending intent")
+		_check(change_scene_to_file(ELDERGROVE_SCENE) == OK, "Reloaded EldergroveForest without pending intent")
 		_stage = 3
 		_wait_frames = 0
 		return false
@@ -202,16 +219,139 @@ func _process(_delta: float) -> bool:
 			return false
 		var arrival2: EldergroveForestArrival = current_scene as EldergroveForestArrival
 		_check(not arrival2.is_handoff_acknowledged(), "Destination without valid intent does not acknowledge")
+		_check(not arrival2.is_runtime_milestone_recorded(), "Destination without valid intent does not record runtime milestone")
+		_check(not arrival2.was_persisted_on_arrival(), "Destination without valid intent does not claim persistence")
 		_check(arrival2.progression == null, "Destination without valid intent has no progression milestone mutation")
 		_check(arrival2.is_player_control_restored(), "Destination without valid intent does not lock player permanently")
 
-		var err3: Error = change_scene_to_file(MAIN_SCENE)
-		_check(err3 == OK, "Loaded Main.tscn for New Game / Continue invalidation tests")
+		# Stage 4: Missing ProgressionState in source_context
+		EldergroveHandoffBridge.authorize_departure(ELDERGROVE_SCENE, {
+			"era_mgr": EraProgressionManager.new(),
+			"save_path": TEST_SAVE_PATH,
+			"base_save_payload": _valid_base_payload,
+		})
+		_check(change_scene_to_file(ELDERGROVE_SCENE) == OK, "Loaded EldergroveForest for missing ProgressionState test")
 		_stage = 4
 		_wait_frames = 0
 		return false
 
 	if _stage == 4:
+		if current_scene == null or not (current_scene is EldergroveForestArrival):
+			return false
+		var arr_no_prog: EldergroveForestArrival = current_scene as EldergroveForestArrival
+		_check(not arr_no_prog.is_handoff_acknowledged(), "Missing ProgressionState rejects handoff acknowledgement")
+		_check(arr_no_prog.get_last_status_reason() == "missing_or_invalid_progression", "Missing ProgressionState reports missing_or_invalid_progression")
+		_check(arr_no_prog.progression == null, "Missing ProgressionState never synthesizes a replacement ProgressionState")
+		_check(not EldergroveHandoffBridge.has_pending_intent(), "Invalid context intent is invalidated")
+		_check(arr_no_prog.is_player_control_restored(), "Player control restored after missing ProgressionState rejection")
+
+		# Stage 5: Invalid ProgressionState reference (wrong type)
+		EldergroveHandoffBridge.authorize_departure(ELDERGROVE_SCENE, {
+			"progression": "not_a_progression_state",
+			"era_mgr": EraProgressionManager.new(),
+			"save_path": TEST_SAVE_PATH,
+			"base_save_payload": _valid_base_payload,
+		})
+		_check(change_scene_to_file(ELDERGROVE_SCENE) == OK, "Loaded EldergroveForest for invalid ProgressionState test")
+		_stage = 5
+		_wait_frames = 0
+		return false
+
+	if _stage == 5:
+		if current_scene == null or not (current_scene is EldergroveForestArrival):
+			return false
+		var arr_bad_prog: EldergroveForestArrival = current_scene as EldergroveForestArrival
+		_check(not arr_bad_prog.is_handoff_acknowledged(), "Invalid ProgressionState reference rejects handoff acknowledgement")
+		_check(arr_bad_prog.get_last_status_reason() == "missing_or_invalid_progression", "Invalid ProgressionState reports missing_or_invalid_progression")
+		_check(arr_bad_prog.is_player_control_restored(), "Player control restored after invalid ProgressionState rejection")
+
+		# Stage 6: Missing EraProgressionManager
+		_neg_progression = ProgressionState.new()
+		EldergroveHandoffBridge.authorize_departure(ELDERGROVE_SCENE, {
+			"progression": _neg_progression,
+			"save_path": TEST_SAVE_PATH,
+			"base_save_payload": _valid_base_payload,
+		})
+		_check(change_scene_to_file(ELDERGROVE_SCENE) == OK, "Loaded EldergroveForest for missing EraProgressionManager test")
+		_stage = 6
+		_wait_frames = 0
+		return false
+
+	if _stage == 6:
+		if current_scene == null or not (current_scene is EldergroveForestArrival):
+			return false
+		var arr_no_era: EldergroveForestArrival = current_scene as EldergroveForestArrival
+		_check(not arr_no_era.is_handoff_acknowledged(), "Missing EraProgressionManager rejects handoff acknowledgement")
+		_check(arr_no_era.get_last_status_reason() == "missing_or_invalid_era_manager", "Missing EraProgressionManager reports missing_or_invalid_era_manager")
+		_check(not _neg_progression.has_fact(ProgressionState.FACT_ELDERGROVE_REACHED), "Missing EraProgressionManager does not record FACT_ELDERGROVE_REACHED")
+		_check(arr_no_era.is_player_control_restored(), "Player control restored after missing EraProgressionManager rejection")
+
+		# Stage 7: Invalid persistence context (unsafe save path & malformed payload)
+		_neg_progression = ProgressionState.new()
+		EldergroveHandoffBridge.authorize_departure(ELDERGROVE_SCENE, {
+			"progression": _neg_progression,
+			"era_mgr": EraProgressionManager.new(),
+			"save_path": "../escape.json",
+			"base_save_payload": {},
+		})
+		_check(change_scene_to_file(ELDERGROVE_SCENE) == OK, "Loaded EldergroveForest for invalid persistence context test")
+		_stage = 7
+		_wait_frames = 0
+		return false
+
+	if _stage == 7:
+		if current_scene == null or not (current_scene is EldergroveForestArrival):
+			return false
+		var arr_bad_persist: EldergroveForestArrival = current_scene as EldergroveForestArrival
+		_check(not arr_bad_persist.is_handoff_acknowledged(), "Invalid persistence context rejects handoff acknowledgement")
+		_check(arr_bad_persist.get_last_status_reason() == "invalid_persistence_context", "Invalid persistence context reports invalid_persistence_context")
+		_check(not _neg_progression.has_fact(ProgressionState.FACT_ELDERGROVE_REACHED), "Invalid persistence context does not record FACT_ELDERGROVE_REACHED")
+		_check(arr_bad_persist.is_player_control_restored(), "Player control restored after invalid persistence context rejection")
+
+		# Stage 8: SaveManager persistence failure preserves previous valid save & exposes failure explicitly
+		var sm_prep := SaveManager.new()
+		_check(sm_prep.save_state(_valid_base_payload, TEST_SAVE_FAIL_PATH), "Prepared previous known-good save for persistence failure test")
+		_fail_save_before = FileAccess.get_file_as_string(TEST_SAVE_FAIL_PATH)
+		_fail_progression = ProgressionState.new()
+		_fail_progression.record_fact(ProgressionState.FACT_FORGOTTEN_SHORE_VESSEL_READY)
+		_fail_era = EraProgressionManager.new()
+		EldergroveHandoffBridge.authorize_departure(ELDERGROVE_SCENE, {
+			"progression": _fail_progression,
+			"era_mgr": _fail_era,
+			"save_path": TEST_SAVE_FAIL_PATH,
+			"base_save_payload": _valid_base_payload,
+			"_test_simulate_save_failure": true,
+		})
+		_check(change_scene_to_file(ELDERGROVE_SCENE) == OK, "Loaded EldergroveForest for save persistence failure test")
+		_stage = 8
+		_wait_frames = 0
+		return false
+
+	if _stage == 8:
+		if current_scene == null or not (current_scene is EldergroveForestArrival):
+			return false
+		var arr_fail_save: EldergroveForestArrival = current_scene as EldergroveForestArrival
+		_check(arr_fail_save.is_handoff_acknowledged(), "Persistence failure still acknowledges valid arrival handoff")
+		_check(arr_fail_save.is_runtime_milestone_recorded() and _fail_progression.has_fact(ProgressionState.FACT_ELDERGROVE_REACHED), "Persistence failure keeps runtime FACT_ELDERGROVE_REACHED intact")
+		_check(not arr_fail_save.was_persisted_on_arrival(), "Persistence failure never reports durable persistence success")
+		_check(not arr_fail_save.get_persistence_failure_reason().is_empty(), "Persistence failure exposes non-empty failure reason")
+		_check(arr_fail_save.get_last_status_reason() == "arrival_persistence_failed", "Persistence failure exposes arrival_persistence_failed status")
+		_check(arr_fail_save.get_persistence_attempts() == EldergroveForestArrival.MAX_PERSIST_ATTEMPTS, "Persistence failure performs bounded retries")
+		_check(arr_fail_save.is_player_control_restored(), "Player control restored safely after persistence failure")
+		_check(FileAccess.get_file_as_string(TEST_SAVE_FAIL_PATH) == _fail_save_before, "Persistence failure preserves previous valid save byte-exact")
+		var sm_fail_chk := SaveManager.new()
+		var fail_reloaded: Dictionary = sm_fail_chk.load_state(TEST_SAVE_FAIL_PATH)
+		_check(bool(fail_reloaded.get("ok", false)), "Previous valid save remains loadable via SaveManager after persistence failure")
+		var fail_pf: Dictionary = (fail_reloaded["data"] as Dictionary)["progression_flags"] as Dictionary
+		_check(not (fail_pf.get("progression_facts", []) as Array).has(ProgressionState.FACT_ELDERGROVE_REACHED), "Previous valid save on disk does not falsely contain FACT_ELDERGROVE_REACHED")
+
+		# Stage 9: Load Main.tscn for New Game / Continue invalidation tests
+		_check(change_scene_to_file(MAIN_SCENE) == OK, "Loaded Main.tscn for New Game / Continue invalidation tests")
+		_stage = 9
+		_wait_frames = 0
+		return false
+
+	if _stage == 9:
 		if current_scene == null or current_scene.name != "Main":
 			return false
 		var main_node: Node = current_scene

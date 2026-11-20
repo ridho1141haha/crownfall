@@ -1,7 +1,7 @@
 # Crownfall — N5 Chapter I Implementation Roadmap
 
 **Status (updated 2026-11-20):** N5.0–N5.4 are IMPLEMENTED & MERGED on `main` @ `0cc3462934a96bc070ed7f947495c8e7a9309806`; N5.5 (voyage & Eldergrove arrival) is IMPLEMENTED on `feature/n55-voyage-eldergrove-arrival` (`D-N5-05` Option A APPROVED 2026-11-20; see [`N55_IMPLEMENTATION_REPORT.md`](N55_IMPLEMENTATION_REPORT.md)). Stage-3 vessel readiness != Set Sail != voyage != Eldergrove arrival.
-**Base `main` SHA audited:** `5abf2d117b8404c6ada56d3ae801c2f3143bac83` (2026-11-20)
+**Base `main` SHA audited:** `0cc3462934a96bc070ed7f947495c8e7a9309806` (2026-11-20)
 **Owner decisions docket:** [`N5_OWNER_DECISIONS.md`](N5_OWNER_DECISIONS.md)
 **Candidate beat sheet (DRAFT / NON-CANON):** [`../CHAPTER_01_BEAT_SHEET.md`](../CHAPTER_01_BEAT_SHEET.md)
 

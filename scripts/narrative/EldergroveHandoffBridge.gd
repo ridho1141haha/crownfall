@@ -58,6 +58,21 @@ static func pending_token() -> int:
 	return int((Engine.get_meta(INTENT_META) as Dictionary).get("token", 0))
 
 
+static func peek_pending_destination() -> String:
+	if not has_pending_intent():
+		return ""
+	return String((Engine.get_meta(INTENT_META) as Dictionary).get("destination", ""))
+
+
+static func peek_pending_context() -> Dictionary:
+	if not has_pending_intent():
+		return {}
+	var raw_ctx: Variant = (Engine.get_meta(INTENT_META) as Dictionary).get("source_context", {})
+	if typeof(raw_ctx) != TYPE_DICTIONARY:
+		return {}
+	return (raw_ctx as Dictionary).duplicate(false)
+
+
 static func last_result() -> Dictionary:
 	if Engine.has_meta(LAST_RESULT_META) and typeof(Engine.get_meta(LAST_RESULT_META)) == TYPE_DICTIONARY:
 		return (Engine.get_meta(LAST_RESULT_META) as Dictionary).duplicate(true)
