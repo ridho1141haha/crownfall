@@ -23,7 +23,7 @@ The GDD distinguishes the implemented N1–N3 runtime foundation from the still-
 
 ---
 
-## 2. Prologue status (designed, not implemented)
+## 2. Prologue status (HISTORICAL SNAPSHOT — 2026-11-17 @ `eb82ae4`; superseded by N4.5-C `pl_01`–`pl_09` merged on `main`)
 
 The Prologue is designed but has **no playable content implementation** (no Prologue scenes or authored sequences). The N1–N3 dialogue/sequence runtime foundation exists on main but is not yet connected to Prologue content. It is tracked by roadmap phases N0–N4 rather than as Chapter I work.
 

@@ -7,6 +7,18 @@ This changelog records repository changes that actually occurred. Planned featur
 
 ---
 
+## [2026-11-20] N5-A: Chapter I design lock, source-audited roadmap & documentation repair
+
+**Type:** Documentation & implementation-readiness package (docs-only; zero `.gd`/`.tscn`/`.tres` or save-schema changes)
+**Baseline:** `main` @ `eef5c5a`; branch `docs/n5-chapter-one-design-lock`
+
+### Summary
+- Created `docs/narrative/N5_IMPLEMENTATION_ROADMAP.md` with a source-audited Chapter I gameplay anchor matrix, beat-by-beat readiness classification (`ch1_01_arrival` through `ch1_08_departure`), and small independently reviewable PR slices (`N5.0`–`N5.5`).
+- Created `docs/narrative/N5_OWNER_DECISIONS.md` surfacing only genuinely blocking implementation decisions (`D-N5-01` through `D-N5-05`) with bounded options and recommended defaults while keeping all protected lore OPEN.
+- Repaired remaining pre-N4.5-C present-tense contradictions across `docs/GDD.md`, `docs/CHAPTER_01_NARRATIVE_GAP_ANALYSIS.md`, `docs/NARRATIVE_IMPLEMENTATION_ROADMAP.md`, `docs/CHAPTER_01_BEAT_SHEET.md`, `docs/narrative/PROLOGUE_STORY_DESIGN.md`, and `docs/narrative/PROLOGUE_PRODUCTION_BREAKDOWN.md` (preserving dated historical snapshots).
+
+---
+
 ## [2026-11-20] N4.5-C: Forgotten Shore handoff lifecycle correction, pl_09 presentation & docs closure
 
 **Type:** Lifecycle correction, real `pl_09` presentation, real-scene integration test & documentation sync (branch `fix/n45b-handoff-lifecycle-and-presentation` over `main` @ `7579bce`)
