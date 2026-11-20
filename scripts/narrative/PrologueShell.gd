@@ -150,6 +150,13 @@ var _voyage_overlay_layer: CanvasLayer = null
 var _voyage_backdrop: ColorRect = null
 var _voyage_caption: Label = null
 var _voyage_sequence_provider: Callable = Callable()
+var _handoff_runner: SequenceRunner = null
+var _handoff_generation: int = 0
+var _handoff_active: bool = false
+var _handoff_completed: bool = false
+var _handoff_skipped: bool = false
+var _handoff_profile_marked: bool = false
+var _handoff_sequence_provider: Callable = Callable()
 
 
 func _ready() -> void:
@@ -201,6 +208,11 @@ func _initialize_runtime() -> bool:
 	_voyage_runner.sequence_failed.connect(_on_voyage_runner_failed)
 	add_child(_voyage_runner)
 	_build_voyage_overlay()
+	_handoff_runner = SequenceRunner.new()
+	_handoff_runner.configure(NarrativeState.new(), _panel, self, Callable(self, "_on_sequence_cue"), Callable(self, "_on_voyage_scene_transition_rejected"), [])
+	_handoff_runner.sequence_completed.connect(_on_handoff_runner_completed)
+	_handoff_runner.sequence_failed.connect(_on_handoff_runner_failed)
+	add_child(_handoff_runner)
 	_stage_backdrop = get_node_or_null("StageBackdrop") as ColorRect
 	_stage_caption_label = get_node_or_null("StageBackdrop/StageCaption") as Label
 	return true
@@ -232,7 +244,7 @@ func vision_runner() -> SequenceRunner:
 
 
 func is_sequence_running() -> bool:
-	return (_runner != null and _runner.is_running()) or (_vision_runner != null and _vision_runner.is_running()) or (_voyage_runner != null and _voyage_runner.is_running())
+	return (_runner != null and _runner.is_running()) or (_vision_runner != null and _vision_runner.is_running()) or (_voyage_runner != null and _voyage_runner.is_running()) or (_handoff_runner != null and _handoff_runner.is_running())
 
 
 func completed_sequence_count() -> int:
@@ -262,6 +274,10 @@ func skip_sequence() -> void:
 	if _voyage_active and _voyage_runner != null and _voyage_runner.is_running():
 		_voyage_runner.skip()
 		return
+	if _handoff_active and _handoff_runner != null and _handoff_runner.is_running():
+		_handoff_skipped = true
+		_handoff_runner.skip()
+		return
 	if _exploration_beat == PrologueBeats.PL_06_CROWNS_CALL and _vision_runner != null and _vision_runner.is_running():
 		skip_current_exploration_beat()
 		return
@@ -290,6 +306,7 @@ func skip_sequence() -> void:
 func cancel_sequence() -> void:
 	_abort_exploration_segment(true)
 	_abort_voyage_segment(true)
+	_abort_handoff_segment(true)
 	if _runner != null:
 		_runner.cancel()
 	if _vision_runner != null and _vision_runner.is_running():
@@ -817,6 +834,9 @@ func _on_sequence_cue(cue_id: String) -> void:
 	if _voyage_active and (cue_id.begins_with("stage_pl07_") or cue_id.begins_with("stage_pl08_")):
 		_show_voyage_cue(cue_id)
 		return
+	if _handoff_active and cue_id.begins_with("stage_pl09_"):
+		_show_voyage_cue(cue_id)
+		return
 	if _awakening_handoff_active and _exploration_stage != null and is_instance_valid(_exploration_stage):
 		var ruins := _exploration_stage.ruins()
 		if ruins != null and is_instance_valid(ruins):
@@ -902,6 +922,7 @@ func _begin_exit(scene_path: String, cancel_running_sequence: bool) -> bool:
 	# aborted the segment through cancel_sequence above.
 	_abort_exploration_segment(false)
 	_abort_voyage_segment(false)
+	_abort_handoff_segment(false)
 	if _exit_transition.is_valid():
 		_exit_transition.call(scene_path)
 		return true
@@ -995,6 +1016,12 @@ func _show_voyage_cue(cue_id: String) -> void:
 				_voyage_backdrop.color = Color(0.08, 0.05, 0.07, 0.98)
 			PrologueBeats.CUE_PL08_FADE_OUT:
 				_voyage_backdrop.color = Color(0.01, 0.01, 0.015, 1.0)
+			PrologueBeats.CUE_PL09_SHORE_WAKE:
+				_voyage_backdrop.color = Color(0.14, 0.16, 0.2, 0.96)
+			PrologueBeats.CUE_PL09_CROWN_CONTINUITY:
+				_voyage_backdrop.color = Color(0.18, 0.16, 0.13, 0.96)
+			PrologueBeats.CUE_PL09_CHAPTER_TITLE:
+				_voyage_backdrop.color = Color(0.05, 0.06, 0.08, 0.98)
 	if _voyage_caption != null and is_instance_valid(_voyage_caption):
 		_voyage_caption.text = PrologueBeats.stage_caption(cue_id)
 
@@ -1115,4 +1142,106 @@ func _exit_tree() -> void:
 	_voyage_generation += 1
 	_voyage_active = false
 	_voyage_beat_id = ""
+	_handoff_generation += 1
+	_handoff_active = false
+	_handoff_skipped = false
 	_hide_voyage_overlay()
+
+
+# --- N4.5-B: Forgotten Shore Landing (pl_09) & Chapter I Handoff ---
+
+func handoff_runner() -> SequenceRunner:
+	return _handoff_runner
+
+
+func is_handoff_active() -> bool:
+	return _handoff_active
+
+
+func handoff_generation() -> int:
+	return _handoff_generation
+
+
+func is_handoff_completed() -> bool:
+	return _handoff_completed
+
+
+func was_profile_marked_completed() -> bool:
+	return _handoff_profile_marked
+
+
+func set_handoff_sequence_provider(provider: Callable) -> void:
+	_handoff_sequence_provider = provider
+
+
+func _resolve_handoff_sequence() -> Dictionary:
+	if _handoff_sequence_provider.is_valid():
+		var provided: Variant = _handoff_sequence_provider.call(PrologueBeats.PL_09_FORGOTTEN_SHORE)
+		return provided as Dictionary if provided is Dictionary else {}
+	return PrologueBeats.shore_handoff_sequence()
+
+
+## Starts N4.5-B (pl_09 Forgotten Shore landing -> Chapter I handoff).
+## Valid only after N4.5-A boundary is reached with pl_08 completed.
+func start_shore_handoff() -> bool:
+	if _exit_started or _handoff_active or _handoff_completed:
+		return false
+	if not _n45a_boundary_reached or _state == null:
+		return false
+	if not _state.is_completed(PrologueBeats.PL_08_SHIPWRECK):
+		return false
+	if _state.is_completed(PrologueBeats.PL_09_FORGOTTEN_SHORE):
+		return false
+	if _handoff_runner == null or _handoff_runner.is_running():
+		return false
+	var seq: Dictionary = _resolve_handoff_sequence()
+	if seq.is_empty() or not NarrativeData.validate_sequence(seq) or String(seq.get("id", "")) != PrologueBeats.PL_09_FORGOTTEN_SHORE:
+		return false
+	_handoff_generation += 1
+	_handoff_active = true
+	_handoff_skipped = false
+	if not _handoff_runner.play(seq):
+		_handoff_active = false
+		_hide_voyage_overlay()
+		return false
+	return true
+
+
+func _on_handoff_runner_completed(sequence_id: String) -> void:
+	if _exit_started or not _handoff_active or _handoff_completed:
+		return
+	if sequence_id != PrologueBeats.PL_09_FORGOTTEN_SHORE:
+		return
+	if _state == null or _state.is_completed(PrologueBeats.PL_09_FORGOTTEN_SHORE):
+		return
+	_state.mark_completed(PrologueBeats.PL_09_FORGOTTEN_SHORE)
+	var was_skipped: bool = _handoff_skipped
+	_handoff_generation += 1
+	_handoff_active = false
+	_handoff_skipped = false
+	_handoff_completed = true
+	_hide_voyage_overlay()
+	if not was_skipped:
+		var profile_path: String = String(Engine.get_meta("crownfall_profile_path", PlayerProfile.DEFAULT_PROFILE_PATH))
+		var profile := PlayerProfile.new()
+		if profile.set_profile_path(profile_path):
+			_handoff_profile_marked = profile.mark_prologue_completed(profile_path)
+			if not _handoff_profile_marked:
+				push_warning("[PrologueShell] PlayerProfile.mark_prologue_completed failed; continuing to Forgotten Shore")
+	_begin_exit(FORGOTTEN_SHORE_SCENE, false)
+
+
+func _on_handoff_runner_failed(_sequence_id: String, _reason: String) -> void:
+	_abort_handoff_segment(false)
+
+
+func _abort_handoff_segment(update_status: bool) -> void:
+	var was_active: bool = _handoff_active
+	_handoff_generation += 1
+	_handoff_active = false
+	_handoff_skipped = false
+	_hide_voyage_overlay()
+	if _handoff_runner != null and _handoff_runner.is_running():
+		_handoff_runner.cancel()
+	if was_active and update_status and not _exit_started:
+		_set_cancelled_exploration_status()

@@ -52,6 +52,7 @@ const PL_06_CROWNS_CALL: String = "pl_06_crowns_call"
 const PL_06_VISION_SEQUENCE_ID: String = "pl_06_vision"
 const PL_07_UNFINISHED_JOURNEY: String = "pl_07_unfinished_journey"
 const PL_08_SHIPWRECK: String = "pl_08_shipwreck"
+const PL_09_FORGOTTEN_SHORE: String = "pl_09_forgotten_shore"
 
 ## Presentation speaker for adult Monarch (exploration internal lines).
 const MONARCH: String = "Monarch"
@@ -81,6 +82,9 @@ const CUE_PL07_OPEN_SEA: String = "stage_pl07_open_sea"
 const CUE_PL08_STORM_GATHERS: String = "stage_pl08_storm_gathers"
 const CUE_PL08_SHIPWRECK: String = "stage_pl08_shipwreck"
 const CUE_PL08_FADE_OUT: String = "stage_pl08_fade_out"
+const CUE_PL09_SHORE_WAKE: String = "stage_pl09_shore_wake"
+const CUE_PL09_CROWN_CONTINUITY: String = "stage_pl09_crown_continuity"
+const CUE_PL09_CHAPTER_TITLE: String = "stage_pl09_chapter_title"
 
 const VISION_FRAGMENT_IDS: Array[String] = [
 	"vision_ancient_kingdom",
@@ -244,6 +248,24 @@ static func shipwreck_sequence() -> Dictionary:
 	}
 
 
+## N4.5-B pl_09 Forgotten Shore landing & handoff (existing allowlisted ops only; no crown-survival dialogue).
+static func shore_handoff_sequence() -> Dictionary:
+	return {
+		"id": PL_09_FORGOTTEN_SHORE,
+		"skip_allowed": true,
+		"steps": [
+			{"op": "lock_control"},
+			{"op": "play_cue", "cue_id": CUE_PL09_SHORE_WAKE},
+			{"op": "wait", "seconds": 0.25},
+			{"op": "play_cue", "cue_id": CUE_PL09_CROWN_CONTINUITY},
+			{"op": "wait", "seconds": 0.3},
+			{"op": "play_cue", "cue_id": CUE_PL09_CHAPTER_TITLE},
+			{"op": "wait", "seconds": 0.25},
+			{"op": "finish"},
+		],
+	}
+
+
 ## Placeholder caption for a stage cue id (labelled placeholder; unknown ids
 ## fall back to a generic labelled caption so nothing unlabelled can show).
 static func stage_caption(cue_id: String) -> String:
@@ -278,6 +300,12 @@ static func stage_caption(cue_id: String) -> String:
 			return "[Placeholder art] Waves break across the deck — the vessel loses control"
 		CUE_PL08_FADE_OUT:
 			return "[Placeholder art] The wreck vanishes into darkness"
+		CUE_PL09_SHORE_WAKE:
+			return "[Placeholder art] Forgotten Shore — Monarch awakens on unfamiliar sand"
+		CUE_PL09_CROWN_CONTINUITY:
+			return "[Placeholder art] The ancient crown rests beside Monarch on the shore"
+		CUE_PL09_CHAPTER_TITLE:
+			return "[Placeholder art] Chapter I — Forgotten Shore"
 		CUE_PL06_AWAKENING:
 			return "[Placeholder art] Faint golden resonance — recalling the childhood light, brief and uncontrolled"
 		_:

@@ -7,6 +7,19 @@ This changelog records repository changes that actually occurred. Planned featur
 
 ---
 
+## [2026-11-20] N4.5-B: Forgotten Shore landing (pl_09) & Chapter I handoff
+
+**Type:** Production milestone slice (N4.5-B; final Prologue beat `pl_09` + `PlayerProfile` completion marking + `ForgottenShore.tscn` handoff)
+**Engine Verified:** `4.7.2.stable.official.ed1daf0bf` (`tests/run_all.sh` ALL SUITES PASSED, 31/31; static verifier 287/287 PASS; 5/5 N4.5-B stability PASS)
+**Baseline:** `main` @ `d30d215`; branch `feature/n45b-forgotten-shore-handoff`
+
+### Summary
+- Added `PL_09_FORGOTTEN_SHORE` and labelled placeholder cues (`stage_pl09_shore_wake`, `stage_pl09_crown_continuity`, `stage_pl09_chapter_title`) in `PrologueBeats.gd` with zero crown-survival dialogue.
+- Added additive `start_shore_handoff()` and isolated `_handoff_runner` in `PrologueShell.gd`, persisting `PlayerProfile.prologue_completed_once` only on normal full completion (never on Skip/Cancel/Dev Exit/Unload) before a single handoff to `res://scenes/world/ForgottenShore.tscn`.
+- Added `tests/test_n45b_forgotten_shore_handoff.gd` (36 checks), registered it in `tests/run_all.sh` and `.github/workflows/godot-ci.yml`, and recorded `docs/narrative/N45B_IMPLEMENTATION_REPORT.md`.
+
+---
+
 ## [2026-11-19] N4.5-A: Voyage & Shipwreck (`pl_07` + `pl_08`)
 
 **Type:** Production milestone slice (N4.5-A; `pl_09` Forgotten Shore landing and `PlayerProfile.mark_prologue_completed()` remain N4.5-B scope)

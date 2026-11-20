@@ -265,6 +265,13 @@ jobs:
           ! grep -E "(SCRIPT ERROR:|Parser Error:|TEST FAILURE:)" /tmp/godot_n45a.log
           grep -q "PASS: All .* N45A Voyage Shipwreck" /tmp/godot_n45a.log
 
+      - name: Run N45B Forgotten Shore Handoff Tests
+        run: |
+          set -o pipefail
+          godot --headless --script res://tests/test_n45b_forgotten_shore_handoff.gd 2>&1 | tee /tmp/godot_n45b.log
+          ! grep -E "(SCRIPT ERROR:|Parser Error:|TEST FAILURE:)" /tmp/godot_n45b.log
+          grep -q "PASS: All .* N45B Forgotten Shore Handoff" /tmp/godot_n45b.log
+
       - name: Run N44 Step 3A Shrine Autosave Tests
         run: |
           set -o pipefail
