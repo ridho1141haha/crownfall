@@ -65,7 +65,7 @@ Every slice below is independently reviewable, preserves `SaveManager` schema v2
 - **Save/load & recovery:** Suppressed on Continue when `day_count >= 2`; sunrise autosave & breach recovery remain untouched.
 - **Dependencies:** N5.0 + owner approval of `D-N5-02`.
 
-### Slice N5.3 — Optional Scientist & Research Integration (`ch1_05_scientist`, `ch1_06_research`) — **IMPLEMENTED** on `feature/n53-scientist-research-narrative` (unmerged; see [`N53_IMPLEMENTATION_REPORT.md`](N53_IMPLEMENTATION_REPORT.md))
+### Slice N5.3 — Optional Scientist & Research Integration (`ch1_05_scientist`, `ch1_06_research`) — **IMPLEMENTED** on `feature/n53-scientist-research-narrative` (unmerged; see [`N53_IMPLEMENTATION_REPORT.md`](N53_IMPLEMENTATION_REPORT.md)) — **IMPLEMENTED** on `feature/n53-scientist-research-narrative` (unmerged; see [`N53_IMPLEMENTATION_REPORT.md`](N53_IMPLEMENTATION_REPORT.md))
 - **Objective:** Wire optional discovery/recruitment (`SpecialistDomain`) and first-research (`ResearchManager`) beats without gating ship repair or inventing Scientist/Relic/Shrine lore.
 - **Files likely to change:** `ChapterOneNarrativeAdapter.gd`, `ChapterOneBeats.gd`, `tests/test_n53_scientist_research_narrative.gd`, runner/CI.
 - **Authoritative state/signal:** `SpecialistDomain.specialist_discovered`, `SpecialistDomain.specialist_recruited`, `ResearchManager.research_started`/`research_completed`, `ProgressionState` facts.
