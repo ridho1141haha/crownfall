@@ -1,14 +1,21 @@
 class_name ChapterOneNarrativeAdapter
 extends RefCounted
 
-## N5.0: Narrow, session-owned integration boundary for Chapter I narrative
-## events on Forgotten Shore (D-N5-04 Option A: restore-silent, zero per-beat
-## persistence flags, zero SaveManager schema v2 changes).
+## N5.0 / N5.1: Narrow, session-owned integration boundary for Chapter I
+## narrative events on Forgotten Shore (D-N5-04 Option A: restore-silent, zero
+## per-beat persistence flags, zero SaveManager schema v2 changes).
 ##
-## Infrastructure only: N5.0 implements NO authored Chapter I beats, NO dialogue
-## lines, and NO gameplay progression state. Future slices (N5.1+) attach beat
-## triggers behind this boundary while reusing DialoguePanel, NarrativeState,
-## and PlayerControlLock.
+## Implemented beats:
+##   - N5.1: ch1_02_foothold ("A Place to Survive") — fires once when
+##     BuildingManager.WALL_ID ("wall_east_01") transitions into
+##     BuildingManager.WallState.COMPLETED ("COMPLETED") during a live session
+##     (D-N5-01 Option A, D-N5-03 Option A).
+## N5.2+ beats remain unimplemented.
+
+const BEAT_CH1_02_FOOTHOLD: String = "ch1_02_foothold"
+const FOOTHOLD_SPEAKER: String = "Monarch"
+const FOOTHOLD_LINE_TEXT: String = "The eastern wall is up. It won't hold forever, but it gives us a fighting chance tonight."
+const WALL_STATE_COMPLETED_NAME: String = "COMPLETED"
 
 var _player: Node = null
 var _time_manager: TimeManager = null
@@ -26,6 +33,12 @@ var _allow_live_dispatch: bool = false
 var _active: bool = false
 var _restoring_save: bool = false
 var _torn_down: bool = false
+
+var _last_east_wall_state: String = ""
+var _foothold_historical_passed: bool = false
+var _foothold_active: bool = false
+var _active_beat_id: String = ""
+var _beat_generation: int = 0
 
 var _observed_event_count: int = 0
 var _last_observed_event: Dictionary = {}
@@ -60,8 +73,14 @@ func setup(deps: Dictionary, allow_live_dispatch: bool = true) -> bool:
 	_dialogue_panel = panel
 	_allow_live_dispatch = allow_live_dispatch
 
+	_last_east_wall_state = _building_mgr.get_state_name(BuildingManager.WALL_ID)
+	if _building_mgr.is_standing(BuildingManager.WALL_ID):
+		_foothold_historical_passed = true
+
+	_track_connect(_building_mgr, &"wall_state_changed", Callable(self, "_on_wall_state_changed"))
 	_track_connect(_progression, &"fact_recorded", Callable(self, "_on_progression_fact_recorded"))
 	_track_connect(_night_mgr, &"night_encounter_resolved", Callable(self, "_on_night_encounter_resolved"))
+	_track_connect(_dialogue_panel, &"dialogue_finished", Callable(self, "_on_dialogue_finished"))
 	_initialized = true
 	return true
 
@@ -84,14 +103,35 @@ func activate() -> bool:
 func begin_save_restore() -> void:
 	_restoring_save = true
 	_active = false
+	if _foothold_active:
+		_cancel_active_beat()
 
 
 func end_save_restore(restored_ok: bool) -> void:
 	_restoring_save = false
+	if _building_mgr != null:
+		_last_east_wall_state = _building_mgr.get_state_name(BuildingManager.WALL_ID)
+		if restored_ok and _building_mgr.is_standing(BuildingManager.WALL_ID):
+			_foothold_historical_passed = true
 	if restored_ok:
 		# Continue / load restoration stays silent for historical beats.
 		_allow_live_dispatch = false
 		_active = false
+
+
+## Skips the currently active short Chapter I beat (D-N5-04 Option A:
+## skip_allowed = true). Finishes the beat cleanly, records it once in
+## NarrativeState, and releases any adapter-owned control lock.
+func skip_active_beat() -> bool:
+	if _torn_down or not _foothold_active or _active_beat_id.is_empty():
+		return false
+	if _dialogue_panel != null and is_instance_valid(_dialogue_panel):
+		_dialogue_panel.set_process_unhandled_input(true)
+		if _dialogue_panel.is_open():
+			_dialogue_panel.close()
+		return true
+	_finish_active_beat()
+	return true
 
 
 ## Deterministic cleanup: disconnects ONLY this adapter's own tracked signals,
@@ -103,6 +143,9 @@ func teardown() -> void:
 	_torn_down = true
 	_active = false
 	_restoring_save = false
+	_beat_generation += 1
+	_foothold_active = false
+	_active_beat_id = ""
 	_disconnect_tracked()
 	if _dialogue_panel != null and is_instance_valid(_dialogue_panel) and _dialogue_panel.is_open():
 		_dialogue_panel.close()
@@ -129,6 +172,14 @@ func is_restoring_save() -> bool:
 
 func is_torn_down() -> bool:
 	return _torn_down
+
+
+func is_beat_active() -> bool:
+	return _foothold_active
+
+
+func active_beat_id() -> String:
+	return _active_beat_id
 
 
 func narrative_state() -> NarrativeState:
@@ -179,10 +230,66 @@ func _can_dispatch_live() -> bool:
 	return _initialized and _active and not _torn_down and not _restoring_save
 
 
+func _on_wall_state_changed(wall_id: String, new_state: String, _progress: float, _durability: int, _max_durability: int) -> void:
+	if wall_id != BuildingManager.WALL_ID:
+		return
+	var prev_state: String = _last_east_wall_state
+	_last_east_wall_state = new_state
+	if not _can_dispatch_live():
+		return
+	if _foothold_historical_passed or _foothold_active or _state.is_completed(BEAT_CH1_02_FOOTHOLD):
+		return
+	if new_state != WALL_STATE_COMPLETED_NAME or prev_state == WALL_STATE_COMPLETED_NAME:
+		return
+	_start_foothold_beat()
+
+
+func _start_foothold_beat() -> void:
+	if _dialogue_panel == null or not is_instance_valid(_dialogue_panel) or _dialogue_panel.is_open():
+		return
+	_beat_generation += 1
+	_foothold_active = true
+	_active_beat_id = BEAT_CH1_02_FOOTHOLD
+	# Non-gating acknowledgement (N5.1 §3): never lock player or swallow gameplay keys (e.g., Q upgrade / movement).
+	_dialogue_panel.set_process_unhandled_input(false)
+	var lines: Array[Dictionary] = [
+		{"speaker": FOOTHOLD_SPEAKER, "text": FOOTHOLD_LINE_TEXT},
+	]
+	_dialogue_panel.open_lines(lines)
+
+
+func _on_dialogue_finished() -> void:
+	if _torn_down or not _foothold_active or _active_beat_id != BEAT_CH1_02_FOOTHOLD:
+		return
+	_finish_active_beat()
+
+
+func _finish_active_beat() -> void:
+	var completed_id: String = _active_beat_id
+	_beat_generation += 1
+	_foothold_active = false
+	_active_beat_id = ""
+	if _dialogue_panel != null and is_instance_valid(_dialogue_panel):
+		_dialogue_panel.set_process_unhandled_input(true)
+	_control_lock.unlock()
+	if not completed_id.is_empty():
+		_state.mark_completed(completed_id)
+
+
+func _cancel_active_beat() -> void:
+	_beat_generation += 1
+	_foothold_active = false
+	_active_beat_id = ""
+	if _dialogue_panel != null and is_instance_valid(_dialogue_panel):
+		_dialogue_panel.set_process_unhandled_input(true)
+		if _dialogue_panel.is_open():
+			_dialogue_panel.close()
+	_control_lock.unlock()
+
+
 func _on_progression_fact_recorded(fact_id: String) -> void:
 	if not _can_dispatch_live():
 		return
-	# N5.0 infrastructure seam only — no beats dispatched or completed yet.
 	_observed_event_count += 1
 	_last_observed_event = {"source": "progression", "fact_id": fact_id}
 
@@ -190,6 +297,5 @@ func _on_progression_fact_recorded(fact_id: String) -> void:
 func _on_night_encounter_resolved(survived: bool, wall_held: bool) -> void:
 	if not _can_dispatch_live():
 		return
-	# N5.0 infrastructure seam only — no beats dispatched or completed yet.
 	_observed_event_count += 1
 	_last_observed_event = {"source": "night_encounter", "survived": survived, "wall_held": wall_held}

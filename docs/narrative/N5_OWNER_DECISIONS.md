@@ -6,7 +6,7 @@
 
 ---
 
-## D-N5-01 — Exact early-game foothold milestone (`ch1_02_foothold`)
+## D-N5-01 — Exact early-game foothold milestone (`ch1_02_foothold`) — **APPROVED (2026-11-20, Option A)**
 - **Exact question:** Which existing early-game gameplay milestone should complete `ch1_02_foothold`?
 - **Why source inspection cannot resolve it:** `ForgottenShoreSession.gd` tracks resource collection (`EconomyLedger`), recruitment (`NPCPopulationManager`), and construction (`BuildingManager.wall_state_changed`), but no single authoritative "foothold established" fact exists in `ProgressionState.gd`.
 - **Bounded options:**
@@ -29,7 +29,7 @@
 - **Technical consequence:** Eliminates a redundant trigger state between `sunrise_reached` and `daylight_started`.
 - **Blocking status:** **Blocks N5.2** (first-night slice).
 
-## D-N5-03 — Dialogue presentation & NPC dialogue scope in first coding slices
+## D-N5-03 — Dialogue presentation & NPC dialogue scope in first coding slices — **APPROVED (2026-11-20, Option A)**
 - **Exact question:** Should initial Chapter I slices (N5.0–N5.2) reuse the existing text-only `DialoguePanel` with short Monarch internal lines (no NPC dialogue required yet), or require authored NPC dialogue up front?
 - **Why source inspection cannot resolve it:** `docs/CHAPTER_01_BEAT_SHEET.md` is DRAFT/NON-CANON with zero owner-approved dialogue lines; `DialoguePanel.gd` is already tested and ready for text-only lines.
 - **Bounded options:**
@@ -40,7 +40,7 @@
 - **Technical consequence:** Zero changes to `DialoguePanel.gd` or `SequenceRunner.gd`.
 - **Blocking status:** **Blocks N5.1** content text; does **not** block N5.0.
 
-## D-N5-04 — Skippable / replayable Chapter I beat policy
+## D-N5-04 — Skippable / replayable Chapter I beat policy — **APPROVED (2026-11-20, Option A)**
 - **Exact question:** Should Chapter I in-world narrative beats be skippable via the existing `DialoguePanel` / `SequenceRunner` skip path and suppressed on Continue save loads?
 - **Why source inspection cannot resolve it:** Prologue uses per-run `NarrativeState` with no mid-Prologue saves, whereas Forgotten Shore supports Continue/autosave (`SaveManager` schema v2).
 - **Bounded options:**
