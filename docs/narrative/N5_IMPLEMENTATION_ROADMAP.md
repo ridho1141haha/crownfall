@@ -1,7 +1,7 @@
 # Crownfall — N5 Chapter I Implementation Roadmap
 
-**Status (updated 2026-11-20):** N5.0 is IMPLEMENTED & MERGED on `main` @ `ba2deb20997807610f671d950a9d99fa60cb8e5a`; N5.1 (`ch1_02_foothold`) is IMPLEMENTED on `feature/n51-first-foothold` (unmerged; see [`N51_IMPLEMENTATION_REPORT.md`](N51_IMPLEMENTATION_REPORT.md)). N5.2–N5.5 remain pending; `D-N5-02` and `D-N5-05` remain OPEN.
-**Base `main` SHA audited:** `ba2deb20997807610f671d950a9d99fa60cb8e5a` (2026-11-20)
+**Status (updated 2026-11-20):** N5.0 and N5.1 are IMPLEMENTED & MERGED on `main` @ `90058ec47eeeef3a957f9c023446ab5ea5c32c4f`; N5.2 (`ch1_03_first_night`, with `ch1_04_after_dawn` folded in per `D-N5-02` Option A) is IMPLEMENTED on `feature/n52-first-night-resolution` (unmerged; see [`N52_IMPLEMENTATION_REPORT.md`](N52_IMPLEMENTATION_REPORT.md)). N5.3–N5.5 remain pending; `D-N5-05` remains OPEN/deferred.
+**Base `main` SHA audited:** `90058ec47eeeef3a957f9c023446ab5ea5c32c4f` (2026-11-20)
 **Owner decisions docket:** [`N5_OWNER_DECISIONS.md`](N5_OWNER_DECISIONS.md)
 **Candidate beat sheet (DRAFT / NON-CANON):** [`../CHAPTER_01_BEAT_SHEET.md`](../CHAPTER_01_BEAT_SHEET.md)
 
@@ -31,7 +31,7 @@ All anchors below were verified directly against `scripts/world/ForgottenShoreSe
 | `ch1_01_arrival` | The Stranded | **ALREADY COVERED BY EXISTING GAMEPLAY** | N4.5-C `pl_09` + two-stage handoff already returns control on Forgotten Shore. |
 | `ch1_02_foothold` | A Place to Survive | **NEEDS OWNER DECISION** | Blocked on `D-N5-01` (exact early-game trigger) and `D-N5-03` (text scope). |
 | `ch1_03_first_night` | The First Night | **READY FOR IMPLEMENTATION** | Authoritative `NightEncounterManager.night_encounter_resolved` supports both defense & breach recovery. |
-| `ch1_04_after_dawn` | After the Night | **NEEDS OWNER DECISION** | Blocked on `D-N5-02` (fold into `ch1_03` resolution vs separate beat). |
+| `ch1_04_after_dawn` | After the Night | **FOLDED INTO N5.2** | `D-N5-02` Option A approved (2026-11-20): folded into `ch1_03_first_night` Day 1 sunrise resolution; no separate `daylight_started(2)` trigger. |
 | `ch1_05_scientist` | A Different Kind of Knowledge | **OPTIONAL / NON-BLOCKING** | Anchored on `SpecialistDomain` signals & `ProgressionState` facts; never required to finish Chapter I. |
 | `ch1_06_research` | Signs of the Past | **OPTIONAL / NON-BLOCKING** | Anchored on `ResearchManager`; specialist-gated, never required for ship repair/departure. |
 | `ch1_07_prepare_vessel` | The Way Forward | **READY FOR IMPLEMENTATION** | Anchored on `FACT_FORGOTTEN_SHORE_VESSEL_READY`; distinct from Set Sail and Chapter I end. |
@@ -51,14 +51,14 @@ Every slice below is independently reviewable, preserves `SaveManager` schema v2
 - **Out of scope:** Authored story beats, quest journal, event bus, save schema changes.
 - **Dependencies:** `D-N5-04` (recommended default Option A).
 
-### Slice N5.1 — First Foothold Milestone (`ch1_02_foothold`) — **IMPLEMENTED** on `feature/n51-first-foothold` (unmerged; see [`N51_IMPLEMENTATION_REPORT.md`](N51_IMPLEMENTATION_REPORT.md))
+### Slice N5.1 — First Foothold Milestone (`ch1_02_foothold`) — **IMPLEMENTED & MERGED** on `main` @ `90058ec` (see [`N51_IMPLEMENTATION_REPORT.md`](N51_IMPLEMENTATION_REPORT.md))
 - **Objective:** Trigger one short, skippable foothold beat when the approved early-game milestone completes.
 - **Files likely to change:** `scripts/narrative/ChapterOneNarrativeAdapter.gd`, `scripts/narrative/ChapterOneBeats.gd` (data-only), `tests/test_n51_foothold_beat.gd`, runner/CI.
 - **Authoritative state/signal:** `BuildingManager.wall_state_changed` (if `D-N5-01` Option A approved).
 - **Save/load & recovery:** Suppressed on Continue if `building_mgr.is_standing(WALL_ID)` or `day_count > 1`; wall destruction/rebuild never re-triggers.
 - **Dependencies:** N5.0 + owner approval of `D-N5-01` and `D-N5-03`.
 
-### Slice N5.2 — Mandatory First-Night Resolution (`ch1_03_first_night` [+ `ch1_04_after_dawn` if separate])
+### Slice N5.2 — Mandatory First-Night Resolution (`ch1_03_first_night`; `ch1_04_after_dawn` folded in per `D-N5-02` Option A) — **IMPLEMENTED** on `feature/n52-first-night-resolution` (unmerged; see [`N52_IMPLEMENTATION_REPORT.md`](N52_IMPLEMENTATION_REPORT.md))
 - **Objective:** Trigger exactly-once first-night resolution after Day 1 night ends, supporting both defense success (`survived=true`) and breach recovery (`ReignState.BREACH_PENALTY`) without soft-locking.
 - **Files likely to change:** `ChapterOneNarrativeAdapter.gd`, `ChapterOneBeats.gd`, `tests/test_n52_first_night_narrative.gd`, runner/CI.
 - **Authoritative state/signal:** `NightEncounterManager.night_encounter_resolved(survived, wall_held)` + `TimeManager.sunrise_reached(completed_day)`.
