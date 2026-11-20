@@ -1,5 +1,7 @@
 # Crownfall — Chapter I Narrative Gap Analysis
 
+> **Status Sync (2026-11-20, N4.5-C on `fix/n45b-handoff-lifecycle-and-presentation` over `main` @ `7579bce`):** Prologue beats `pl_01`–`pl_09` and the real two-stage handoff into a fresh `ForgottenShore.tscn` session are implemented and verified (`PrologueHandoffBridge` persists `PlayerProfile.prologue_completed_once` only after `ForgottenShoreSession._ready()` confirms initialization; `pl_09` renders real shore assets + temporary non-canon crown continuity marker + exact `CHAPTER I — FORGOTTEN SHORE` title card). SaveManager schema v2 is unchanged; Chapter I narrative beats (N5) remain unimplemented and OPEN lore remains unresolved. Historical notes below are retained for audit history.
+
 **Audit date:** 2026-11-17 (refreshed after PR #11)  
 **Snapshot:** `main` @ `eb82ae4d63a33a5c0fb9bb3f17f4bf832860c79a` (PR #11 merged)  
 **Engine:** Godot `4.7.2.stable`  

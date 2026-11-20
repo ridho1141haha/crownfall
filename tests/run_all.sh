@@ -179,6 +179,7 @@ run_godot "N44D vision sequence" "--script res://tests/test_n44d_vision_sequence
 run_godot "N44 full flow" "--script res://tests/test_n44_full_flow.gd" "PASS: All .* N44 Full Flow"
 run_godot "N45A voyage shipwreck" "--script res://tests/test_n45a_voyage_shipwreck.gd" "PASS: All .* N45A Voyage Shipwreck"
 run_godot "N45B forgotten shore handoff" "--script res://tests/test_n45b_forgotten_shore_handoff.gd" "PASS: All .* N45B Forgotten Shore Handoff"
+run_godot "N45C real handoff integration" "--script res://tests/test_n45c_real_handoff_integration.gd" "PASS: All .* N45C Real Handoff Integration"
 run_godot "N44 Step3 shrine autosave" "--script res://tests/test_n44_step3a_shrine_autosave.gd" "PASS: All .* N44 Step3 3A"
 run_godot "N44 Step3 world_time types" "--script res://tests/test_n44_step3b_world_time_types.gd" "PASS: All .* N44 Step3 3B"
 run_godot "N44 Step3 rollback era" "--script res://tests/test_n44_step3c_rollback_era.gd" "PASS: All .* N44 Step3 3C"

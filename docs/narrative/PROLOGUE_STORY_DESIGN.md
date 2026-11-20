@@ -1,5 +1,7 @@
 # CROWNFALL — PROLOGUE STORY DESIGN
 
+> **Status Sync (2026-11-20, N4.5-C on `fix/n45b-handoff-lifecycle-and-presentation` over `main` @ `7579bce`):** Prologue beats `pl_01`–`pl_09` and the real two-stage handoff into a fresh `ForgottenShore.tscn` session are implemented and verified (`PrologueHandoffBridge` persists `PlayerProfile.prologue_completed_once` only after `ForgottenShoreSession._ready()` confirms initialization; `pl_09` renders real shore assets + temporary non-canon crown continuity marker + exact `CHAPTER I — FORGOTTEN SHORE` title card). SaveManager schema v2 is unchanged; Chapter I narrative beats (N5) remain unimplemented and OPEN lore remains unresolved. Historical notes below are retained for audit history.
+
 **Title:** The Crown's Call  
 **Leads into:** Chapter I — Forgotten Shore  
 **Status (updated 2026-11-18):** Narrative design draft; pl_01–pl_04 are implemented (pl_03/pl_04 as the N4.3 exploration segment, verified end to end by N4.3-C). **pl_05 is implemented on the N4.4-A review branch `feature/n44a-ruins-foundation` (PR #23, not yet merged); pl_06 is activated DORMANT there with no content.** pl_06's content (N4.4-B/C/D) and pl_07–pl_09 are not implemented. This document remains the content authority; implementation status is tracked in the roadmap and production breakdown.  

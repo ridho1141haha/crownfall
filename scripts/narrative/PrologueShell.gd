@@ -157,6 +157,12 @@ var _handoff_completed: bool = false
 var _handoff_skipped: bool = false
 var _handoff_profile_marked: bool = false
 var _handoff_sequence_provider: Callable = Callable()
+var _handoff_token: int = 0
+var _shore_landing_layer: CanvasLayer = null
+var _shore_scene_root: Control = null
+var _shore_crown_prop: Control = null
+var _shore_title_backdrop: ColorRect = null
+var _shore_title_label: Label = null
 
 
 func _ready() -> void:
@@ -213,6 +219,7 @@ func _initialize_runtime() -> bool:
 	_handoff_runner.sequence_completed.connect(_on_handoff_runner_completed)
 	_handoff_runner.sequence_failed.connect(_on_handoff_runner_failed)
 	add_child(_handoff_runner)
+	_build_shore_landing_overlay()
 	_stage_backdrop = get_node_or_null("StageBackdrop") as ColorRect
 	_stage_caption_label = get_node_or_null("StageBackdrop/StageCaption") as Label
 	return true
@@ -835,7 +842,7 @@ func _on_sequence_cue(cue_id: String) -> void:
 		_show_voyage_cue(cue_id)
 		return
 	if _handoff_active and cue_id.begins_with("stage_pl09_"):
-		_show_voyage_cue(cue_id)
+		_show_shore_landing_cue(cue_id)
 		return
 	if _awakening_handoff_active and _exploration_stage != null and is_instance_valid(_exploration_stage):
 		var ruins := _exploration_stage.ruins()
@@ -927,7 +934,10 @@ func _begin_exit(scene_path: String, cancel_running_sequence: bool) -> bool:
 		_exit_transition.call(scene_path)
 		return true
 	if is_inside_tree() and get_tree() != null:
-		get_tree().change_scene_to_file(scene_path)
+		var err: Error = get_tree().change_scene_to_file(scene_path)
+		if err != OK:
+			PrologueHandoffBridge.invalidate_pending("scene_change_failed")
+			return false
 	return true
 
 # --- N4.5-A: Voyage (pl_07) & Shipwreck (pl_08) ---
@@ -1146,9 +1156,13 @@ func _exit_tree() -> void:
 	_handoff_active = false
 	_handoff_skipped = false
 	_hide_voyage_overlay()
+	_hide_shore_landing_overlay()
+	# If the shell unloads BEFORE completing an authorized handoff, invalidate any pending intent.
+	if not _handoff_completed:
+		PrologueHandoffBridge.invalidate_pending("shell_unloaded_before_handoff")
 
 
-# --- N4.5-B: Forgotten Shore Landing (pl_09) & Chapter I Handoff ---
+# --- N4.5-B / N4.5-C: Forgotten Shore Landing (pl_09) & Chapter I Handoff ---
 
 func handoff_runner() -> SequenceRunner:
 	return _handoff_runner
@@ -1166,12 +1180,211 @@ func is_handoff_completed() -> bool:
 	return _handoff_completed
 
 
+func handoff_token() -> int:
+	return _handoff_token
+
+
 func was_profile_marked_completed() -> bool:
-	return _handoff_profile_marked
+	var last: Dictionary = PrologueHandoffBridge.last_result()
+	return bool(last.get("persisted", false))
+
+
+func shore_landing_layer() -> CanvasLayer:
+	return _shore_landing_layer
+
+
+func is_shore_landing_visible() -> bool:
+	return _shore_landing_layer != null and is_instance_valid(_shore_landing_layer) and _shore_landing_layer.visible
+
+
+func is_shore_crown_visible() -> bool:
+	return _shore_crown_prop != null and is_instance_valid(_shore_crown_prop) and _shore_crown_prop.visible
+
+
+func shore_title_text() -> String:
+	if _shore_title_label != null and is_instance_valid(_shore_title_label) and _shore_title_label.visible:
+		return _shore_title_label.text
+	return ""
 
 
 func set_handoff_sequence_provider(provider: Callable) -> void:
 	_handoff_sequence_provider = provider
+
+
+func _build_shore_landing_overlay() -> void:
+	var layer := CanvasLayer.new()
+	layer.name = "ShoreLandingLayer"
+	layer.layer = 1
+	layer.follow_viewport_enabled = false
+	layer.visible = false
+
+	var root_ctrl := Control.new()
+	root_ctrl.name = "ShoreLandingRoot"
+	root_ctrl.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	root_ctrl.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	layer.add_child(root_ctrl)
+
+	# Beach composition using existing Forgotten Shore assets (dawn sky, mountains, forest, shore sand, shipwreck, Monarch).
+	var sky := ColorRect.new()
+	sky.name = "ShoreSky"
+	sky.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	sky.color = Color(0.16, 0.24, 0.34, 1.0)
+	sky.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	root_ctrl.add_child(sky)
+
+	var mtn_tex: Texture2D = load("res://assets/environment/backgrounds/bg_mountains_far.png") as Texture2D
+	if mtn_tex != null:
+		var mtn := TextureRect.new()
+		mtn.name = "ShoreMountains"
+		mtn.texture = mtn_tex
+		mtn.stretch_mode = TextureRect.STRETCH_TILE
+		mtn.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_WIDE)
+		mtn.offset_top = -420.0
+		mtn.offset_bottom = -160.0
+		mtn.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		root_ctrl.add_child(mtn)
+
+	var forest_tex: Texture2D = load("res://assets/environment/backgrounds/bg_forest_mid.png") as Texture2D
+	if forest_tex != null:
+		var forest := TextureRect.new()
+		forest.name = "ShoreForest"
+		forest.texture = forest_tex
+		forest.stretch_mode = TextureRect.STRETCH_TILE
+		forest.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_WIDE)
+		forest.offset_top = -320.0
+		forest.offset_bottom = -140.0
+		forest.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		root_ctrl.add_child(forest)
+
+	var sand_tex: Texture2D = load("res://assets/environment/terrain/terrain_shore_tile.png") as Texture2D
+	var beach := TextureRect.new()
+	beach.name = "ShoreBeachTerrain"
+	beach.texture = sand_tex
+	beach.stretch_mode = TextureRect.STRETCH_TILE
+	beach.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_WIDE)
+	beach.offset_top = -170.0
+	beach.offset_bottom = 0.0
+	beach.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	root_ctrl.add_child(beach)
+
+	var ship_tex: Texture2D = load("res://assets/buildings/shipwreck/building_shipwreck_stages.png") as Texture2D
+	if ship_tex != null:
+		var ship_atlas := AtlasTexture.new()
+		ship_atlas.atlas = ship_tex
+		ship_atlas.region = Rect2(0.0, 0.0, ship_tex.get_width() / 4.0, ship_tex.get_height())
+		var ship := TextureRect.new()
+		ship.name = "ShoreShipwreck"
+		ship.texture = ship_atlas
+		ship.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+		ship.position = Vector2(760.0, 410.0)
+		ship.size = Vector2(220.0, 160.0)
+		ship.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		root_ctrl.add_child(ship)
+
+	var monarch_tex: Texture2D = load(EXPLORER_TEXTURE_PATH) as Texture2D
+	if monarch_tex != null:
+		var idle_atlas := AtlasTexture.new()
+		idle_atlas.atlas = monarch_tex
+		idle_atlas.region = Rect2(0.0, 0.0, monarch_tex.get_width() / 8.0, monarch_tex.get_height())
+		var monarch := TextureRect.new()
+		monarch.name = "ShoreMonarch"
+		monarch.texture = idle_atlas
+		monarch.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+		monarch.position = Vector2(520.0, 468.0)
+		monarch.size = Vector2(96.0, 96.0)
+		monarch.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		root_ctrl.add_child(monarch)
+
+	# Temporary non-canon crown continuity marker (no dedicated crown sprite asset exists yet).
+	var crown_box := Control.new()
+	crown_box.name = "ShoreCrownProp"
+	crown_box.position = Vector2(624.0, 536.0)
+	crown_box.size = Vector2(28.0, 18.0)
+	crown_box.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	crown_box.visible = false
+	var crown_band := ColorRect.new()
+	crown_band.name = "CrownBand"
+	crown_band.position = Vector2(0.0, 8.0)
+	crown_band.size = Vector2(28.0, 10.0)
+	crown_band.color = Color(0.88, 0.76, 0.34, 1.0)
+	crown_band.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	crown_box.add_child(crown_band)
+	for px: float in [2.0, 11.0, 20.0]:
+		var prong := ColorRect.new()
+		prong.position = Vector2(px, 0.0)
+		prong.size = Vector2(6.0, 8.0)
+		prong.color = Color(0.95, 0.85, 0.44, 1.0)
+		prong.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		crown_box.add_child(prong)
+	root_ctrl.add_child(crown_box)
+
+	# Chapter I title card overlay (exact approved string, readable & unclipped).
+	var title_bg := ColorRect.new()
+	title_bg.name = "ChapterTitleBackdrop"
+	title_bg.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	title_bg.color = Color(0.03, 0.04, 0.06, 0.92)
+	title_bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	title_bg.visible = false
+	var title_lbl := Label.new()
+	title_lbl.name = "ChapterTitleLabel"
+	title_lbl.text = PrologueBeats.CHAPTER_I_TITLE
+	title_lbl.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	title_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	title_lbl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	title_lbl.add_theme_font_size_override("font_size", 36)
+	title_lbl.add_theme_color_override("font_color", Color(0.95, 0.91, 0.80, 1.0))
+	title_lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	title_lbl.visible = false
+	title_bg.add_child(title_lbl)
+	root_ctrl.add_child(title_bg)
+
+	add_child(layer)
+	_shore_landing_layer = layer
+	_shore_scene_root = root_ctrl
+	_shore_crown_prop = crown_box
+	_shore_title_backdrop = title_bg
+	_shore_title_label = title_lbl
+
+
+func _show_shore_landing_cue(cue_id: String) -> void:
+	if _shore_landing_layer == null or not is_instance_valid(_shore_landing_layer):
+		return
+	_hide_voyage_overlay()
+	_shore_landing_layer.visible = true
+	match cue_id:
+		PrologueBeats.CUE_PL09_SHORE_WAKE:
+			if _shore_crown_prop != null:
+				_shore_crown_prop.visible = false
+			if _shore_title_backdrop != null:
+				_shore_title_backdrop.visible = false
+			if _shore_title_label != null:
+				_shore_title_label.visible = false
+		PrologueBeats.CUE_PL09_CROWN_CONTINUITY:
+			if _shore_crown_prop != null:
+				_shore_crown_prop.visible = true
+			if _shore_title_backdrop != null:
+				_shore_title_backdrop.visible = false
+			if _shore_title_label != null:
+				_shore_title_label.visible = false
+		PrologueBeats.CUE_PL09_CHAPTER_TITLE:
+			if _shore_crown_prop != null:
+				_shore_crown_prop.visible = true
+			if _shore_title_backdrop != null:
+				_shore_title_backdrop.visible = true
+			if _shore_title_label != null:
+				_shore_title_label.text = PrologueBeats.CHAPTER_I_TITLE
+				_shore_title_label.visible = true
+
+
+func _hide_shore_landing_overlay() -> void:
+	if _shore_landing_layer != null and is_instance_valid(_shore_landing_layer):
+		_shore_landing_layer.visible = false
+	if _shore_crown_prop != null and is_instance_valid(_shore_crown_prop):
+		_shore_crown_prop.visible = false
+	if _shore_title_backdrop != null and is_instance_valid(_shore_title_backdrop):
+		_shore_title_backdrop.visible = false
+	if _shore_title_label != null and is_instance_valid(_shore_title_label):
+		_shore_title_label.visible = false
 
 
 func _resolve_handoff_sequence() -> Dictionary:
@@ -1181,7 +1394,7 @@ func _resolve_handoff_sequence() -> Dictionary:
 	return PrologueBeats.shore_handoff_sequence()
 
 
-## Starts N4.5-B (pl_09 Forgotten Shore landing -> Chapter I handoff).
+## Starts N4.5-B/C (pl_09 Forgotten Shore landing -> Chapter I handoff).
 ## Valid only after N4.5-A boundary is reached with pl_08 completed.
 func start_shore_handoff() -> bool:
 	if _exit_started or _handoff_active or _handoff_completed:
@@ -1202,7 +1415,7 @@ func start_shore_handoff() -> bool:
 	_handoff_skipped = false
 	if not _handoff_runner.play(seq):
 		_handoff_active = false
-		_hide_voyage_overlay()
+		_hide_shore_landing_overlay()
 		return false
 	return true
 
@@ -1221,13 +1434,14 @@ func _on_handoff_runner_completed(sequence_id: String) -> void:
 	_handoff_skipped = false
 	_handoff_completed = true
 	_hide_voyage_overlay()
+	_hide_shore_landing_overlay()
 	if not was_skipped:
 		var profile_path: String = String(Engine.get_meta("crownfall_profile_path", PlayerProfile.DEFAULT_PROFILE_PATH))
-		var profile := PlayerProfile.new()
-		if profile.set_profile_path(profile_path):
-			_handoff_profile_marked = profile.mark_prologue_completed(profile_path)
-			if not _handoff_profile_marked:
-				push_warning("[PrologueShell] PlayerProfile.mark_prologue_completed failed; continuing to Forgotten Shore")
+		_handoff_token = PrologueHandoffBridge.authorize_fresh_handoff(FORGOTTEN_SHORE_SCENE, profile_path)
+	else:
+		_handoff_token = 0
+		PrologueHandoffBridge.invalidate_pending("pl09_skipped")
+		Engine.set_meta("crownfall_load_on_start", false)
 	_begin_exit(FORGOTTEN_SHORE_SCENE, false)
 
 
@@ -1240,8 +1454,10 @@ func _abort_handoff_segment(update_status: bool) -> void:
 	_handoff_generation += 1
 	_handoff_active = false
 	_handoff_skipped = false
-	_hide_voyage_overlay()
+	_hide_shore_landing_overlay()
 	if _handoff_runner != null and _handoff_runner.is_running():
 		_handoff_runner.cancel()
+	if not _handoff_completed:
+		PrologueHandoffBridge.invalidate_pending("handoff_aborted")
 	if was_active and update_status and not _exit_started:
 		_set_cancelled_exploration_status()
