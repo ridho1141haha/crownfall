@@ -145,6 +145,8 @@ func _setup_chapter1_narrative_adapter() -> void:
 		"night_mgr": night_mgr,
 		"progression": progression,
 		"dialogue_panel": _chapter1_dialogue_panel,
+		"specialists": specialists,
+		"research_mgr": research_mgr,
 	}
 	if chapter1_narrative.setup(deps, not _loaded_from_save_on_start) and not _loaded_from_save_on_start:
 		chapter1_narrative.activate()

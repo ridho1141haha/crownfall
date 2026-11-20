@@ -7,6 +7,19 @@ This changelog records repository changes that actually occurred. Planned featur
 
 ---
 
+## [2026-11-20] N5.3: Optional Scientist & research narrative beats
+
+**Type:** Narrative integration slice (N5.3; optional Scientist discovery/recruitment & first research start; SaveManager schema v2 unchanged)
+**Engine Verified:** `4.7.2.stable.official.ed1daf0bf` (`SUMMARY: passed=36 failed=0 skipped=0`; `PASS: All 304 repository integrity, scene-graph, CI lock, and OD-01..OD-10 documentation checks succeeded!`)
+**Baseline:** `main` @ `1285e13`; branch `feature/n53-scientist-research-narrative`
+
+### Summary
+- Wired existing `SpecialistDomain` and `ResearchManager` into `ChapterOneNarrativeAdapter` via `ForgottenShoreSession._setup_chapter1_narrative_adapter()`.
+- Added non-gating, skippable `ch1_05_scientist_discovery`, `ch1_05_scientist_recruitment`, and `ch1_06_research` beats with a bounded 4-slot contention policy (`first_night → scientist_discovery → scientist_recruitment → first_research`) and restore-silent Continue checks.
+- Added `tests/test_n53_scientist_research_narrative.gd`, registered it in `tests/run_all.sh` and `.github/workflows/godot-ci.yml`, updated `docs/narrative/N5_IMPLEMENTATION_ROADMAP.md`, and created `docs/narrative/N53_IMPLEMENTATION_REPORT.md`.
+
+---
+
 ## [2026-11-20] N5-A: Chapter I design lock, source-audited roadmap & documentation repair
 
 **Type:** Documentation & implementation-readiness package (docs-only; zero `.gd`/`.tscn`/`.tres` or save-schema changes)

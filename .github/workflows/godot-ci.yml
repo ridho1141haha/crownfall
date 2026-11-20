@@ -300,6 +300,13 @@ jobs:
           ! grep -E "(SCRIPT ERROR:|Parser Error:|TEST FAILURE:)" /tmp/godot_n52.log
           grep -q "PASS: All .* N52 First Night Narrative" /tmp/godot_n52.log
 
+      - name: Run N53 Scientist & Research Narrative Tests
+        run: |
+          set -o pipefail
+          godot --headless --script res://tests/test_n53_scientist_research_narrative.gd 2>&1 | tee /tmp/godot_n53.log
+          ! grep -E "(SCRIPT ERROR:|Parser Error:|TEST FAILURE:)" /tmp/godot_n53.log
+          grep -q "PASS: All .* N53 Scientist Research Narrative" /tmp/godot_n53.log
+
       - name: Run N44 Step 3A Shrine Autosave Tests
         run: |
           set -o pipefail
