@@ -1,4 +1,4 @@
-[gd_scene load_steps=10 format=3]
+[gd_scene load_steps=11 format=3]
 
 [ext_resource type="Script" path="res://scripts/world/EldergroveForestArrival.gd" id="1_arrival"]
 [ext_resource type="PackedScene" path="res://scenes/player/Player.tscn" id="2_player"]
@@ -7,6 +7,7 @@
 [ext_resource type="Texture2D" path="res://assets/environment/terrain/terrain_shore_tile.png" id="5_ground_tex"]
 [ext_resource type="Texture2D" path="res://assets/environment/vegetation/env_pine_tree_states.png" id="6_tree_tex"]
 [ext_resource type="Texture2D" path="res://assets/buildings/shipwreck/building_shipwreck_stages.png" id="7_ship_tex"]
+[ext_resource type="Script" path="res://scripts/ui/PauseMenu.gd" id="8_pause_menu"]
 
 [sub_resource type="RectangleShape2D" id="RectangleShape2D_floor"]
 size = Vector2(1600, 120)
@@ -100,38 +101,38 @@ frame = 3
 position = Vector2(-180, -64)
 texture = ExtResource("6_tree_tex")
 centered = false
-hframes = 4
+hframes = 2
 
 [node name="PineTree2" type="Sprite2D" parent="WorldObjects"]
 position = Vector2(80, -64)
 texture = ExtResource("6_tree_tex")
 centered = false
-hframes = 4
+hframes = 2
 
 [node name="PineTree3" type="Sprite2D" parent="WorldObjects"]
-position = Vector2(260, -64)
+position = Vector2(340, -64)
 texture = ExtResource("6_tree_tex")
 centered = false
-hframes = 4
+hframes = 2
 
 [node name="PineTree4" type="Sprite2D" parent="WorldObjects"]
-position = Vector2(480, -64)
+position = Vector2(600, -64)
 texture = ExtResource("6_tree_tex")
 centered = false
-hframes = 4
+hframes = 2
 
 [node name="Player" parent="." instance=ExtResource("2_player")]
 position = Vector2(-320, 0)
 
 [node name="ArrivalHUD" type="CanvasLayer" parent="."]
-layer = 10
+layer = 9
 
 [node name="MarginContainer" type="MarginContainer" parent="ArrivalHUD"]
 anchors_preset = 10
 anchor_right = 1.0
-offset_bottom = 120.0
+offset_bottom = 140.0
 grow_horizontal = 2
-theme_override_constants/margin_top = 28
+theme_override_constants/margin_top = 20
 
 [node name="VBoxContainer" type="VBoxContainer" parent="ArrivalHUD/MarginContainer"]
 layout_mode = 2
@@ -146,3 +147,33 @@ horizontal_alignment = 1
 layout_mode = 2
 text = "A new shore. We begin again."
 horizontal_alignment = 1
+
+[node name="ResourcesLabel" type="Label" parent="ArrivalHUD/MarginContainer/VBoxContainer"]
+layout_mode = 2
+text = "Gold: 0 | Wood: 0 | Stone: 0"
+horizontal_alignment = 1
+
+[node name="BottomBar" type="VBoxContainer" parent="ArrivalHUD"]
+anchors_preset = 12
+anchor_top = 1.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_top = -72.0
+offset_bottom = -16.0
+grow_horizontal = 2
+grow_vertical = 0
+theme_override_constants/separation = 4
+
+[node name="PromptLabel" type="Label" parent="ArrivalHUD/BottomBar"]
+layout_mode = 2
+text = ""
+horizontal_alignment = 1
+
+[node name="FeedbackLabel" type="Label" parent="ArrivalHUD/BottomBar"]
+layout_mode = 2
+text = ""
+horizontal_alignment = 1
+
+[node name="PauseMenu" type="CanvasLayer" parent="."]
+layer = 10
+script = ExtResource("8_pause_menu")

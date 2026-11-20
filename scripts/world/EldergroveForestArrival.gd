@@ -1,49 +1,112 @@
 class_name EldergroveForestArrival
 extends Node2D
 
-## N5.5 / N5.6: Minimal Eldergrove Forest arrival scene controller.
+## N5.5 / N5.6 / N6.0: Eldergrove Forest arrival & first playable slice controller.
 ##
-## Supports two strictly separated lifecycle paths:
+## Lifecycle paths:
 ##   A) Fresh N5.5 Departure Handoff (crownfall_load_on_start == false)
 ##   B) N5.6 Island-Aware Continue Restoration (crownfall_load_on_start == true)
+##
+## N6.0 reuses existing PlayerController, EconomyLedger, ResourceNodeManager,
+## InteractionResolver, PauseMenu, ProgressionState, EraProgressionManager, and
+## SaveManager (schema v2 unchanged) to provide a bounded playable clearing with
+## movement, collision, resource gathering, manual save, and Main Menu exit/re-entry.
 
 signal arrival_acknowledged(token: int)
 signal arrival_rejected(reason: String)
 signal arrival_persistence_failed(reason: String)
 signal continue_restored(save_path: String)
 signal continue_restore_failed(reason: String)
+signal interaction_completed(target_id: String, resource_id: StringName, amount: int)
+signal feedback_message(text: String)
 
 const SCENE_PATH: String = "res://scenes/world/EldergroveForest.tscn"
+const MAIN_MENU_SCENE: String = "res://scenes/main/Main.tscn"
 const ARRIVAL_TITLE: String = "ELDERGROVE FOREST"
 const ARRIVAL_SUBTITLE: String = "A new shore. We begin again."
 const RESTORED_SUBTITLE: String = "Eldergrove Forest — reign restored."
 const PERSIST_FAIL_SUBTITLE: String = "A new shore. We begin again. (Warning: arrival progress was not saved)"
 const MIN_BOUND_X: float = -760.0
 const MAX_BOUND_X: float = 760.0
+const PLAYER_SPAWN_X: float = -320.0
+const PLAYER_SPAWN_Y: float = 0.0
 const MAX_PERSIST_ATTEMPTS: int = 2
+const OFF_ISLAND_X: float = -99999.0
+
+const ELDERGROVE_NODES: Array[Dictionary] = [
+	{
+		"id": "eldergrove_fallen_timber_01",
+		"resource": &"wood",
+		"amount": 4,
+		"x": -60.0,
+		"renewable": false,
+		"label": "Fallen Clearing Timber (+4 Wood)",
+		"prompt": "[E] Gather Timber (+4W)",
+	},
+	{
+		"id": "eldergrove_mossy_stone_01",
+		"resource": &"stone",
+		"amount": 3,
+		"x": 220.0,
+		"renewable": false,
+		"label": "Mossy Outcrop (+3 Stone)",
+		"prompt": "[E] Gather Stone (+3S)",
+	},
+	{
+		"id": "eldergrove_foraged_supply_01",
+		"resource": &"gold",
+		"amount": 3,
+		"x": 500.0,
+		"renewable": false,
+		"label": "Weathered Supply Crate (+3 Gold)",
+		"prompt": "[E] Salvage Crate (+3G)",
+	},
+]
 
 var progression: ProgressionState = null
 var era_mgr: EraProgressionManager = null
+var ledger: EconomyLedger = EconomyLedger.new()
+var resource_mgr: ResourceNodeManager = ResourceNodeManager.new()
+
 var _arrival_lock: PlayerControlLock = PlayerControlLock.new()
 var _handoff_acknowledged: bool = false
 var _restored_from_continue: bool = false
 var _runtime_milestone_recorded: bool = false
 var _init_valid: bool = false
 var _last_status_reason: String = ""
+var _last_rejection_reason: String = ""
 var _persisted_on_arrival: bool = false
 var _persistence_attempts: int = 0
 var _persistence_failure_reason: String = ""
 var _force_invalid_init_for_test: bool = false
+var _base_save_payload: Dictionary = {}
+var _has_unsaved_progress: bool = false
+var _active_target: Dictionary = {}
+var _node_markers: Dictionary = {}
+var _signals_connected: bool = false
+var _scene_transition: Callable = Callable()
 
 @onready var player: PlayerController = get_node_or_null("Player") as PlayerController
 @onready var ground: StaticBody2D = get_node_or_null("Ground") as StaticBody2D
 @onready var ground_collision: CollisionShape2D = get_node_or_null("Ground/CollisionShape2D") as CollisionShape2D
+@onready var world_objects: Node2D = get_node_or_null("WorldObjects") as Node2D
 @onready var title_label: Label = get_node_or_null("ArrivalHUD/MarginContainer/VBoxContainer/TitleLabel") as Label
 @onready var subtitle_label: Label = get_node_or_null("ArrivalHUD/MarginContainer/VBoxContainer/SubtitleLabel") as Label
+@onready var resources_label: Label = get_node_or_null("ArrivalHUD/MarginContainer/VBoxContainer/ResourcesLabel") as Label
+@onready var prompt_label: Label = get_node_or_null("ArrivalHUD/BottomBar/PromptLabel") as Label
+@onready var feedback_label: Label = get_node_or_null("ArrivalHUD/BottomBar/FeedbackLabel") as Label
+@onready var pause_menu: PauseMenu = get_node_or_null("PauseMenu") as PauseMenu
 
 
 func _ready() -> void:
+	resource_mgr.configure_nodes(ELDERGROVE_NODES)
 	_configure_player_bounds()
+	_place_player_at_spawn()
+	_build_resource_markers()
+	_wire_gameplay_connections()
+	if pause_menu != null:
+		pause_menu.bind_session(self)
+
 	if player != null:
 		_arrival_lock.lock(player)
 
@@ -90,6 +153,7 @@ func _ready() -> void:
 	var ctx: Dictionary = ack.get("source_context", {}) as Dictionary
 	progression = ctx.get("progression", null) as ProgressionState
 	era_mgr = ctx.get("era_mgr", null) as EraProgressionManager
+	_hydrate_gameplay_from_payload(ctx.get("base_save_payload", {}) as Dictionary, false)
 	if progression.record_fact(ProgressionState.FACT_ELDERGROVE_REACHED):
 		_runtime_milestone_recorded = progression.has_fact(ProgressionState.FACT_ELDERGROVE_REACHED)
 	era_mgr.notify_eldergrove_milestone(progression)
@@ -100,24 +164,208 @@ func _ready() -> void:
 	_persistence_failure_reason = String(persist_res.get("reason", ""))
 	if not _persisted_on_arrival:
 		_last_status_reason = "arrival_persistence_failed"
+		_has_unsaved_progress = true
 		push_warning("[EldergroveForestArrival] Arrival fact recorded in runtime but persistence failed after %d attempt(s): %s" % [_persistence_attempts, _persistence_failure_reason])
 		arrival_persistence_failed.emit(_persistence_failure_reason)
 	else:
 		_last_status_reason = ""
+		_has_unsaved_progress = false
 
 	_show_arrival_presentation()
+	_refresh_gameplay_hud()
+	_refresh_resource_markers()
 	_arrival_lock.unlock()
 	arrival_acknowledged.emit(int(ack.get("token", 0)))
 
 
+func _process(_delta: float) -> void:
+	if player == null or not is_instance_valid(player):
+		return
+	_active_target = resolve_nearest_interaction(player.global_position.x)
+	if prompt_label != null:
+		if bool(_active_target.get("has_target", false)):
+			prompt_label.text = String(_active_target.get("prompt_text", ""))
+		else:
+			prompt_label.text = "Explore the clearing — [A/D] Move | [E] Interact | [K] Save | [Esc] Menu"
+
+
 func _exit_tree() -> void:
 	_arrival_lock.unlock()
+	if get_tree() != null:
+		get_tree().paused = false
+
+
+func set_scene_transition(transition: Callable) -> void:
+	_scene_transition = transition
+
+
+func resolve_nearest_interaction(actor_x: float) -> Dictionary:
+	return InteractionResolver.resolve_nearest(
+		actor_x,
+		resource_mgr,
+		null,
+		null,
+		null,
+		0,
+		OFF_ISLAND_X,
+		-OFF_ISLAND_X,
+		true
+	)
+
+
+func get_active_interaction_target() -> Dictionary:
+	return _active_target.duplicate(true)
+
+
+func try_interact_at(actor_x: float) -> Dictionary:
+	if progression == null or not progression.has_fact(ProgressionState.FACT_ELDERGROVE_REACHED):
+		_record_rejection("Eldergrove session is not active")
+		return {"ok": false, "reason": _last_rejection_reason}
+	var target: Dictionary = resolve_nearest_interaction(actor_x)
+	if not bool(target.get("has_target", false)):
+		_record_rejection("Nothing within interaction range")
+		return {"ok": false, "reason": _last_rejection_reason}
+	var cmd: StringName = target.get("primary_command", &"") as StringName
+	var target_id: String = String(target.get("target_id", ""))
+	if cmd == &"collect":
+		var res: Dictionary = resource_mgr.try_collect(target_id, actor_x, ledger)
+		if not bool(res.get("ok", false)):
+			_record_rejection(String(res.get("reason", "Collection failed")))
+			return res
+		var node_def: Dictionary = res.get("node", {}) as Dictionary
+		var res_id: StringName = node_def.get("resource", &"wood") as StringName
+		var amount: int = int(node_def.get("amount", 0))
+		_has_unsaved_progress = true
+		_last_rejection_reason = ""
+		_refresh_resource_markers()
+		_refresh_gameplay_hud()
+		var msg: String = "Gathered %s" % String(node_def.get("label", target_id))
+		_set_feedback(msg)
+		interaction_completed.emit(target_id, res_id, amount)
+		return res
+	_record_rejection("Unsupported interaction command")
+	return {"ok": false, "reason": _last_rejection_reason}
+
+
+func build_save_payload() -> Dictionary:
+	if _base_save_payload.is_empty() or progression == null or era_mgr == null:
+		return {}
+	var payload: Dictionary = _base_save_payload.duplicate(true)
+	if not payload.has("progression_flags") or typeof(payload["progression_flags"]) != TYPE_DICTIONARY:
+		return {}
+	payload["resources"] = ledger.get_all_balances()
+	if player != null and is_instance_valid(player):
+		payload["player"] = {
+			"position_x": clampf(player.global_position.x, MIN_BOUND_X, MAX_BOUND_X),
+			"facing_direction": 1 if player.facing_direction >= 0 else -1,
+		}
+	var pf: Dictionary = payload["progression_flags"] as Dictionary
+	pf["progression_facts"] = progression.to_save_array()
+	pf["era_id"] = era_mgr.to_save_id()
+	var merged_nodes: Dictionary = {}
+	if pf.has("node_states") and typeof(pf["node_states"]) == TYPE_DICTIONARY:
+		merged_nodes = (pf["node_states"] as Dictionary).duplicate(true)
+	var eg_nodes: Dictionary = resource_mgr.to_save_dict()
+	for nid: String in eg_nodes.keys():
+		merged_nodes[nid] = bool(eg_nodes[nid])
+	pf["node_states"] = merged_nodes
+	return payload
+
+
+func save_game_state(save_path: String = "", simulate_failure: bool = false) -> bool:
+	if progression == null or era_mgr == null or not progression.has_fact(ProgressionState.FACT_ELDERGROVE_REACHED):
+		_record_rejection("Cannot save without active Eldergrove progression")
+		return false
+	var target_path: String = save_path if not save_path.is_empty() else _resolve_continue_save_path()
+	if target_path.is_empty() or not SaveManager.is_safe_save_path(target_path):
+		_record_rejection("Invalid save path")
+		return false
+	var payload: Dictionary = build_save_payload()
+	if payload.is_empty():
+		_record_rejection("No valid base save payload available")
+		return false
+	var sm := SaveManager.new()
+	if not sm.validate_payload(payload):
+		_record_rejection("Save payload failed schema v2 validation")
+		return false
+	if not sm.save_state(payload, target_path, simulate_failure):
+		_record_rejection("Failed to save Eldergrove progress")
+		return false
+	_base_save_payload = payload.duplicate(true)
+	_has_unsaved_progress = false
+	_last_rejection_reason = ""
+	_set_feedback("Eldergrove progress saved.")
+	return true
+
+
+func _on_manual_save() -> bool:
+	return save_game_state()
+
+
+func has_unsaved_progress() -> bool:
+	return _has_unsaved_progress
+
+
+func get_last_rejection_reason() -> String:
+	return _last_rejection_reason
+
+
+func return_to_main_menu() -> bool:
+	EldergroveHandoffBridge.invalidate_pending("eldergrove_return_to_menu")
+	_arrival_lock.unlock()
+	if get_tree() != null:
+		get_tree().paused = false
+	if _scene_transition.is_valid():
+		_scene_transition.call(MAIN_MENU_SCENE)
+		return true
+	if is_inside_tree() and get_tree() != null:
+		return get_tree().change_scene_to_file(MAIN_MENU_SCENE) == OK
+	return false
+
+
+func _on_player_interaction_requested(player_x: float) -> void:
+	try_interact_at(player_x)
+
+
+func _wire_gameplay_connections() -> void:
+	if _signals_connected or player == null or not is_instance_valid(player):
+		return
+	if not player.interaction_requested.is_connected(_on_player_interaction_requested):
+		player.interaction_requested.connect(_on_player_interaction_requested)
+	if not player.manual_save_requested.is_connected(_on_manual_save):
+		player.manual_save_requested.connect(_on_manual_save)
+	_signals_connected = true
 
 
 func _resolve_continue_save_path() -> String:
 	if Engine.has_meta("crownfall_menu_save_path"):
 		return String(Engine.get_meta("crownfall_menu_save_path"))
 	return SaveManager.DEFAULT_SAVE_PATH
+
+
+func _hydrate_gameplay_from_payload(payload: Dictionary, restore_player_position: bool) -> void:
+	if payload.is_empty():
+		return
+	_base_save_payload = payload.duplicate(true)
+	if payload.has("resources") and typeof(payload["resources"]) == TYPE_DICTIONARY:
+		ledger.set_balances_from_dict(payload["resources"] as Dictionary)
+	if payload.has("progression_flags") and typeof(payload["progression_flags"]) == TYPE_DICTIONARY:
+		var pf: Dictionary = payload["progression_flags"] as Dictionary
+		if pf.has("node_states") and typeof(pf["node_states"]) == TYPE_DICTIONARY:
+			resource_mgr.apply_save_state(pf["node_states"])
+	if restore_player_position and player != null and is_instance_valid(player):
+		var placed: bool = false
+		if payload.has("player") and typeof(payload["player"]) == TYPE_DICTIONARY:
+			var p_dict: Dictionary = payload["player"] as Dictionary
+			if typeof(p_dict.get("position_x", null)) in [TYPE_FLOAT, TYPE_INT]:
+				var px: float = float(p_dict["position_x"])
+				if not is_nan(px) and not is_inf(px) and px >= MIN_BOUND_X and px <= MAX_BOUND_X:
+					player.global_position = Vector2(px, PLAYER_SPAWN_Y)
+					var fd: int = int(roundf(float(p_dict.get("facing_direction", 1))))
+					player.facing_direction = -1 if fd < 0 else 1
+					placed = true
+		if not placed:
+			_place_player_at_spawn()
 
 
 func _restore_from_continue_save() -> void:
@@ -158,6 +406,7 @@ func _restore_from_continue_save() -> void:
 
 	progression = restored_prog
 	era_mgr = restored_era
+	_hydrate_gameplay_from_payload(data, true)
 	_handoff_acknowledged = false
 	_restored_from_continue = true
 	_runtime_milestone_recorded = progression.has_fact(ProgressionState.FACT_ELDERGROVE_REACHED)
@@ -165,7 +414,10 @@ func _restore_from_continue_save() -> void:
 	_persistence_attempts = 0
 	_persistence_failure_reason = ""
 	_last_status_reason = ""
+	_has_unsaved_progress = false
 	_show_restored_presentation()
+	_refresh_gameplay_hud()
+	_refresh_resource_markers()
 	_arrival_lock.unlock()
 	continue_restored.emit(save_path)
 
@@ -173,6 +425,7 @@ func _restore_from_continue_save() -> void:
 func _reject_continue_restore(reason: String) -> void:
 	progression = null
 	era_mgr = null
+	_base_save_payload = {}
 	_handoff_acknowledged = false
 	_restored_from_continue = false
 	_runtime_milestone_recorded = false
@@ -180,11 +433,13 @@ func _reject_continue_restore(reason: String) -> void:
 	_persistence_attempts = 0
 	_persistence_failure_reason = ""
 	_last_status_reason = reason
+	_has_unsaved_progress = false
 	_arrival_lock.unlock()
 	continue_restore_failed.emit(reason)
 
 
 func _reject_arrival(reason: String) -> void:
+	_base_save_payload = {}
 	_handoff_acknowledged = false
 	_restored_from_continue = false
 	_runtime_milestone_recorded = false
@@ -192,6 +447,7 @@ func _reject_arrival(reason: String) -> void:
 	_persistence_attempts = 0
 	_persistence_failure_reason = ""
 	_last_status_reason = reason
+	_has_unsaved_progress = false
 	_arrival_lock.unlock()
 	arrival_rejected.emit(reason)
 
@@ -301,6 +557,74 @@ func _configure_player_bounds() -> void:
 		cam.limit_right = 800
 
 
+func _place_player_at_spawn() -> void:
+	if player == null or not is_instance_valid(player):
+		return
+	player.global_position = Vector2(PLAYER_SPAWN_X, PLAYER_SPAWN_Y)
+	player.facing_direction = 1
+
+
+func _build_resource_markers() -> void:
+	if world_objects == null or not is_instance_valid(world_objects):
+		return
+	var container: Node2D = world_objects.get_node_or_null("ResourceMarkers") as Node2D
+	if container == null:
+		container = Node2D.new()
+		container.name = "ResourceMarkers"
+		world_objects.add_child(container)
+	_node_markers.clear()
+	for n: Dictionary in resource_mgr.nodes:
+		var nid: String = String(n["id"])
+		var marker := Node2D.new()
+		marker.name = nid
+		marker.position = Vector2(float(n["x"]), 0.0)
+		var box := ColorRect.new()
+		box.name = "Visual"
+		box.offset_left = -14.0
+		box.offset_top = -24.0
+		box.offset_right = 14.0
+		box.offset_bottom = 0.0
+		var res_id: StringName = n["resource"] as StringName
+		if res_id == &"wood":
+			box.color = Color(0.55, 0.36, 0.2, 1.0)
+		elif res_id == &"stone":
+			box.color = Color(0.58, 0.62, 0.66, 1.0)
+		else:
+			box.color = Color(0.84, 0.68, 0.24, 1.0)
+		marker.add_child(box)
+		var lbl := Label.new()
+		lbl.name = "Tag"
+		lbl.text = String(n.get("prompt", "[E]"))
+		lbl.position = Vector2(-64.0, -48.0)
+		marker.add_child(lbl)
+		container.add_child(marker)
+		_node_markers[nid] = marker
+
+
+func _refresh_resource_markers() -> void:
+	for nid: String in _node_markers.keys():
+		var marker: Node2D = _node_markers[nid] as Node2D
+		if marker != null and is_instance_valid(marker):
+			marker.visible = not resource_mgr.is_collected(nid)
+
+
+func _refresh_gameplay_hud() -> void:
+	if resources_label != null:
+		var b: Dictionary = ledger.get_all_balances()
+		resources_label.text = "Gold: %d | Wood: %d | Stone: %d" % [int(b["gold"]), int(b["wood"]), int(b["stone"])]
+
+
+func _set_feedback(text: String) -> void:
+	if feedback_label != null:
+		feedback_label.text = text
+	feedback_message.emit(text)
+
+
+func _record_rejection(reason: String) -> void:
+	_last_rejection_reason = reason
+	_set_feedback(reason)
+
+
 func _show_arrival_presentation() -> void:
 	if title_label != null:
 		title_label.text = ARRIVAL_TITLE
@@ -328,6 +652,10 @@ func _try_persist_arrival(ctx: Dictionary) -> Dictionary:
 	var pf: Dictionary = payload["progression_flags"] as Dictionary
 	pf["progression_facts"] = progression.to_save_array()
 	pf["era_id"] = era_mgr.to_save_id()
+	payload["player"] = {
+		"position_x": PLAYER_SPAWN_X,
+		"facing_direction": 1,
+	}
 
 	var simulate_fail: bool = bool(ctx.get("_test_simulate_save_failure", false))
 	var sm := SaveManager.new()
@@ -338,6 +666,7 @@ func _try_persist_arrival(ctx: Dictionary) -> Dictionary:
 	for _i: int in range(MAX_PERSIST_ATTEMPTS):
 		attempts += 1
 		if sm.save_state(payload, save_path, simulate_fail):
+			_base_save_payload = payload.duplicate(true)
 			return {"ok": true, "attempts": attempts, "reason": ""}
 
 	var reason: String = last_error[0] if not last_error[0].is_empty() else "save_write_failed"

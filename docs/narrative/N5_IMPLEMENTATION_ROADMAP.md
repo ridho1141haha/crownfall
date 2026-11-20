@@ -1,6 +1,6 @@
 # Crownfall — N5 Chapter I Implementation Roadmap
 
-**Status (updated 2026-11-20):** N5.0–N5.5 are IMPLEMENTED & MERGED on `main` @ `287feeb930870f39081740e373b097d81076f58c` (PR #43); N5.6 (island-aware Continue & save restoration) is IMPLEMENTED on `feature/n56-island-aware-continue` (see [`N56_IMPLEMENTATION_REPORT.md`](N56_IMPLEMENTATION_REPORT.md)). Stage-3 vessel readiness != Set Sail != voyage != Eldergrove arrival.
+**Status (updated 2026-11-20):** N5.0–N5.6 are IMPLEMENTED & MERGED on `main` @ `1ea114111a667aa6f7527c7a82ef0fc4a4def21b`; N6.0 (Eldergrove First Playable Slice) is IMPLEMENTED on `feature/n60-eldergrove-first-playable-slice` (see [`N60_IMPLEMENTATION_REPORT.md`](N60_IMPLEMENTATION_REPORT.md)). Stage-3 vessel readiness != Set Sail != voyage != Eldergrove arrival.
 **Base `main` SHA audited:** `287feeb930870f39081740e373b097d81076f58c` (2026-11-20)
 **Owner decisions docket:** [`N5_OWNER_DECISIONS.md`](N5_OWNER_DECISIONS.md)
 **Candidate beat sheet (DRAFT / NON-CANON):** [`../CHAPTER_01_BEAT_SHEET.md`](../CHAPTER_01_BEAT_SHEET.md)
@@ -85,7 +85,7 @@ Every slice below is independently reviewable, preserves `SaveManager` schema v2
 - **Save/load & recovery:** Failed transition or cancellation leaves Forgotten Shore save intact and never records `FACT_ELDERGROVE_REACHED`.
 - **Dependencies:** N5.4 + owner approval of `D-N5-05`.
 
-### Slice N5.6 — Island-Aware Continue & Save Restoration — **IMPLEMENTED** on `feature/n56-island-aware-continue` (see [`N56_IMPLEMENTATION_REPORT.md`](N56_IMPLEMENTATION_REPORT.md))
+### Slice N5.6 — Island-Aware Continue & Save Restoration — **IMPLEMENTED & MERGED** on `main` @ `1ea1141` (see [`N56_IMPLEMENTATION_REPORT.md`](N56_IMPLEMENTATION_REPORT.md))
 - **Objective:** Route Continue to `EldergroveForest.tscn` when the validated SaveManager v2 payload contains `ProgressionState.FACT_ELDERGROVE_REACHED`, restoring progression facts and era via a dedicated Continue path separate from the N5.5 one-shot departure handoff.
 - **Files changed:** `scripts/core/Main.gd`, `scripts/world/EldergroveForestArrival.gd`, `tests/test_n56_island_continue.gd`, `tests/run_all.sh`, `.github/workflows/godot-ci.yml`.
 - **Save/load & recovery:** `SaveManager` schema v2 untouched; legacy Forgotten Shore saves continue routing to `ForgottenShore.tscn`; invalid/failed restorations never overwrite disk saves and always restore player control.

@@ -50,6 +50,25 @@ func load_from_data(path: String = "res://data/resource_nodes.json") -> void:
 			node_states[nid] = false
 
 
+func configure_nodes(custom_nodes: Array[Dictionary]) -> void:
+	nodes.clear()
+	node_states.clear()
+	for item: Dictionary in custom_nodes:
+		var nid: String = String(item.get("id", ""))
+		if nid.is_empty():
+			continue
+		nodes.append({
+			"id": nid,
+			"resource": StringName(String(item.get("resource", "wood"))),
+			"amount": maxi(1, int(roundf(float(item.get("amount", 1))))),
+			"x": float(item.get("x", 0.0)),
+			"renewable": bool(item.get("renewable", false)),
+			"label": String(item.get("label", nid)),
+			"prompt": String(item.get("prompt", "[E] Collect")),
+		})
+		node_states[nid] = false
+
+
 func is_collected(node_id: String) -> bool:
 	return bool(node_states.get(node_id, false))
 

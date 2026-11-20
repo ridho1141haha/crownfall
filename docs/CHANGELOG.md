@@ -7,6 +7,15 @@ This changelog records repository changes that actually occurred. Planned featur
 
 ---
 
+## [2026-11-20] N6.0: Eldergrove First Playable Slice
+
+**Type:** Gameplay milestone slice (N6.0)
+**Baseline:** `main` @ `1ea114111a667aa6f7527c7a82ef0fc4a4def21b`; branch `feature/n60-eldergrove-first-playable-slice`
+
+- Upgraded `scenes/world/EldergroveForest.tscn` and `scripts/world/EldergroveForestArrival.gd` into the first playable Eldergrove clearing reusing `PlayerController`, `InteractionResolver`, `ResourceNodeManager`, `EconomyLedger`, `PauseMenu`, and `SaveManager` schema v2.
+- Added `ResourceNodeManager.configure_nodes()` and three interactable Eldergrove clearing nodes with live proximity prompts, resource HUD, manual save (`[K]` / Pause Menu), and clean Main Menu exit/re-entry via N5.6 Continue without replaying N5.5 arrival.
+- Added `tests/test_n60_eldergrove_playable.gd`, registered it in `tests/run_all.sh` and `.github/workflows/godot-ci.yml`, updated `docs/narrative/N5_IMPLEMENTATION_ROADMAP.md`, and created `docs/narrative/N60_IMPLEMENTATION_REPORT.md`.
+
 ## [2026-11-20] N5.6: Island-Aware Continue & Save Restoration
 
 **Type:** Production milestone slice (N5.6)

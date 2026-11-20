@@ -366,6 +366,13 @@ jobs:
           ! grep -E "(SCRIPT ERROR:|Parser Error:|TEST FAILURE:)" /tmp/godot_n56.log
           grep -q "PASS: All .* N56 Island Continue" /tmp/godot_n56.log
 
+      - name: Run N60 Eldergrove Playable Slice Tests
+        run: |
+          set -o pipefail
+          godot --headless --script res://tests/test_n60_eldergrove_playable.gd 2>&1 | tee /tmp/godot_n60.log
+          ! grep -E "(SCRIPT ERROR:|Parser Error:|TEST FAILURE:)" /tmp/godot_n60.log
+          grep -q "PASS: All .* N60 Eldergrove Playable" /tmp/godot_n60.log
+
       - name: Run aggregate test runner
         run: |
           set -o pipefail
