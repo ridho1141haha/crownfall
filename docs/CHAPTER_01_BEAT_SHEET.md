@@ -1,6 +1,6 @@
 # Crownfall — Chapter I Beat Sheet (Draft Proposal)
 
-**Status:** DRAFT / NON-CANON — owner review required. No dialogue in this document is approved for implementation.
+**Status (updated 2026-11-20):** **CANDIDATE BEATS REMAIN DRAFT / NON-CANON** — no dialogue in this document is approved for implementation. Owner-approved progression constraints (Chapter I ends on Eldergrove arrival; mandatory first night with defense + breach recovery valid; Scientist & research optional and never block departure; SaveManager schema v2 unchanged) are locked and mapped to small PRs in [`docs/narrative/N5_IMPLEMENTATION_ROADMAP.md`](narrative/N5_IMPLEMENTATION_ROADMAP.md); open implementation triggers are tracked in [`docs/narrative/N5_OWNER_DECISIONS.md`](narrative/N5_OWNER_DECISIONS.md).
 **Baseline:** main @ eb82ae4d63a33a5c0fb9bb3f17f4bf832860c79a (PR #11 merged), Godot 4.7.2.stable.
 **Scope:** N5 design planning only. This document does not authorize gameplay changes, narrative code, new lore, or a chapter/quest framework.
 **Story boundary:** Chapter I begins when the Monarch regains player control on Forgotten Shore after Prologue beat pl_09_forgotten_shore. Crown discovery, awakening, and the fragmented vision belong to the Prologue.
