@@ -63,6 +63,8 @@ var _last_rejection_reason: String = ""
 var _last_rollback_failure_reason: String = ""
 var _signals_wired: bool = false
 var _last_saved_signature: int = 0
+var _session_initialized: bool = false
+var _loaded_from_save_on_start: bool = false
 
 @onready var time_manager: TimeManager = $TimeManager as TimeManager
 @onready var player: PlayerController = $Player as PlayerController
@@ -98,6 +100,18 @@ func _ready() -> void:
 	_sync_plot_label_data()
 	_last_saved_signature = _unsaved_signature()
 	feedback_message.emit("Forgotten Shore: [A/D] Move | [E] Interact | [Q] Upgrade | [R] Recruit | [B] Build | [F] Repair | [T] 20x | [K] Save | [Esc] Pause")
+	var core_ready: bool = player != null and time_manager != null and building_mgr != null and pop_mgr != null and fx != null and view != null and slice_hud != null
+	_session_initialized = core_ready
+	if PrologueHandoffBridge.has_pending_intent():
+		PrologueHandoffBridge.acknowledge_destination_ready("res://scenes/world/ForgottenShore.tscn", _session_initialized, _loaded_from_save_on_start)
+
+
+func is_session_initialized() -> bool:
+	return _session_initialized
+
+
+func was_loaded_from_save_on_start() -> bool:
+	return _loaded_from_save_on_start
 
 
 func _setup_pause_menu() -> void:
@@ -1287,6 +1301,7 @@ func _apply_loaded_payload(data: Dictionary) -> bool:
 
 func _consume_pending_load_if_requested() -> void:
 	if Engine.has_meta("crownfall_load_on_start") and bool(Engine.get_meta("crownfall_load_on_start")):
+		_loaded_from_save_on_start = true
 		Engine.set_meta("crownfall_load_on_start", false)
 		# N4.0 test isolation: when the menu's injected save path meta is set
 		# (crownfall_menu_save_path, see Main.MENU_SAVE_PATH_META), Continue

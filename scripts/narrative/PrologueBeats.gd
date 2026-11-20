@@ -85,6 +85,7 @@ const CUE_PL08_FADE_OUT: String = "stage_pl08_fade_out"
 const CUE_PL09_SHORE_WAKE: String = "stage_pl09_shore_wake"
 const CUE_PL09_CROWN_CONTINUITY: String = "stage_pl09_crown_continuity"
 const CUE_PL09_CHAPTER_TITLE: String = "stage_pl09_chapter_title"
+const CHAPTER_I_TITLE: String = "CHAPTER I — FORGOTTEN SHORE"
 
 const VISION_FRAGMENT_IDS: Array[String] = [
 	"vision_ancient_kingdom",
@@ -305,7 +306,7 @@ static func stage_caption(cue_id: String) -> String:
 		CUE_PL09_CROWN_CONTINUITY:
 			return "[Placeholder art] The ancient crown rests beside Monarch on the shore"
 		CUE_PL09_CHAPTER_TITLE:
-			return "[Placeholder art] Chapter I — Forgotten Shore"
+			return CHAPTER_I_TITLE
 		CUE_PL06_AWAKENING:
 			return "[Placeholder art] Faint golden resonance — recalling the childhood light, brief and uncontrolled"
 		_:

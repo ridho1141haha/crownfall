@@ -7,6 +7,18 @@ This changelog records repository changes that actually occurred. Planned featur
 
 ---
 
+## [2026-11-20] N4.5-C: Forgotten Shore handoff lifecycle correction, pl_09 presentation & docs closure
+
+**Type:** Lifecycle correction, real `pl_09` presentation, real-scene integration test & documentation sync (branch `fix/n45b-handoff-lifecycle-and-presentation` over `main` @ `7579bce`)
+**Engine Verified:** `4.7.2.stable.official.ed1daf0bf` (`SUMMARY: passed=32 failed=0 skipped=0`; `PASS: All 291 repository integrity, scene-graph, CI lock, and OD-01..OD-10 documentation checks succeeded!`)
+
+### Summary
+- Added `scripts/narrative/PrologueHandoffBridge.gd` and moved `PlayerProfile.mark_prologue_completed()` to run ONLY after `ForgottenShoreSession._ready()` confirms valid fresh-session initialization (with one-shot token, destination, duplicate, stale, cancel, unload, Continue, and bounded persistence-failure guards).
+- Replaced flat `pl_09` placeholder captions in `PrologueShell.gd` with `ShoreLandingLayer` reusing real Forgotten Shore assets (`bg_mountains_far.png`, `bg_forest_mid.png`, `terrain_shore_tile.png`, `building_shipwreck_stages.png`, `player_monarch_sheet.png`), temporary non-canon `ShoreCrownProp`, and exact `CHAPTER I — FORGOTTEN SHORE` title card.
+- Added real destination-scene integration suite `tests/test_n45c_real_handoff_integration.gd` (registered in `tests/run_all.sh` and `.github/workflows/godot-ci.yml`), updated `tests/test_n45b_forgotten_shore_handoff.gd`, synchronized stale narrative/GDD status docs, and added `docs/narrative/N45C_IMPLEMENTATION_REPORT.md`.
+
+---
+
 ## [2026-11-20] N4.5-B: Forgotten Shore landing (pl_09) & Chapter I handoff
 
 **Type:** Production milestone slice (N4.5-B; final Prologue beat `pl_09` + `PlayerProfile` completion marking + `ForgottenShore.tscn` handoff)

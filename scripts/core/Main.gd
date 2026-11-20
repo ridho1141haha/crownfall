@@ -89,6 +89,7 @@ func _route_to_prologue() -> void:
 	if _route_started:
 		return
 	_route_started = true
+	PrologueHandoffBridge.invalidate_pending("route_to_prologue")
 	Engine.set_meta("crownfall_load_on_start", false)
 	_change_scene(PROLOGUE_ROUTE_SCENE)
 
@@ -101,6 +102,7 @@ func _start_new_game() -> void:
 	if _route_started:
 		return
 	_route_started = true
+	PrologueHandoffBridge.invalidate_pending("start_new_game")
 	Engine.set_meta("crownfall_load_on_start", false)
 	_change_scene(FORGOTTEN_SHORE_SCENE)
 
@@ -119,6 +121,7 @@ func _on_continue_button_pressed() -> void:
 	if _route_started:
 		return
 	_route_started = true
+	PrologueHandoffBridge.invalidate_pending("continue_saved_reign")
 	Engine.set_meta("crownfall_load_on_start", true)
 	_change_scene(FORGOTTEN_SHORE_SCENE)
 

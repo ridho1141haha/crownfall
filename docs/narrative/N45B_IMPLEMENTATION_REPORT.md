@@ -19,3 +19,8 @@
 - **N4.4 Full Flow (`tests/test_n44_full_flow.gd`):** PASS (`rc=0`)
 - **Aggregate Runner (`bash tests/run_all.sh`):** `ALL SUITES PASSED` (`rc=0`)
 - **Repository Verifier (`python3 tests/verify_repo_integrity.py`):** `PASS: All 287 repository integrity, scene-graph, CI lock, and OD-01..OD-10 documentation checks succeeded!`
+
+---
+
+## 3. N4.5-C Audit Correction (2026-11-20)
+PR #35 delivered the initial `pl_09` sequence and callback-observed unit tests, but wrote `PlayerProfile.mark_prologue_completed()` before destination initialization and used flat placeholder captions. Those gaps are closed on `fix/n45b-handoff-lifecycle-and-presentation` (see [`N45C_IMPLEMENTATION_REPORT.md`](N45C_IMPLEMENTATION_REPORT.md)).
