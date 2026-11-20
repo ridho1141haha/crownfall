@@ -1,0 +1,148 @@
+[gd_scene load_steps=10 format=3]
+
+[ext_resource type="Script" path="res://scripts/world/EldergroveForestArrival.gd" id="1_arrival"]
+[ext_resource type="PackedScene" path="res://scenes/player/Player.tscn" id="2_player"]
+[ext_resource type="Texture2D" path="res://assets/environment/backgrounds/bg_mountains_far.png" id="3_mtn_tex"]
+[ext_resource type="Texture2D" path="res://assets/environment/backgrounds/bg_forest_mid.png" id="4_forest_tex"]
+[ext_resource type="Texture2D" path="res://assets/environment/terrain/terrain_shore_tile.png" id="5_ground_tex"]
+[ext_resource type="Texture2D" path="res://assets/environment/vegetation/env_pine_tree_states.png" id="6_tree_tex"]
+[ext_resource type="Texture2D" path="res://assets/buildings/shipwreck/building_shipwreck_stages.png" id="7_ship_tex"]
+
+[sub_resource type="RectangleShape2D" id="RectangleShape2D_floor"]
+size = Vector2(1600, 120)
+
+[sub_resource type="RectangleShape2D" id="RectangleShape2D_wall"]
+size = Vector2(40, 600)
+
+[node name="EldergroveForest" type="Node2D"]
+script = ExtResource("1_arrival")
+
+[node name="SkyLayer" type="CanvasLayer" parent="."]
+layer = -101
+
+[node name="SkyBackground" type="ColorRect" parent="SkyLayer"]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+color = Color(0.18, 0.34, 0.36, 1)
+
+[node name="ParallaxBackground" type="ParallaxBackground" parent="."]
+
+[node name="MountainsLayer" type="ParallaxLayer" parent="ParallaxBackground"]
+motion_scale = Vector2(0.18, 1)
+
+[node name="MountainsSprite" type="Sprite2D" parent="ParallaxBackground/MountainsLayer"]
+modulate = Color(0.75, 0.88, 0.85, 1)
+texture_repeat = 2
+position = Vector2(-900, -130)
+scale = Vector2(1.4, 1.4)
+texture = ExtResource("3_mtn_tex")
+centered = false
+region_enabled = true
+region_rect = Rect2(0, 0, 1800, 96)
+
+[node name="ForestLayer" type="ParallaxLayer" parent="ParallaxBackground"]
+motion_scale = Vector2(0.42, 1)
+
+[node name="ForestSprite" type="Sprite2D" parent="ParallaxBackground/ForestLayer"]
+modulate = Color(0.85, 1, 0.85, 1)
+texture_repeat = 2
+position = Vector2(-900, -96)
+texture = ExtResource("4_forest_tex")
+centered = false
+region_enabled = true
+region_rect = Rect2(0, 0, 1800, 96)
+
+[node name="Ground" type="StaticBody2D" parent="."]
+
+[node name="DeepSoil" type="ColorRect" parent="Ground"]
+offset_left = -800.0
+offset_top = 32.0
+offset_right = 800.0
+offset_bottom = 320.0
+color = Color(0.15, 0.13, 0.1, 1)
+
+[node name="GroundSprite" type="Sprite2D" parent="Ground"]
+modulate = Color(0.68, 0.88, 0.68, 1)
+texture_repeat = 2
+position = Vector2(-800, 0)
+texture = ExtResource("5_ground_tex")
+centered = false
+region_enabled = true
+region_rect = Rect2(0, 0, 1600, 32)
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="Ground"]
+position = Vector2(0, 60)
+shape = SubResource("RectangleShape2D_floor")
+
+[node name="WorldBounds" type="StaticBody2D" parent="."]
+
+[node name="LeftWall" type="CollisionShape2D" parent="WorldBounds"]
+position = Vector2(-780, -300)
+shape = SubResource("RectangleShape2D_wall")
+
+[node name="RightWall" type="CollisionShape2D" parent="WorldBounds"]
+position = Vector2(780, -300)
+shape = SubResource("RectangleShape2D_wall")
+
+[node name="WorldObjects" type="Node2D" parent="."]
+
+[node name="MooredVessel" type="Sprite2D" parent="WorldObjects"]
+position = Vector2(-520, -48)
+texture = ExtResource("7_ship_tex")
+centered = false
+hframes = 4
+frame = 3
+
+[node name="PineTree1" type="Sprite2D" parent="WorldObjects"]
+position = Vector2(-180, -64)
+texture = ExtResource("6_tree_tex")
+centered = false
+hframes = 4
+
+[node name="PineTree2" type="Sprite2D" parent="WorldObjects"]
+position = Vector2(80, -64)
+texture = ExtResource("6_tree_tex")
+centered = false
+hframes = 4
+
+[node name="PineTree3" type="Sprite2D" parent="WorldObjects"]
+position = Vector2(260, -64)
+texture = ExtResource("6_tree_tex")
+centered = false
+hframes = 4
+
+[node name="PineTree4" type="Sprite2D" parent="WorldObjects"]
+position = Vector2(480, -64)
+texture = ExtResource("6_tree_tex")
+centered = false
+hframes = 4
+
+[node name="Player" parent="." instance=ExtResource("2_player")]
+position = Vector2(-320, 0)
+
+[node name="ArrivalHUD" type="CanvasLayer" parent="."]
+layer = 10
+
+[node name="MarginContainer" type="MarginContainer" parent="ArrivalHUD"]
+anchors_preset = 10
+anchor_right = 1.0
+offset_bottom = 120.0
+grow_horizontal = 2
+theme_override_constants/margin_top = 28
+
+[node name="VBoxContainer" type="VBoxContainer" parent="ArrivalHUD/MarginContainer"]
+layout_mode = 2
+theme_override_constants/separation = 6
+
+[node name="TitleLabel" type="Label" parent="ArrivalHUD/MarginContainer/VBoxContainer"]
+layout_mode = 2
+text = "ELDERGROVE FOREST"
+horizontal_alignment = 1
+
+[node name="SubtitleLabel" type="Label" parent="ArrivalHUD/MarginContainer/VBoxContainer"]
+layout_mode = 2
+text = "A new shore. We begin again."
+horizontal_alignment = 1

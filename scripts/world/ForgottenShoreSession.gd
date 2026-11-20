@@ -14,6 +14,10 @@ const FARM_HARVEST_INTERVAL: float = 60.0
 const FARM_GOLD_YIELD: int = 2
 const SHIPWRECK_X: float = -1350.0
 const PORTAL_X: float = 1350.0
+const ELDERGROVE_SCENE_PATH: String = "res://scenes/world/EldergroveForest.tscn"
+const VOYAGE_DURATION_SEC: float = 4.0
+const VOYAGE_SKIP_DEBOUNCE_SEC: float = 0.35
+const VOYAGE_TEXT: String = "The shore falls behind. A new land waits beyond the mist."
 const SHIPWRECK_COSTS: Array[Dictionary] = [
 	{"gold": 2, "wood": 3, "stone": 1},
 	{"gold": 2, "wood": 3, "stone": 2},
@@ -63,6 +67,15 @@ var _last_rejection_reason: String = ""
 var _last_rollback_failure_reason: String = ""
 var _signals_wired: bool = false
 var _last_saved_signature: int = 0
+var _departure_in_progress: bool = false
+var _voyage_active: bool = false
+var _voyage_elapsed: float = 0.0
+var _scene_change_committed: bool = false
+var _voyage_overlay: CanvasLayer = null
+var _voyage_backdrop: ColorRect = null
+var _voyage_label: Label = null
+var _voyage_scene_changer: Callable = Callable()
+var _voyage_control_lock: PlayerControlLock = PlayerControlLock.new()
 var _session_initialized: bool = false
 var _loaded_from_save_on_start: bool = false
 var chapter1_narrative: ChapterOneNarrativeAdapter = null
@@ -87,6 +100,7 @@ func _init() -> void:
 
 
 func _ready() -> void:
+	EldergroveHandoffBridge.invalidate_pending("forgotten_shore_session_started")
 	var cam: Camera2D = (player.get_node_or_null("Camera2D") as Camera2D) if player != null else null
 	fx = ShoreFX.new(self, sfx_player, cam)
 	view = ShoreView.new(self)
@@ -126,6 +140,10 @@ func _setup_pause_menu() -> void:
 
 
 func _exit_tree() -> void:
+	if _departure_in_progress and not _scene_change_committed:
+		cancel_voyage_transition("scene_unloaded")
+	else:
+		_voyage_control_lock.unlock()
 	if chapter1_narrative != null:
 		chapter1_narrative.teardown()
 	if get_tree() != null:
@@ -168,6 +186,9 @@ func get_actor_position(actor_id: String) -> float:
 
 
 func _process(delta: float) -> void:
+	if _voyage_active:
+		_advance_voyage_transition(delta)
+		return
 	if player != null:
 		_actor_positions["player_1"] = player.global_position.x
 	var sim_delta: float = delta * (time_manager.time_scale if time_manager != null else 1.0)
@@ -668,15 +689,7 @@ func _on_player_interact_shipwreck(player_x: float) -> bool:
 		_record_rejection("Move closer to the Shipwreck (x=-1350)")
 		return false
 	if shipwreck_stage >= 3:
-		night_mgr.stop_encounter()
-		reign_state = ReignState.ISLAND_CLEARED
-		if not save_game_state():
-			_record_rejection("Island cleared, but auto-save FAILED — progress may be lost")
-		_play_sfx("sfx_coin")
-		if slice_hud != null and slice_hud.has_method("show_victory_banner"):
-			slice_hud.call("show_victory_banner", "ISLAND CLEARED", "The vessel sets sail from Forgotten Shore toward Eldergrove Forest!")
-		feedback_message.emit("Ship repaired! Setting sail from Forgotten Shore toward Eldergrove Forest!")
-		return true
+		return _begin_eldergrove_departure()
 	var cost: Dictionary = SHIPWRECK_COSTS[shipwreck_stage]
 	if not economy.try_spend(cost):
 		_record_rejection("Shipwreck Stage %d/3 needs %dG %dW %dS" % [shipwreck_stage + 1, int(cost["gold"]), int(cost["wood"]), int(cost["stone"])])
@@ -1347,3 +1360,162 @@ func _consume_pending_load_if_requested() -> void:
 			feedback_message.emit("Loaded saved kingdom state from %s" % load_path)
 		else:
 			feedback_message.emit("Failed to load saved kingdom state — starting a fresh reign")
+
+
+func set_voyage_scene_changer(changer: Callable) -> void:
+	_voyage_scene_changer = changer
+
+
+func is_departure_in_progress() -> bool:
+	return _departure_in_progress
+
+
+func is_voyage_active() -> bool:
+	return _voyage_active
+
+
+func _is_narrative_dialogue_busy() -> bool:
+	var adapter: Variant = get("_narrative_adapter")
+	if adapter != null and is_instance_valid(adapter) and adapter.has_method("is_beat_active") and bool(adapter.call("is_beat_active")):
+		return true
+	for child: Node in get_children():
+		if child is DialoguePanel and (child as DialoguePanel).is_open():
+			return true
+	return false
+
+
+func _resolve_active_save_path() -> String:
+	if Engine.has_meta("crownfall_menu_save_path"):
+		return String(Engine.get_meta("crownfall_menu_save_path"))
+	return SaveManager.DEFAULT_SAVE_PATH
+
+
+func _begin_eldergrove_departure() -> bool:
+	if _departure_in_progress:
+		_record_rejection("Departure already in progress")
+		return false
+	_departure_in_progress = true
+	_voyage_active = true
+	_voyage_elapsed = 0.0
+	_scene_change_committed = false
+	night_mgr.stop_encounter()
+	if player != null and is_instance_valid(player):
+		_voyage_control_lock.lock(player)
+	var source_context: Dictionary = {
+		"source_scene": "res://scenes/world/ForgottenShore.tscn",
+		"progression": progression,
+		"era_mgr": era_mgr,
+		"save_path": _resolve_active_save_path(),
+		"base_save_payload": build_save_payload(),
+	}
+	EldergroveHandoffBridge.authorize_departure(ELDERGROVE_SCENE_PATH, source_context)
+	_play_sfx("sfx_coin")
+	_show_voyage_overlay()
+	feedback_message.emit("Setting sail from Forgotten Shore...")
+	return true
+
+
+func _unhandled_input(event: InputEvent) -> void:
+	if not _voyage_active or _voyage_elapsed < VOYAGE_SKIP_DEBOUNCE_SEC:
+		return
+	var adv_key: bool = event is InputEventKey and event.is_action_pressed("dialogue_advance")
+	var adv_mouse: bool = event is InputEventMouseButton and (event as InputEventMouseButton).button_index == MOUSE_BUTTON_LEFT and event.is_pressed()
+	if adv_key or adv_mouse:
+		get_viewport().set_input_as_handled()
+		skip_voyage_transition()
+
+
+func _show_voyage_overlay() -> void:
+	if _voyage_overlay != null and is_instance_valid(_voyage_overlay):
+		_voyage_overlay.visible = true
+		return
+	var layer := CanvasLayer.new()
+	layer.layer = 95
+	var bg := ColorRect.new()
+	bg.anchors_preset = Control.PRESET_FULL_RECT
+	bg.color = Color(0.03, 0.05, 0.09, 0.92)
+	bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	layer.add_child(bg)
+	var center := CenterContainer.new()
+	center.anchors_preset = Control.PRESET_FULL_RECT
+	center.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	layer.add_child(center)
+	var vbox := VBoxContainer.new()
+	vbox.add_theme_constant_override("separation", 12)
+	vbox.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	center.add_child(vbox)
+	var lbl := Label.new()
+	lbl.text = VOYAGE_TEXT
+	lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	vbox.add_child(lbl)
+	var hint := Label.new()
+	hint.text = "[Enter / Click] Skip voyage"
+	hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	hint.modulate = Color(0.75, 0.8, 0.88, 0.8)
+	vbox.add_child(hint)
+	add_child(layer)
+	_voyage_overlay = layer
+	_voyage_backdrop = bg
+	_voyage_label = lbl
+
+
+func _hide_voyage_overlay() -> void:
+	if _voyage_overlay != null and is_instance_valid(_voyage_overlay):
+		_voyage_overlay.queue_free()
+	_voyage_overlay = null
+	_voyage_backdrop = null
+	_voyage_label = null
+
+
+func _advance_voyage_transition(delta: float) -> void:
+	_voyage_elapsed += delta
+	if _voyage_elapsed >= VOYAGE_DURATION_SEC:
+		_commit_voyage_scene_change()
+
+
+func skip_voyage_transition() -> void:
+	if not _departure_in_progress or not _voyage_active:
+		return
+	_commit_voyage_scene_change()
+
+
+func cancel_voyage_transition(reason: String = "voyage_cancelled") -> void:
+	if not _departure_in_progress and not _voyage_active:
+		return
+	_voyage_active = false
+	_voyage_elapsed = 0.0
+	_departure_in_progress = false
+	_scene_change_committed = false
+	EldergroveHandoffBridge.invalidate_pending(reason)
+	_hide_voyage_overlay()
+	_voyage_control_lock.unlock()
+
+
+func _commit_voyage_scene_change() -> void:
+	if not _departure_in_progress or not _voyage_active:
+		return
+	_voyage_active = false
+	_scene_change_committed = true
+	if _voyage_scene_changer.is_valid():
+		var res: Variant = _voyage_scene_changer.call(ELDERGROVE_SCENE_PATH)
+		var ok_res: bool = (typeof(res) == TYPE_INT and int(res) == OK) or (typeof(res) == TYPE_BOOL and bool(res)) or res == null
+		if not ok_res:
+			_recover_from_departure_failure("scene_change_failed")
+		return
+	if is_inside_tree() and get_tree() != null:
+		var err: Error = get_tree().change_scene_to_file(ELDERGROVE_SCENE_PATH)
+		if err != OK:
+			_recover_from_departure_failure("scene_change_failed")
+		return
+	_recover_from_departure_failure("scene_tree_unavailable")
+
+
+func _recover_from_departure_failure(reason: String) -> void:
+	_scene_change_committed = false
+	_voyage_active = false
+	_voyage_elapsed = 0.0
+	_departure_in_progress = false
+	EldergroveHandoffBridge.invalidate_pending(reason)
+	_hide_voyage_overlay()
+	_voyage_control_lock.unlock()
+	_record_rejection("Unable to set sail (%s) — remaining on Forgotten Shore" % reason)

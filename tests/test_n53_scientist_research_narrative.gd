@@ -171,7 +171,8 @@ func _test_optionality_for_vessel_departure() -> void:
 	for _step: int in range(3):
 		_check(bool(s.call("_on_player_interact_shipwreck", ForgottenShoreSession.SHIPWRECK_X)), "12 & 18. Shipwreck repair stage succeeded without Scientist/research")
 	_check(prog.has_fact(ProgressionState.FACT_FORGOTTEN_SHORE_VESSEL_READY), "12 & 18. Vessel ready recorded without Scientist/research")
-	_check(bool(s.call("_on_player_interact_shipwreck", ForgottenShoreSession.SHIPWRECK_X)) and int(s.get("reign_state")) == ForgottenShoreSession.ReignState.ISLAND_CLEARED, "12 & 18. Set Sail succeeds without Scientist or research")
+	_check(bool(s.call("_on_player_interact_shipwreck", ForgottenShoreSession.SHIPWRECK_X)) and bool(s.call("is_departure_in_progress")) and EldergroveHandoffBridge.has_pending_intent() and int(s.get("reign_state")) == ForgottenShoreSession.ReignState.ACTIVE, "12 & 18. Set Sail succeeds without Scientist or research")
+	s.call("cancel_voyage_transition", "n53_test_cleanup")
 
 
 func _test_contention_ordering_skip_and_teardown() -> void:

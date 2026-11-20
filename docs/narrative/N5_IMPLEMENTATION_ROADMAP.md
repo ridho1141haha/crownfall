@@ -1,7 +1,7 @@
 # Crownfall — N5 Chapter I Implementation Roadmap
 
-**Status (updated 2026-11-20):** N5.0–N5.3 are IMPLEMENTED & MERGED on `main` @ `5abf2d117b8404c6ada56d3ae801c2f3143bac83`; N5.4 (`ch1_07_prepare_vessel`) is IMPLEMENTED on `feature/n54-vessel-readiness-narrative` (unmerged; see [`N54_IMPLEMENTATION_REPORT.md`](N54_IMPLEMENTATION_REPORT.md)). N5.5 (voyage & Eldergrove arrival) remains pending; `D-N5-05` remains OPEN/deferred. Stage-3 vessel readiness != Set Sail != voyage != Eldergrove arrival.
-**Base `main` SHA audited:** `5abf2d117b8404c6ada56d3ae801c2f3143bac83` (2026-11-20)
+**Status (updated 2026-11-20):** N5.0–N5.4 are IMPLEMENTED & MERGED on `main` @ `0cc3462934a96bc070ed7f947495c8e7a9309806`; N5.5 (voyage & Eldergrove arrival) is IMPLEMENTED on `feature/n55-voyage-eldergrove-arrival` (`D-N5-05` Option A APPROVED 2026-11-20; see [`N55_IMPLEMENTATION_REPORT.md`](N55_IMPLEMENTATION_REPORT.md)). Stage-3 vessel readiness != Set Sail != voyage != Eldergrove arrival.
+**Base `main` SHA audited:** `0cc3462934a96bc070ed7f947495c8e7a9309806` (2026-11-20)
 **Owner decisions docket:** [`N5_OWNER_DECISIONS.md`](N5_OWNER_DECISIONS.md)
 **Candidate beat sheet (DRAFT / NON-CANON):** [`../CHAPTER_01_BEAT_SHEET.md`](../CHAPTER_01_BEAT_SHEET.md)
 
@@ -72,14 +72,14 @@ Every slice below is independently reviewable, preserves `SaveManager` schema v2
 - **Tests:** Verify departure remains reachable with Scientist undiscovered/unrecruited and zero research completed; verify research remains gated behind `FACT_SCIENTIST_RECRUITED`.
 - **Dependencies:** N5.0.
 
-### Slice N5.4 — Vessel Readiness & Departure Setup (`ch1_07_prepare_vessel`) — **IMPLEMENTED** on `feature/n54-vessel-readiness-narrative` (unmerged; see [`N54_IMPLEMENTATION_REPORT.md`](N54_IMPLEMENTATION_REPORT.md))
+### Slice N5.4 — Vessel Readiness & Departure Setup (`ch1_07_prepare_vessel`) — **IMPLEMENTED & MERGED** on `main` @ `0cc3462` (PR #42; see [`N54_IMPLEMENTATION_REPORT.md`](N54_IMPLEMENTATION_REPORT.md))
 - **Objective:** Acknowledge vessel readiness when `shipwreck_stage == 3` records `FACT_FORGOTTEN_SHORE_VESSEL_READY`, keeping readiness distinct from Set Sail and Chapter I completion.
 - **Files likely to change:** `ChapterOneNarrativeAdapter.gd`, `ChapterOneBeats.gd`, `tests/test_n54_vessel_readiness_narrative.gd`, runner/CI.
 - **Authoritative state/signal:** `ProgressionState.fact_recorded` (`FACT_FORGOTTEN_SHORE_VESSEL_READY`).
 - **Save/load & recovery:** Suppressed on Continue when fact already exists; `FACT_ELDERGROVE_REACHED` remains false.
 - **Dependencies:** N5.0.
 
-### Slice N5.5 — Voyage & Eldergrove Forest Arrival (`ch1_08_departure`)
+### Slice N5.5 — Voyage & Eldergrove Forest Arrival (`ch1_08_departure`) — **IMPLEMENTED** on `feature/n55-voyage-eldergrove-arrival` (see [`N55_IMPLEMENTATION_REPORT.md`](N55_IMPLEMENTATION_REPORT.md))
 - **Objective:** Replace the current Set Sail victory-banner dead end with a distinct departure → voyage → Eldergrove Forest arrival handoff that records `FACT_ELDERGROVE_REACHED` and completes Chapter I **only** after the Eldergrove scene initializes and returns control.
 - **Files likely to change:** `ForgottenShoreSession.gd`, narrow Eldergrove handoff bridge/scene, `tests/test_n55_eldergrove_handoff.gd`, runner/CI.
 - **Save/load & recovery:** Failed transition or cancellation leaves Forgotten Shore save intact and never records `FACT_ELDERGROVE_REACHED`.

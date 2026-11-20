@@ -7,6 +7,16 @@ This changelog records repository changes that actually occurred. Planned featur
 
 ---
 
+## [2026-11-20] N5.5: Voyage & Eldergrove Arrival
+
+**Type:** Production milestone slice (`D-N5-05` Option A)
+**Baseline:** `main` @ `0cc3462934a96bc070ed7f947495c8e7a9309806`; branch `feature/n55-voyage-eldergrove-arrival`
+
+- Replaced Stage-3+ Shipwreck terminal `ISLAND_CLEARED` banner with Set Sail -> ~4.0s skippable voyage transition -> `EldergroveForest.tscn` arrival handoff.
+- Added `scripts/narrative/EldergroveHandoffBridge.gd`, `scenes/world/EldergroveForest.tscn`, `scripts/world/EldergroveForestArrival.gd`, and `tests/test_n55_eldergrove_handoff.gd`.
+- Recorded `ProgressionState.FACT_ELDERGROVE_REACHED` and notified `EraProgressionManager` only after destination initialization and one-shot handoff acknowledgement.
+- Preserved `SaveManager` schema v2 untouched and invalidated pending Eldergrove intents on New Game and Continue in `scripts/core/Main.gd`.
+
 ## [2026-11-20] N5.3: Optional Scientist & research narrative beats
 
 **Type:** Narrative integration slice (N5.3; optional Scientist discovery/recruitment & first research start; SaveManager schema v2 unchanged)
