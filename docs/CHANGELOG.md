@@ -7,6 +7,15 @@ This changelog records repository changes that actually occurred. Planned featur
 
 ---
 
+## [2026-11-20] N5.6: Island-Aware Continue & Save Restoration
+
+**Type:** Production milestone slice (N5.6)
+**Baseline:** `main` @ `287feeb930870f39081740e373b097d81076f58c`; branch `feature/n56-island-aware-continue`
+
+- Added Continue destination resolution in `scripts/core/Main.gd` routing validated saves carrying `ProgressionState.FACT_ELDERGROVE_REACHED` to `res://scenes/world/EldergroveForest.tscn` while preserving Forgotten Shore Continue, New Game, and Prologue gating.
+- Added dedicated Continue save-restoration path in `scripts/world/EldergroveForestArrival.gd` separate from the N5.5 one-shot departure handoff, restoring progression facts and era without modifying `SaveManager` schema v2 or rewriting disk saves.
+- Added `tests/test_n56_island_continue.gd`, registered it in `tests/run_all.sh` and `.github/workflows/godot-ci.yml`, and added `docs/narrative/N56_IMPLEMENTATION_REPORT.md`.
+
 ## [2026-11-20] N5.5: Voyage & Eldergrove Arrival
 
 **Type:** Production milestone slice (`D-N5-05` Option A)
