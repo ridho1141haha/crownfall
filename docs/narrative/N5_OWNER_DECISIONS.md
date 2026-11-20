@@ -1,7 +1,7 @@
 # Crownfall — N5 Chapter I Owner Decision Docket
 
 **Status:** OPEN — decisions below materially shape Chapter I implementation slices. Protected lore (Crown origin, dynasty/ancestor, ancient kingdom name, power source, Great Eclipse cause, Greedling/Portal/Relic origins, Forgotten Shrine vs. Shrine of Growth identity) is deliberately **excluded** and remains OPEN.
-**Baseline audited:** `main` @ `eef5c5a9100edbee403e0592b80e783e25ca6eb8` (2026-11-20)
+**Baseline audited:** `main` @ `90058ec47eeeef3a957f9c023446ab5ea5c32c4f` (2026-11-20)
 **Companion roadmap:** [`N5_IMPLEMENTATION_ROADMAP.md`](N5_IMPLEMENTATION_ROADMAP.md)
 
 ---
@@ -18,7 +18,7 @@
 - **Technical consequence:** Zero new gameplay state; one-shot listener in the narrow N5.0 boundary.
 - **Blocking status:** **Blocks N5.1**; does **not** block N5.0 (integration boundary).
 
-## D-N5-02 — `ch1_04_after_dawn` as separate beat vs. first-night resolution
+## D-N5-02 — `ch1_04_after_dawn` as separate beat vs. first-night resolution — **APPROVED (2026-11-20, Option A — folded into `ch1_03_first_night`, no separate `daylight_started(2)` trigger)**
 - **Exact question:** Should `ch1_04_after_dawn` be implemented as its own narrative beat or folded into `ch1_03_first_night` sunrise resolution?
 - **Why source inspection cannot resolve it:** `ForgottenShoreSession._on_sunrise_reached()` and `_on_night_resolved(survived, wall_held)` already emit distinct survival vs. breach-recovery feedback and trigger sunrise autosave; whether a separate beat is warranted is a pacing decision.
 - **Bounded options:**
