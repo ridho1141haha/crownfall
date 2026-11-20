@@ -189,6 +189,7 @@ run_godot "N44 Step3 shrine autosave" "--script res://tests/test_n44_step3a_shri
 run_godot "N44 Step3 world_time types" "--script res://tests/test_n44_step3b_world_time_types.gd" "PASS: All .* N44 Step3 3B"
 run_godot "N44 Step3 rollback era" "--script res://tests/test_n44_step3c_rollback_era.gd" "PASS: All .* N44 Step3 3C"
 run_godot "N55 Eldergrove handoff" "--script res://tests/test_n55_eldergrove_handoff.gd" "PASS: All .* N55 Eldergrove Handoff"
+run_godot "N56 Island continue" "--script res://tests/test_n56_island_continue.gd" "PASS: All .* N56 Island Continue"
 # --- Save guard (after): the real user data dir must be unchanged ---
 FP_AFTER="$(real_dir_fingerprint)"
 echo "== Save guard (after): real user data fingerprint = ${FP_AFTER}"

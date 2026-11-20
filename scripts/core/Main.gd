@@ -1,6 +1,7 @@
 extends Control
 
 const FORGOTTEN_SHORE_SCENE: String = "res://scenes/world/ForgottenShore.tscn"
+const ELDERGROVE_FOREST_SCENE: String = "res://scenes/world/EldergroveForest.tscn"
 ## N4.1 route target: the functional Prologue shell (scripts/narrative/
 ## PrologueShell.gd — per-run narrative runtime + lifecycle, no story beats
 ## until N4.2–N4.5). The entry-gate routing below is unchanged since N4.0.
@@ -41,6 +42,31 @@ func refresh_continue_state(save_path: String = "") -> void:
 func has_valid_save(save_path: String = "") -> bool:
 	var save_mgr: SaveManager = SaveManager.new()
 	return save_mgr.has_valid_save(_resolve_save_path(save_path))
+
+
+## N5.6: Authoritative Continue destination resolver. Routes to Eldergrove Forest
+## ONLY when a validated SaveManager payload carries FACT_ELDERGROVE_REACHED.
+## Never infers Eldergrove from era_id alone; fails safe to Forgotten Shore.
+static func resolve_continue_destination_from_payload(payload: Variant) -> String:
+	var save_mgr: SaveManager = SaveManager.new()
+	if not save_mgr.validate_payload(payload):
+		return FORGOTTEN_SHORE_SCENE
+	var dict: Dictionary = payload as Dictionary
+	if not dict.has("progression_flags") or typeof(dict["progression_flags"]) != TYPE_DICTIONARY:
+		return FORGOTTEN_SHORE_SCENE
+	var pf: Dictionary = dict["progression_flags"] as Dictionary
+	var facts: Variant = pf.get("progression_facts", null)
+	if typeof(facts) == TYPE_ARRAY and ProgressionState.is_valid_fact_array(facts) and (facts as Array).has(ProgressionState.FACT_ELDERGROVE_REACHED):
+		return ELDERGROVE_FOREST_SCENE
+	return FORGOTTEN_SHORE_SCENE
+
+
+func resolve_continue_destination(save_path: String = "") -> String:
+	var save_mgr: SaveManager = SaveManager.new()
+	var loaded: Dictionary = save_mgr.load_state(_resolve_save_path(save_path))
+	if not bool(loaded.get("ok", false)):
+		return FORGOTTEN_SHORE_SCENE
+	return resolve_continue_destination_from_payload(loaded.get("data", null))
 
 
 func _resolve_save_path(save_path: String = "") -> String:
@@ -126,7 +152,7 @@ func _on_continue_button_pressed() -> void:
 	EldergroveHandoffBridge.invalidate_pending("main_menu_continue")
 	PrologueHandoffBridge.invalidate_pending("continue_saved_reign")
 	Engine.set_meta("crownfall_load_on_start", true)
-	_change_scene(FORGOTTEN_SHORE_SCENE)
+	_change_scene(resolve_continue_destination())
 
 
 func _on_exit_button_pressed() -> void:
