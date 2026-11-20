@@ -1,6 +1,6 @@
 # N5.3 Implementation Report — Optional Scientist & Research Narrative Integration
 
-**Status:** IMPLEMENTED & VERIFIED (feature branch `feature/n53-scientist-research-narrative`; not merged)
+**Status:** IMPLEMENTED, MERGED & VERIFIED on `main` @ `5abf2d117b8404c6ada56d3ae801c2f3143bac83` (PR #41)
 **Base `main` SHA:** `1285e133e746953eb4450e5bfb93837d0822565e`
 **Engine Verified:** `4.7.2.stable.official.ed1daf0bf`
 

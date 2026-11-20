@@ -184,6 +184,7 @@ run_godot "N50 chapter1 boundary" "--script res://tests/test_n50_chapter1_bounda
 run_godot "N51 first foothold" "--script res://tests/test_n51_foothold_beat.gd" "PASS: All .* N51 First Foothold"
 run_godot "N52 first night narrative" "--script res://tests/test_n52_first_night_narrative.gd" "PASS: All .* N52 First Night Narrative"
 run_godot "N53 scientist research narrative" "--script res://tests/test_n53_scientist_research_narrative.gd" "PASS: All .* N53 Scientist Research Narrative"
+run_godot "N54 vessel readiness narrative" "--script res://tests/test_n54_vessel_readiness_narrative.gd" "PASS: All .* N54 Vessel Readiness Narrative"
 run_godot "N44 Step3 shrine autosave" "--script res://tests/test_n44_step3a_shrine_autosave.gd" "PASS: All .* N44 Step3 3A"
 run_godot "N44 Step3 world_time types" "--script res://tests/test_n44_step3b_world_time_types.gd" "PASS: All .* N44 Step3 3B"
 run_godot "N44 Step3 rollback era" "--script res://tests/test_n44_step3c_rollback_era.gd" "PASS: All .* N44 Step3 3C"

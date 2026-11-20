@@ -1,7 +1,7 @@
 class_name ChapterOneNarrativeAdapter
 extends RefCounted
 
-## N5.0–N5.3: Narrow, session-owned integration boundary for Chapter I
+## N5.0–N5.4: Narrow, session-owned integration boundary for Chapter I
 ## narrative events on Forgotten Shore (D-N5-04 Option A: restore-silent, zero
 ## per-beat persistence flags, zero SaveManager schema v2 changes).
 ##
@@ -9,13 +9,15 @@ extends RefCounted
 ##   - N5.1: ch1_02_foothold ("A Place to Survive")
 ##   - N5.2: ch1_03_first_night ("The First Night", ch1_04_after_dawn folded in)
 ##   - N5.3: ch1_05_scientist_discovery, ch1_05_scientist_recruitment, ch1_06_research
-## N5.4+ beats remain unimplemented.
+##   - N5.4: ch1_07_prepare_vessel (live FACT_FORGOTTEN_SHORE_VESSEL_READY)
+## N5.5 (voyage / Eldergrove arrival) remains unimplemented.
 
 const BEAT_CH1_02_FOOTHOLD: String = "ch1_02_foothold"
 const BEAT_CH1_03_FIRST_NIGHT: String = "ch1_03_first_night"
 const BEAT_CH1_05_SCIENTIST_DISCOVERY: String = "ch1_05_scientist_discovery"
 const BEAT_CH1_05_SCIENTIST_RECRUITMENT: String = "ch1_05_scientist_recruitment"
 const BEAT_CH1_06_RESEARCH: String = "ch1_06_research"
+const BEAT_CH1_07_PREPARE_VESSEL: String = "ch1_07_prepare_vessel"
 
 const SCIENTIST_ID: String = "scientist"
 const MONARCH_SPEAKER: String = "Monarch"
@@ -30,6 +32,7 @@ const SCIENTIST_DISCOVERY_LINE_1: String = "You found me. I've been studying wha
 const SCIENTIST_DISCOVERY_LINE_2: String = "Then perhaps we can learn something useful together."
 const SCIENTIST_RECRUITMENT_LINE: String = "Good. With a place to work, I can begin a proper study."
 const FIRST_RESEARCH_LINE: String = "The first study is underway. At last, we have a way to turn questions into something useful."
+const VESSEL_READY_LINE: String = "The repairs are complete. The vessel is ready to leave this shore."
 const WALL_STATE_COMPLETED_NAME: String = "COMPLETED"
 
 var _player: Node = null
@@ -57,16 +60,18 @@ var _first_night_historical_passed: bool = false
 var _scientist_discovery_historical_passed: bool = false
 var _scientist_recruitment_historical_passed: bool = false
 var _first_research_historical_passed: bool = false
+var _vessel_ready_historical_passed: bool = false
 
 var _beat_active: bool = false
 var _active_beat_id: String = ""
 var _beat_generation: int = 0
 
-## Fixed, bounded 4-slot pending representation (deterministic priority order:
-## first_night -> scientist_discovery -> scientist_recruitment -> first_research).
+## Fixed, bounded 5-slot pending representation (deterministic priority order:
+## first_night -> vessel_ready -> scientist_discovery -> scientist_recruitment -> first_research).
 var _pending_first_night: bool = false
 var _pending_first_night_survived: bool = false
 var _pending_first_night_wall_held: bool = false
+var _pending_vessel_ready: bool = false
 var _pending_scientist_discovery: bool = false
 var _pending_scientist_recruitment: bool = false
 var _pending_first_research: bool = false
@@ -204,8 +209,12 @@ func has_pending_first_night() -> bool:
 	return _pending_first_night
 
 
+func has_pending_vessel_ready() -> bool:
+	return _pending_vessel_ready
+
+
 func has_any_pending_beat() -> bool:
-	return _pending_first_night or _pending_scientist_discovery or _pending_scientist_recruitment or _pending_first_research
+	return _pending_first_night or _pending_vessel_ready or _pending_scientist_discovery or _pending_scientist_recruitment or _pending_first_research
 
 
 func narrative_state() -> NarrativeState:
@@ -252,6 +261,8 @@ func _refresh_historical_flags() -> void:
 			_scientist_discovery_historical_passed = true
 		if _progression.has_fact(ProgressionState.FACT_SCIENTIST_RECRUITED):
 			_scientist_recruitment_historical_passed = true
+		if _progression.has_fact(ProgressionState.FACT_FORGOTTEN_SHORE_VESSEL_READY):
+			_vessel_ready_historical_passed = true
 	if _research_mgr != null:
 		if _research_mgr.has_active_research() or not _research_mgr.get_completed_tech_ids().is_empty():
 			_first_research_historical_passed = true
@@ -387,6 +398,12 @@ func _present_first_research() -> void:
 	])
 
 
+func _present_vessel_ready() -> void:
+	_present_non_gating_lines(BEAT_CH1_07_PREPARE_VESSEL, [
+		{"speaker": MONARCH_SPEAKER, "text": VESSEL_READY_LINE},
+	])
+
+
 func _present_non_gating_lines(beat_id: String, lines: Array[Dictionary]) -> void:
 	if _dialogue_panel == null or not is_instance_valid(_dialogue_panel) or _dialogue_panel.is_open():
 		return
@@ -427,6 +444,10 @@ func _dispatch_next_pending_beat() -> void:
 		_pending_first_night_wall_held = false
 		_present_non_gating_lines(BEAT_CH1_03_FIRST_NIGHT, [{"speaker": MONARCH_SPEAKER, "text": first_night_line_for_outcome(p_surv, p_held)}])
 		return
+	if _pending_vessel_ready and not _state.is_completed(BEAT_CH1_07_PREPARE_VESSEL):
+		_pending_vessel_ready = false
+		_present_vessel_ready()
+		return
 	if _pending_scientist_discovery and not _state.is_completed(BEAT_CH1_05_SCIENTIST_DISCOVERY):
 		_pending_scientist_discovery = false
 		_present_scientist_discovery()
@@ -455,6 +476,7 @@ func _clear_all_pending() -> void:
 	_pending_first_night = false
 	_pending_first_night_survived = false
 	_pending_first_night_wall_held = false
+	_pending_vessel_ready = false
 	_pending_scientist_discovery = false
 	_pending_scientist_recruitment = false
 	_pending_first_research = false
@@ -465,3 +487,16 @@ func _on_progression_fact_recorded(fact_id: String) -> void:
 		return
 	_observed_event_count += 1
 	_last_observed_event = {"source": "progression", "fact_id": fact_id}
+	if fact_id != ProgressionState.FACT_FORGOTTEN_SHORE_VESSEL_READY:
+		return
+	# Live Stage-3 repair emits fact_recorded synchronously AFTER recording the fact;
+	# suppress only via _vessel_ready_historical_passed (set at setup/restore).
+	if _vessel_ready_historical_passed or _state.is_completed(BEAT_CH1_07_PREPARE_VESSEL):
+		return
+	if _active_beat_id == BEAT_CH1_07_PREPARE_VESSEL or _pending_vessel_ready:
+		return
+	_vessel_ready_historical_passed = true
+	if _is_panel_busy():
+		_pending_vessel_ready = true
+		return
+	_present_vessel_ready()
