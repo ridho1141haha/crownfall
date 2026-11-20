@@ -1,7 +1,7 @@
 # Crownfall — N5 Chapter I Implementation Roadmap
 
-**Status (updated 2026-11-20):** N5.0, N5.1, and N5.2 are IMPLEMENTED & MERGED on `main` @ `1285e133e746953eb4450e5bfb93837d0822565e`; N5.3 (optional Scientist & research beats) is IMPLEMENTED on `feature/n53-scientist-research-narrative` (unmerged; see [`N53_IMPLEMENTATION_REPORT.md`](N53_IMPLEMENTATION_REPORT.md)). N5.4–N5.5 remain pending; `D-N5-05` remains OPEN/deferred.
-**Base `main` SHA audited:** `1285e133e746953eb4450e5bfb93837d0822565e` (2026-11-20)
+**Status (updated 2026-11-20):** N5.0–N5.3 are IMPLEMENTED & MERGED on `main` @ `5abf2d117b8404c6ada56d3ae801c2f3143bac83`; N5.4 (`ch1_07_prepare_vessel`) is IMPLEMENTED on `feature/n54-vessel-readiness-narrative` (unmerged; see [`N54_IMPLEMENTATION_REPORT.md`](N54_IMPLEMENTATION_REPORT.md)). N5.5 (voyage & Eldergrove arrival) remains pending; `D-N5-05` remains OPEN/deferred. Stage-3 vessel readiness != Set Sail != voyage != Eldergrove arrival.
+**Base `main` SHA audited:** `5abf2d117b8404c6ada56d3ae801c2f3143bac83` (2026-11-20)
 **Owner decisions docket:** [`N5_OWNER_DECISIONS.md`](N5_OWNER_DECISIONS.md)
 **Candidate beat sheet (DRAFT / NON-CANON):** [`../CHAPTER_01_BEAT_SHEET.md`](../CHAPTER_01_BEAT_SHEET.md)
 
@@ -65,14 +65,14 @@ Every slice below is independently reviewable, preserves `SaveManager` schema v2
 - **Save/load & recovery:** Suppressed on Continue when `day_count >= 2`; sunrise autosave & breach recovery remain untouched.
 - **Dependencies:** N5.0 + owner approval of `D-N5-02`.
 
-### Slice N5.3 — Optional Scientist & Research Integration (`ch1_05_scientist`, `ch1_06_research`) — **IMPLEMENTED** on `feature/n53-scientist-research-narrative` (unmerged; see [`N53_IMPLEMENTATION_REPORT.md`](N53_IMPLEMENTATION_REPORT.md)) — **IMPLEMENTED** on `feature/n53-scientist-research-narrative` (unmerged; see [`N53_IMPLEMENTATION_REPORT.md`](N53_IMPLEMENTATION_REPORT.md))
+### Slice N5.3 — Optional Scientist & Research Integration (`ch1_05_scientist`, `ch1_06_research`) — **IMPLEMENTED & MERGED** on `main` @ `5abf2d1` (PR #41; see [`N53_IMPLEMENTATION_REPORT.md`](N53_IMPLEMENTATION_REPORT.md))
 - **Objective:** Wire optional discovery/recruitment (`SpecialistDomain`) and first-research (`ResearchManager`) beats without gating ship repair or inventing Scientist/Relic/Shrine lore.
 - **Files likely to change:** `ChapterOneNarrativeAdapter.gd`, `ChapterOneBeats.gd`, `tests/test_n53_scientist_research_narrative.gd`, runner/CI.
 - **Authoritative state/signal:** `SpecialistDomain.specialist_discovered`, `SpecialistDomain.specialist_recruited`, `ResearchManager.research_started`/`research_completed`, `ProgressionState` facts.
 - **Tests:** Verify departure remains reachable with Scientist undiscovered/unrecruited and zero research completed; verify research remains gated behind `FACT_SCIENTIST_RECRUITED`.
 - **Dependencies:** N5.0.
 
-### Slice N5.4 — Vessel Readiness & Departure Setup (`ch1_07_prepare_vessel`)
+### Slice N5.4 — Vessel Readiness & Departure Setup (`ch1_07_prepare_vessel`) — **IMPLEMENTED** on `feature/n54-vessel-readiness-narrative` (unmerged; see [`N54_IMPLEMENTATION_REPORT.md`](N54_IMPLEMENTATION_REPORT.md))
 - **Objective:** Acknowledge vessel readiness when `shipwreck_stage == 3` records `FACT_FORGOTTEN_SHORE_VESSEL_READY`, keeping readiness distinct from Set Sail and Chapter I completion.
 - **Files likely to change:** `ChapterOneNarrativeAdapter.gd`, `ChapterOneBeats.gd`, `tests/test_n54_vessel_readiness_narrative.gd`, runner/CI.
 - **Authoritative state/signal:** `ProgressionState.fact_recorded` (`FACT_FORGOTTEN_SHORE_VESSEL_READY`).
