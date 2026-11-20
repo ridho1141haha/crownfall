@@ -190,6 +190,7 @@ run_godot "N44 Step3 world_time types" "--script res://tests/test_n44_step3b_wor
 run_godot "N44 Step3 rollback era" "--script res://tests/test_n44_step3c_rollback_era.gd" "PASS: All .* N44 Step3 3C"
 run_godot "N55 Eldergrove handoff" "--script res://tests/test_n55_eldergrove_handoff.gd" "PASS: All .* N55 Eldergrove Handoff"
 run_godot "N56 Island continue" "--script res://tests/test_n56_island_continue.gd" "PASS: All .* N56 Island Continue"
+run_godot "N60 Eldergrove playable" "--script res://tests/test_n60_eldergrove_playable.gd" "PASS: All .* N60 Eldergrove Playable"
 # --- Save guard (after): the real user data dir must be unchanged ---
 FP_AFTER="$(real_dir_fingerprint)"
 echo "== Save guard (after): real user data fingerprint = ${FP_AFTER}"
