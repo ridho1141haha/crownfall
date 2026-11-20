@@ -1,7 +1,7 @@
 # Crownfall — N5 Chapter I Implementation Roadmap
 
-**Status:** DESIGN-LOCK & READINESS PACKAGE (docs-only; no Chapter I narrative code implemented yet).
-**Base `main` SHA audited:** `eef5c5a9100edbee403e0592b80e783e25ca6eb8` (2026-11-20)
+**Status (updated 2026-11-20):** N5.0 is IMPLEMENTED & MERGED on `main` @ `ba2deb20997807610f671d950a9d99fa60cb8e5a`; N5.1 (`ch1_02_foothold`) is IMPLEMENTED on `feature/n51-first-foothold` (unmerged; see [`N51_IMPLEMENTATION_REPORT.md`](N51_IMPLEMENTATION_REPORT.md)). N5.2–N5.5 remain pending; `D-N5-02` and `D-N5-05` remain OPEN.
+**Base `main` SHA audited:** `ba2deb20997807610f671d950a9d99fa60cb8e5a` (2026-11-20)
 **Owner decisions docket:** [`N5_OWNER_DECISIONS.md`](N5_OWNER_DECISIONS.md)
 **Candidate beat sheet (DRAFT / NON-CANON):** [`../CHAPTER_01_BEAT_SHEET.md`](../CHAPTER_01_BEAT_SHEET.md)
 
@@ -43,7 +43,7 @@ All anchors below were verified directly against `scripts/world/ForgottenShoreSe
 
 Every slice below is independently reviewable, preserves `SaveManager` schema v2, avoids generic quest/event frameworks, and forbids firing narrative beats during silent save restoration.
 
-### Slice N5.0 — Chapter I Narrative Integration Boundary (**IMPLEMENTED** on `feature/n50-chapter1-narrative-boundary`, see [`N50_IMPLEMENTATION_REPORT.md`](N50_IMPLEMENTATION_REPORT.md))
+### Slice N5.0 — Chapter I Narrative Integration Boundary (**IMPLEMENTED & MERGED** on `main` @ `ba2deb2`, see [`N50_IMPLEMENTATION_REPORT.md`](N50_IMPLEMENTATION_REPORT.md))
 - **Objective:** Add a narrow, session-owned narrative observer (`scripts/narrative/ChapterOneNarrativeAdapter.gd`, instantiated by `ForgottenShoreSession`) wired to existing `DialoguePanel` + `NarrativeState` with a strict `restore_silent` guard during `load_game_state()`.
 - **Files likely to change:** new `scripts/narrative/ChapterOneNarrativeAdapter.gd`, minimal hook in `scripts/world/ForgottenShoreSession.gd`, new `tests/test_n50_chapter1_boundary.gd`, `tests/run_all.sh`, `.github/workflows/godot-ci.yml`.
 - **Authoritative state/signal:** `ForgottenShoreSession._is_restoring_save` (or `load_game_state` guard), `NarrativeState`.
@@ -51,7 +51,7 @@ Every slice below is independently reviewable, preserves `SaveManager` schema v2
 - **Out of scope:** Authored story beats, quest journal, event bus, save schema changes.
 - **Dependencies:** `D-N5-04` (recommended default Option A).
 
-### Slice N5.1 — First Foothold Milestone (`ch1_02_foothold`)
+### Slice N5.1 — First Foothold Milestone (`ch1_02_foothold`) — **IMPLEMENTED** on `feature/n51-first-foothold` (unmerged; see [`N51_IMPLEMENTATION_REPORT.md`](N51_IMPLEMENTATION_REPORT.md))
 - **Objective:** Trigger one short, skippable foothold beat when the approved early-game milestone completes.
 - **Files likely to change:** `scripts/narrative/ChapterOneNarrativeAdapter.gd`, `scripts/narrative/ChapterOneBeats.gd` (data-only), `tests/test_n51_foothold_beat.gd`, runner/CI.
 - **Authoritative state/signal:** `BuildingManager.wall_state_changed` (if `D-N5-01` Option A approved).

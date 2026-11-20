@@ -181,6 +181,7 @@ run_godot "N45A voyage shipwreck" "--script res://tests/test_n45a_voyage_shipwre
 run_godot "N45B forgotten shore handoff" "--script res://tests/test_n45b_forgotten_shore_handoff.gd" "PASS: All .* N45B Forgotten Shore Handoff"
 run_godot "N45C real handoff integration" "--script res://tests/test_n45c_real_handoff_integration.gd" "PASS: All .* N45C Real Handoff Integration"
 run_godot "N50 chapter1 boundary" "--script res://tests/test_n50_chapter1_boundary.gd" "PASS: All .* N50 Chapter I Boundary"
+run_godot "N51 first foothold" "--script res://tests/test_n51_foothold_beat.gd" "PASS: All .* N51 First Foothold"
 run_godot "N44 Step3 shrine autosave" "--script res://tests/test_n44_step3a_shrine_autosave.gd" "PASS: All .* N44 Step3 3A"
 run_godot "N44 Step3 world_time types" "--script res://tests/test_n44_step3b_world_time_types.gd" "PASS: All .* N44 Step3 3B"
 run_godot "N44 Step3 rollback era" "--script res://tests/test_n44_step3c_rollback_era.gd" "PASS: All .* N44 Step3 3C"
