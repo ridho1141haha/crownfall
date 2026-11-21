@@ -1,6 +1,6 @@
 # Crownfall — N5 Chapter I Implementation Roadmap
 
-**Status (updated 2026-11-21):** N5.0–N5.6 and N6.0–N6.2 are IMPLEMENTED & MERGED on `main` @ `02d6ed3cb88133d9806ee8fb6fc0c9040f6ddfbc`; N6.3 (First Camp Rest & Time Skip) is IMPLEMENTED on `feature/n63-first-camp-rest` (see [`N63_IMPLEMENTATION_REPORT.md`](N63_IMPLEMENTATION_REPORT.md)). Stage-3 vessel readiness != Set Sail != voyage != Eldergrove arrival.
+**Status (updated 2026-11-21):** N5.0–N5.6 and N6.0–N6.3 are IMPLEMENTED & MERGED on `main`; N6.4 (Eldergrove Night Survival & First Camp Defense) is IMPLEMENTED on `feature/n64-eldergrove-night-survival` (see [`N64_IMPLEMENTATION_REPORT.md`](N64_IMPLEMENTATION_REPORT.md)). Stage-3 vessel readiness != Set Sail != voyage != Eldergrove arrival.
 **Base `main` SHA audited:** `287feeb930870f39081740e373b097d81076f58c` (2026-11-20)
 **Owner decisions docket:** [`N5_OWNER_DECISIONS.md`](N5_OWNER_DECISIONS.md)
 **Candidate beat sheet (DRAFT / NON-CANON):** [`../CHAPTER_01_BEAT_SHEET.md`](../CHAPTER_01_BEAT_SHEET.md)

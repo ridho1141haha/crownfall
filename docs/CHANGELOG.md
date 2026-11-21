@@ -7,6 +7,16 @@ This changelog records repository changes that actually occurred. Planned featur
 
 ---
 
+## [2026-11-21] N6.4: Eldergrove Night Survival & First Camp Defense
+
+**Type:** Gameplay milestone slice (N6.4)
+**Branch:** `feature/n64-eldergrove-night-survival`
+
+- Added modular `scripts/survival/EldergroveNightSurvival.gd` distinguishing `ThreatClass.ORDINARY` (strictly blocked outside constructed First Camp's protected zone) from `ThreatClass.BREACH_CAPABLE` (explicitly able to penetrate camp protection on scheduled breach nights, `day % 3 == 0`).
+- Integrated encounter lifecycle into `scripts/world/EldergroveForestArrival.gd` via existing `TimeManager`, rejecting First Camp rest with clear feedback while an encounter is active and resolving cleanly at sunrise.
+- Persisted resolved night days (`eldergrove_night_resolved_day_<N>`) inside existing `SaveManager` schema v2 `progression_flags["node_states"]` without schema changes.
+- Added `tests/test_n64_eldergrove_night_survival.gd`, registered it in `tests/run_all.sh`, updated `docs/narrative/N5_IMPLEMENTATION_ROADMAP.md`, and created `docs/narrative/N64_IMPLEMENTATION_REPORT.md`.
+
 ## [2026-11-21] N6.3: First Camp Rest & Time Skip
 
 **Type:** Gameplay milestone slice (N6.3)

@@ -85,6 +85,7 @@ var progression: ProgressionState = null
 var era_mgr: EraProgressionManager = null
 var ledger: EconomyLedger = EconomyLedger.new()
 var resource_mgr: ResourceNodeManager = ResourceNodeManager.new()
+var night_survival: EldergroveNightSurvival = EldergroveNightSurvival.new()
 
 var _arrival_lock: PlayerControlLock = PlayerControlLock.new()
 var _handoff_acknowledged: bool = false
@@ -108,6 +109,7 @@ var _last_sunrise_completed_day: int = 0
 var _last_sunrise_refreshed_ids: Array[String] = []
 var _sunrise_renewal_count: int = 0
 var _clock_signals_connected: bool = false
+var _rest_skip_in_progress: bool = false
 
 @onready var player: PlayerController = get_node_or_null("Player") as PlayerController
 @onready var ground: StaticBody2D = get_node_or_null("Ground") as StaticBody2D
@@ -216,8 +218,9 @@ func _ready() -> void:
 	arrival_acknowledged.emit(int(ack.get("token", 0)))
 
 
-func _process(_delta: float) -> void:
+func _process(delta: float) -> void:
 	_refresh_clock_hud()
+	_update_night_survival(delta)
 	if player == null or not is_instance_valid(player):
 		return
 	_active_target = resolve_nearest_interaction(player.global_position.x)
@@ -251,11 +254,15 @@ func can_rest_at_camp() -> bool:
 		return false
 	if time_manager == null or not is_instance_valid(time_manager):
 		return false
+	if night_survival != null and night_survival.is_encounter_active():
+		return false
 	return time_manager.current_phase == TimeManager.Phase.SUNSET or time_manager.current_phase == TimeManager.Phase.NIGHT
 
 
 func _get_camp_prompt_text() -> String:
 	if _first_camp_built:
+		if night_survival != null and night_survival.is_encounter_active():
+			return "First Camp — Threat active (Rest blocked)"
 		if can_rest_at_camp():
 			return "[E] Rest until Sunrise"
 		return "First Camp (Built) — Rest available at Sunset/Night"
@@ -377,6 +384,9 @@ func try_rest_at_camp(actor_x: float) -> Dictionary:
 	if absf(actor_x - CAMP_SITE_X) > CAMP_INTERACT_RANGE:
 		_record_rejection("Move closer to First Camp to rest.")
 		return {"ok": false, "reason": _last_rejection_reason}
+	if night_survival != null and night_survival.is_encounter_active():
+		_record_rejection("Cannot rest while a night threat is active.")
+		return {"ok": false, "encounter_active": true, "reason": _last_rejection_reason}
 	if not can_rest_at_camp():
 		_record_rejection("First Camp is built — rest is only available at Sunset or Night.")
 		return {"ok": false, "already_built": true, "reason": _last_rejection_reason}
@@ -387,7 +397,9 @@ func try_rest_at_camp(actor_x: float) -> Dictionary:
 	if time_manager.current_phase == TimeManager.Phase.SUNSET:
 		advance_sec += maxf(time_manager.night_duration, 0.01)
 
+	_rest_skip_in_progress = true
 	time_manager.advance_time(advance_sec)
+	_rest_skip_in_progress = false
 	_has_unsaved_progress = true
 	_last_rejection_reason = ""
 	_apply_phase_visuals()
@@ -430,6 +442,10 @@ func build_save_payload() -> Dictionary:
 	for nid: String in eg_nodes.keys():
 		merged_nodes[nid] = bool(eg_nodes[nid])
 	merged_nodes[CAMP_BUILT_STATE_KEY] = _first_camp_built
+	if night_survival != null:
+		var surv_states: Dictionary = night_survival.to_save_node_states()
+		for sk: String in surv_states.keys():
+			merged_nodes[sk] = bool(surv_states[sk])
 	pf["node_states"] = merged_nodes
 	return payload
 
@@ -522,8 +538,12 @@ func _hydrate_gameplay_from_payload(payload: Dictionary, restore_player_position
 			var ns: Dictionary = pf["node_states"] as Dictionary
 			resource_mgr.apply_save_state(ns)
 			_first_camp_built = bool(ns.get(CAMP_BUILT_STATE_KEY, false))
+			if night_survival != null:
+				night_survival.apply_save_node_states(ns)
 		else:
 			_first_camp_built = false
+			if night_survival != null:
+				night_survival.apply_save_node_states({})
 	if restore_player_position and player != null and is_instance_valid(player):
 		var placed: bool = false
 		if payload.has("player") and typeof(payload["player"]) == TYPE_DICTIONARY:
@@ -838,10 +858,24 @@ func _on_renewable_nodes_refreshed(refreshed_ids: Array[String]) -> void:
 	_last_sunrise_refreshed_ids = refreshed_ids.duplicate()
 
 
+func _update_night_survival(delta: float) -> void:
+	if _rest_skip_in_progress or night_survival == null or time_manager == null or not is_instance_valid(time_manager):
+		return
+	if time_manager.current_phase == TimeManager.Phase.NIGHT:
+		if night_survival.should_start_encounter(time_manager.current_day, time_manager.phase_elapsed):
+			if night_survival.start_encounter(time_manager.current_day):
+				_set_feedback(night_survival.get_status_text())
+		if night_survival.is_encounter_active():
+			var px: float = player.global_position.x if (player != null and is_instance_valid(player)) else PLAYER_SPAWN_X
+			night_survival.tick(delta, px, _first_camp_built)
+
+
 func _on_sunrise_reached(completed_day: int) -> void:
 	if completed_day <= 0 or completed_day <= _last_sunrise_completed_day:
 		return
 	_last_sunrise_completed_day = completed_day
+	if night_survival != null:
+		night_survival.on_sunrise_reached(completed_day)
 	_last_sunrise_refreshed_ids.clear()
 	resource_mgr.refresh_renewable_nodes()
 	_sunrise_renewal_count += 1
