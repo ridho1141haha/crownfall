@@ -1,6 +1,6 @@
 # Crownfall — N5 Chapter I Implementation Roadmap
 
-**Status (updated 2026-11-21):** N5.0–N5.6 and N6.0 (PR #45) are IMPLEMENTED & MERGED on `main` @ `28bc0638a6fc3bcd932afc47e050cd32f10572ad` (see [`N60_IMPLEMENTATION_REPORT.md`](N60_IMPLEMENTATION_REPORT.md)); N6.1 (First Camp Construction Loop) is IMPLEMENTED on `feature/n61-first-camp-construction` (see [`N61_IMPLEMENTATION_REPORT.md`](N61_IMPLEMENTATION_REPORT.md)). Stage-3 vessel readiness != Set Sail != voyage != Eldergrove arrival.
+**Status (updated 2026-11-21):** N5.0–N5.6, N6.0 (PR #45), and N6.1 (PR #46) are IMPLEMENTED & MERGED on `main` @ `696f981034af0f0f24f973fd6fd24098705ddaa1`; N6.2 (Eldergrove Day Cycle & Resource Renewal) is IMPLEMENTED on `feature/n62-eldergrove-day-cycle` (see [`N62_IMPLEMENTATION_REPORT.md`](N62_IMPLEMENTATION_REPORT.md)). Stage-3 vessel readiness != Set Sail != voyage != Eldergrove arrival.
 **Base `main` SHA audited:** `287feeb930870f39081740e373b097d81076f58c` (2026-11-20)
 **Owner decisions docket:** [`N5_OWNER_DECISIONS.md`](N5_OWNER_DECISIONS.md)
 **Candidate beat sheet (DRAFT / NON-CANON):** [`../CHAPTER_01_BEAT_SHEET.md`](../CHAPTER_01_BEAT_SHEET.md)

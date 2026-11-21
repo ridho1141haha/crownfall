@@ -203,6 +203,7 @@ run_godot "N55 Eldergrove handoff" "--script res://tests/test_n55_eldergrove_han
 run_godot "N56 Island continue" "--script res://tests/test_n56_island_continue.gd" "PASS: All .* N56 Island Continue"
 run_godot "N60 Eldergrove playable" "--script res://tests/test_n60_eldergrove_playable.gd" "PASS: All .* N60 Eldergrove Playable"
 run_godot "N61 First camp construction" "--script res://tests/test_n61_first_camp_construction.gd" "PASS: All .* N61 First Camp Construction"
+run_godot "N62 Eldergrove day cycle" "--script res://tests/test_n62_eldergrove_day_cycle.gd" "PASS: All .* N62 Eldergrove Day Cycle"
 # --- Save guard (after): the real user data dir must be unchanged ---
 FP_AFTER="$(real_dir_fingerprint)"
 echo "== Save guard (after): real user data fingerprint = ${FP_AFTER}"

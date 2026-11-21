@@ -19,6 +19,7 @@ signal continue_restored(save_path: String)
 signal continue_restore_failed(reason: String)
 signal interaction_completed(target_id: String, resource_id: StringName, amount: int)
 signal camp_constructed(camp_id: String, cost: Dictionary)
+signal sunrise_renewal_applied(completed_day: int, refreshed_ids: Array[String])
 signal feedback_message(text: String)
 
 const SCENE_PATH: String = "res://scenes/world/EldergroveForest.tscn"
@@ -41,6 +42,13 @@ const CAMP_BUILD_COST: Dictionary = {
 	"wood": 4,
 	"stone": 2,
 }
+const SKY_COLOR_DAYLIGHT: Color = Color(0.18, 0.34, 0.36, 1.0)
+const SKY_COLOR_SUNSET: Color = Color(0.42, 0.24, 0.18, 1.0)
+const SKY_COLOR_NIGHT: Color = Color(0.06, 0.09, 0.16, 1.0)
+const MODULATE_DAYLIGHT: Color = Color(1.0, 1.0, 1.0, 1.0)
+const MODULATE_SUNSET: Color = Color(0.96, 0.82, 0.72, 1.0)
+const MODULATE_NIGHT: Color = Color(0.62, 0.68, 0.84, 1.0)
+const FAST_CLOCK_SCALE: float = 10.0
 
 const ELDERGROVE_NODES: Array[Dictionary] = [
 	{
@@ -48,7 +56,7 @@ const ELDERGROVE_NODES: Array[Dictionary] = [
 		"resource": &"wood",
 		"amount": 4,
 		"x": -60.0,
-		"renewable": false,
+		"renewable": true,
 		"label": "Fallen Clearing Timber (+4 Wood)",
 		"prompt": "[E] Gather Timber (+4W)",
 	},
@@ -57,7 +65,7 @@ const ELDERGROVE_NODES: Array[Dictionary] = [
 		"resource": &"stone",
 		"amount": 3,
 		"x": 220.0,
-		"renewable": false,
+		"renewable": true,
 		"label": "Mossy Outcrop (+3 Stone)",
 		"prompt": "[E] Gather Stone (+3S)",
 	},
@@ -95,6 +103,10 @@ var _node_markers: Dictionary = {}
 var _signals_connected: bool = false
 var _scene_transition: Callable = Callable()
 var _first_camp_built: bool = false
+var _last_sunrise_completed_day: int = 0
+var _last_sunrise_refreshed_ids: Array[String] = []
+var _sunrise_renewal_count: int = 0
+var _clock_signals_connected: bool = false
 
 @onready var player: PlayerController = get_node_or_null("Player") as PlayerController
 @onready var ground: StaticBody2D = get_node_or_null("Ground") as StaticBody2D
@@ -110,6 +122,10 @@ var _first_camp_built: bool = false
 @onready var camp_site_marker: ColorRect = get_node_or_null("WorldObjects/FirstCampSite/SiteMarker") as ColorRect
 @onready var camp_shelter_sprite: Sprite2D = get_node_or_null("WorldObjects/FirstCampSite/CampShelterSprite") as Sprite2D
 @onready var camp_label: Label = get_node_or_null("WorldObjects/FirstCampSite/CampLabel") as Label
+@onready var time_manager: TimeManager = get_node_or_null("TimeManager") as TimeManager
+@onready var clock_label: Label = get_node_or_null("ArrivalHUD/MarginContainer/VBoxContainer/ClockLabel") as Label
+@onready var sky_background: ColorRect = get_node_or_null("SkyLayer/SkyBackground") as ColorRect
+@onready var day_night_modulate: CanvasModulate = get_node_or_null("DayNightModulate") as CanvasModulate
 
 
 func _ready() -> void:
@@ -119,6 +135,9 @@ func _ready() -> void:
 	_build_resource_markers()
 	_refresh_camp_visuals()
 	_wire_gameplay_connections()
+	_wire_clock_connections()
+	_apply_phase_visuals()
+	_refresh_clock_hud()
 	if pause_menu != null:
 		pause_menu.bind_session(self)
 
@@ -188,6 +207,8 @@ func _ready() -> void:
 
 	_show_arrival_presentation()
 	_refresh_gameplay_hud()
+	_refresh_clock_hud()
+	_apply_phase_visuals()
 	_refresh_resource_markers()
 	_refresh_camp_visuals()
 	_arrival_lock.unlock()
@@ -195,6 +216,7 @@ func _ready() -> void:
 
 
 func _process(_delta: float) -> void:
+	_refresh_clock_hud()
 	if player == null or not is_instance_valid(player):
 		return
 	_active_target = resolve_nearest_interaction(player.global_position.x)
@@ -338,6 +360,11 @@ func build_save_payload() -> Dictionary:
 	var payload: Dictionary = _base_save_payload.duplicate(true)
 	if not payload.has("progression_flags") or typeof(payload["progression_flags"]) != TYPE_DICTIONARY:
 		return {}
+	if time_manager != null and is_instance_valid(time_manager):
+		var clock_dict: Dictionary = time_manager.to_save_dict()
+		payload["day_count"] = int(clock_dict["day_count"])
+		payload["world_time"] = float(clock_dict["world_time"])
+		payload["world_phase"] = String(clock_dict["world_phase"])
 	payload["resources"] = ledger.get_all_balances()
 	if player != null and is_instance_valid(player):
 		payload["player"] = {
@@ -420,6 +447,8 @@ func _wire_gameplay_connections() -> void:
 		player.interaction_requested.connect(_on_player_interaction_requested)
 	if not player.manual_save_requested.is_connected(_on_manual_save):
 		player.manual_save_requested.connect(_on_manual_save)
+	if not player.fast_clock_toggled.is_connected(_on_toggle_fast_clock):
+		player.fast_clock_toggled.connect(_on_toggle_fast_clock)
 	_signals_connected = true
 
 
@@ -433,6 +462,9 @@ func _hydrate_gameplay_from_payload(payload: Dictionary, restore_player_position
 	if payload.is_empty():
 		return
 	_base_save_payload = payload.duplicate(true)
+	if time_manager != null and is_instance_valid(time_manager):
+		if time_manager.apply_save_dict(payload, true):
+			_last_sunrise_completed_day = maxi(0, time_manager.current_day - 1)
 	if payload.has("resources") and typeof(payload["resources"]) == TYPE_DICTIONARY:
 		ledger.set_balances_from_dict(payload["resources"] as Dictionary)
 	if payload.has("progression_flags") and typeof(payload["progression_flags"]) == TYPE_DICTIONARY:
@@ -507,6 +539,8 @@ func _restore_from_continue_save() -> void:
 	_has_unsaved_progress = false
 	_show_restored_presentation()
 	_refresh_gameplay_hud()
+	_refresh_clock_hud()
+	_apply_phase_visuals()
 	_refresh_resource_markers()
 	_refresh_camp_visuals()
 	_arrival_lock.unlock()
@@ -581,6 +615,8 @@ func validate_initialization() -> bool:
 	if ground_collision == null or not is_instance_valid(ground_collision):
 		return false
 	if title_label == null or not is_instance_valid(title_label):
+		return false
+	if time_manager == null or not is_instance_valid(time_manager):
 		return false
 	return true
 
@@ -709,6 +745,107 @@ func _refresh_resource_markers() -> void:
 		var marker: Node2D = _node_markers[nid] as Node2D
 		if marker != null and is_instance_valid(marker):
 			marker.visible = not resource_mgr.is_collected(nid)
+
+
+func _wire_clock_connections() -> void:
+	if _clock_signals_connected or time_manager == null or not is_instance_valid(time_manager):
+		return
+	if not time_manager.daylight_started.is_connected(_on_daylight_started):
+		time_manager.daylight_started.connect(_on_daylight_started)
+	if not time_manager.sunset_started.is_connected(_on_sunset_started):
+		time_manager.sunset_started.connect(_on_sunset_started)
+	if not time_manager.night_started.is_connected(_on_night_started):
+		time_manager.night_started.connect(_on_night_started)
+	if not time_manager.sunrise_reached.is_connected(_on_sunrise_reached):
+		time_manager.sunrise_reached.connect(_on_sunrise_reached)
+	if not resource_mgr.renewable_nodes_refreshed.is_connected(_on_renewable_nodes_refreshed):
+		resource_mgr.renewable_nodes_refreshed.connect(_on_renewable_nodes_refreshed)
+	_clock_signals_connected = true
+
+
+func _on_toggle_fast_clock() -> void:
+	if time_manager == null or not is_instance_valid(time_manager):
+		return
+	time_manager.time_scale = FAST_CLOCK_SCALE if is_equal_approx(time_manager.time_scale, 1.0) else 1.0
+	_set_feedback("Clock speed: %.0fx" % time_manager.time_scale)
+
+
+func _on_daylight_started(_day_number: int) -> void:
+	_apply_phase_visuals()
+	_refresh_clock_hud()
+
+
+func _on_sunset_started(_day_number: int) -> void:
+	_apply_phase_visuals()
+	_refresh_clock_hud()
+
+
+func _on_night_started(_day_number: int) -> void:
+	_apply_phase_visuals()
+	_refresh_clock_hud()
+
+
+func _on_renewable_nodes_refreshed(refreshed_ids: Array[String]) -> void:
+	_last_sunrise_refreshed_ids = refreshed_ids.duplicate()
+
+
+func _on_sunrise_reached(completed_day: int) -> void:
+	if completed_day <= 0 or completed_day <= _last_sunrise_completed_day:
+		return
+	_last_sunrise_completed_day = completed_day
+	_last_sunrise_refreshed_ids.clear()
+	resource_mgr.refresh_renewable_nodes()
+	_sunrise_renewal_count += 1
+	_has_unsaved_progress = true
+	_refresh_resource_markers()
+	_apply_phase_visuals()
+	_refresh_clock_hud()
+	if not _last_sunrise_refreshed_ids.is_empty():
+		_set_feedback("Day %d — Sunrise: clearing timber and stone replenished." % (completed_day + 1))
+	sunrise_renewal_applied.emit(completed_day, _last_sunrise_refreshed_ids.duplicate())
+
+
+func get_sunrise_renewal_count() -> int:
+	return _sunrise_renewal_count
+
+
+func get_last_sunrise_completed_day() -> int:
+	return _last_sunrise_completed_day
+
+
+func get_clock_status_text() -> String:
+	if time_manager == null or not is_instance_valid(time_manager):
+		return ""
+	var secs: int = int(floorf(maxf(time_manager.phase_elapsed, 0.0)))
+	var mins: int = secs / 60
+	var rem: int = secs % 60
+	return "Day %d — %s (%02d:%02d)" % [time_manager.current_day, time_manager.get_phase_name(), mins, rem]
+
+
+func _refresh_clock_hud() -> void:
+	if clock_label == null or not is_instance_valid(clock_label):
+		return
+	var txt: String = get_clock_status_text()
+	if not txt.is_empty():
+		clock_label.text = txt
+
+
+func _apply_phase_visuals() -> void:
+	if time_manager == null or not is_instance_valid(time_manager):
+		return
+	var sky_col: Color = SKY_COLOR_DAYLIGHT
+	var mod_col: Color = MODULATE_DAYLIGHT
+	match time_manager.current_phase:
+		TimeManager.Phase.SUNSET:
+			sky_col = SKY_COLOR_SUNSET
+			mod_col = MODULATE_SUNSET
+		TimeManager.Phase.NIGHT:
+			sky_col = SKY_COLOR_NIGHT
+			mod_col = MODULATE_NIGHT
+	if sky_background != null and is_instance_valid(sky_background):
+		sky_background.color = sky_col
+	if day_night_modulate != null and is_instance_valid(day_night_modulate):
+		day_night_modulate.color = mod_col
 
 
 func _refresh_gameplay_hud() -> void:
