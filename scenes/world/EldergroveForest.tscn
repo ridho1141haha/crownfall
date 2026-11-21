@@ -1,4 +1,4 @@
-[gd_scene load_steps=13 format=3]
+[gd_scene load_steps=14 format=3]
 
 [ext_resource type="Script" path="res://scripts/world/EldergroveForestArrival.gd" id="1_arrival"]
 [ext_resource type="PackedScene" path="res://scenes/player/Player.tscn" id="2_player"]
@@ -10,6 +10,7 @@
 [ext_resource type="Script" path="res://scripts/ui/PauseMenu.gd" id="8_pause_menu"]
 [ext_resource type="Texture2D" path="res://assets/buildings/camp/building_vagrant_tent.png" id="9_tent_tex"]
 [ext_resource type="Script" path="res://scripts/world/TimeManager.gd" id="10_time_mgr"]
+[ext_resource type="Script" path="res://scripts/survival/EldergroveThreatPresenter.gd" id="11_threat_presenter"]
 
 [sub_resource type="RectangleShape2D" id="RectangleShape2D_floor"]
 size = Vector2(1600, 120)
@@ -151,6 +152,9 @@ offset_right = 90.0
 offset_bottom = -32.0
 text = "Camp Site (4W 2S)"
 horizontal_alignment = 1
+
+[node name="ThreatPresenter" type="Node2D" parent="WorldObjects"]
+script = ExtResource("11_threat_presenter")
 
 [node name="Player" parent="." instance=ExtResource("2_player")]
 position = Vector2(-320, 0)

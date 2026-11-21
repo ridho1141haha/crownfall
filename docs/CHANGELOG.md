@@ -7,6 +7,15 @@ This changelog records repository changes that actually occurred. Planned featur
 
 ---
 
+## [2026-11-21] N6.5: Eldergrove Threat Encounters & Pixel-Art Presentation
+
+**Type:** Gameplay & pixel-art presentation milestone slice (N6.5)
+**Branch:** `feature/n65-eldergrove-threat-encounters`
+
+- Added decoupled `scripts/survival/EldergroveThreatPresenter.gd` and wired `WorldObjects/ThreatPresenter` into `scenes/world/EldergroveForest.tscn` and `scripts/world/EldergroveForestArrival.gd` to reflect authoritative N6.4 `EldergroveNightSurvival` state in 2D side-scrolling pixel art (nearest-neighbor filtering, ground baseline `y = 0.0`).
+- Reused verified `assets/enemies/first_enemy/enemy_greedling_raider_sheet.png` (`128x32`, 4 frames) for Ordinary threats and configured a swappable 2x integer-scaled placeholder profile for Breach-Capable threats, plus First Camp perimeter ward posts (`[-4.0, 164.0]`).
+- Added `docs/assets/N65_ASSET_MANIFEST.md`, `docs/narrative/N65_IMPLEMENTATION_REPORT.md`, and `tests/test_n65_eldergrove_threat_encounters.gd` (registered in `tests/run_all.sh`), preserving `SaveManager` schema v2 and all N6.0–N6.4 and Forgotten Shore regressions.
+
 ## [2026-11-21] N6.4: Eldergrove Night Survival & First Camp Defense
 
 **Type:** Gameplay milestone slice (N6.4, revised per PR #50 review)

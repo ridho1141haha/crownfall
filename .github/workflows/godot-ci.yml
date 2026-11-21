@@ -103,7 +103,8 @@ jobs:
           for marker in             "PASS: runner sandbox gate"             "PASS: test_time_manager"             "PASS: All .* P0 Unit Checks"             "PASS: All .* M8 Multi-Frame Scene Transition"             "PASS: All 10 gameplay scenarios"             "PASS: All .* N50 Chapter I Boundary"             "PASS: All .* N51 First Foothold"             "PASS: All .* N52 First Night Narrative"             "PASS: All .* N53 Scientist Research Narrative"             "PASS: All .* N54 Vessel Readiness Narrative"             "PASS: All .* N55 Eldergrove Handoff"             "PASS: All .* N56 Island Continue"             "PASS: All .* N60 Eldergrove Playable"             "PASS: All .* N61 First Camp Construction" \
             "PASS: All .* N62 Eldergrove Day Cycle" \
             "PASS: All .* N63 First Camp Rest" \
-            "PASS: All .* N64 Eldergrove Night Survival"; do
+            "PASS: All .* N64 Eldergrove Night Survival" \
+            "PASS: All .* N65 Eldergrove Threat Encounters"; do
             grep -q "${marker}" /tmp/crownfall_run_all.log || { echo "MISSING REQUIRED COVERAGE MARKER: ${marker}"; exit 1; }
           done
           echo "COVERAGE GATE OK: all ${EXPECTED_COUNT} sandboxed Godot steps ran with failed=0 skipped=0."
