@@ -17,6 +17,7 @@ signal encounter_started(day_number: int, threat_class: int, archetype: String)
 signal threat_blocked_by_camp(day_number: int, threat_x: float)
 signal camp_protection_breached(day_number: int, archetype: String, threat_x: float)
 signal encounter_resolved(day_number: int, survived: bool, camp_breached: bool)
+signal defense_pulse_activated(day_number: int, threat_class: int, new_threat_x: float, repelled_breach: bool)
 
 enum ThreatClass {
 	ORDINARY,
@@ -48,6 +49,12 @@ const ORDINARY_SPEED: float = 95.0
 const BREACH_SPEED: float = 55.0
 const BREACH_NIGHT_INTERVAL: int = 5
 const RESOLVED_DAY_KEY_PREFIX: String = "eldergrove_night_resolved_day_"
+const DEFENSE_PULSE_COOLDOWN_SEC: float = 8.0
+const DEFENSE_PULSE_VISUAL_SEC: float = 0.6
+const ORDINARY_PUSHBACK_PX: float = 140.0
+const ORDINARY_STAGGER_SEC: float = 3.0
+const BREACH_PUSHBACK_PX: float = 96.0
+const BREACH_STAGGER_SEC: float = 1.5
 
 var state: EncounterState = EncounterState.IDLE
 var active_day: int = 0
@@ -57,6 +64,10 @@ var threat_x: float = THREAT_SPAWN_X
 var threat_blocked: bool = false
 var camp_breached: bool = false
 var player_threatened: bool = false
+var defense_cooldown_remaining: float = 0.0
+var threat_stagger_remaining: float = 0.0
+var defense_pulse_visual_remaining: float = 0.0
+var defense_pulse_count: int = 0
 var _day_outcomes: Dictionary = {}
 
 
@@ -147,12 +158,75 @@ func start_encounter(day_number: int, forced_class: int = -1) -> bool:
 	threat_blocked = false
 	camp_breached = false
 	player_threatened = false
+	defense_cooldown_remaining = 0.0
+	threat_stagger_remaining = 0.0
+	defense_pulse_visual_remaining = 0.0
+	defense_pulse_count = 0
 	encounter_started.emit(active_day, threat_class, threat_archetype)
 	return true
 
 
+func is_defense_on_cooldown() -> bool:
+	return defense_cooldown_remaining > 0.0
+
+
+func is_threat_staggered() -> bool:
+	return threat_stagger_remaining > 0.0
+
+
+func apply_camp_defense_pulse(camp_built: bool) -> Dictionary:
+	if not camp_built:
+		return {"ok": false, "reason": "Build First Camp before activating Ward Pulse."}
+	if not is_encounter_active():
+		return {"ok": false, "not_active": true, "reason": "Ward Pulse can only be used during an active night threat."}
+	if is_defense_on_cooldown():
+		return {
+			"ok": false,
+			"on_cooldown": true,
+			"cooldown_remaining": defense_cooldown_remaining,
+			"reason": "Ward Pulse recharging (%.1fs)." % defense_cooldown_remaining,
+		}
+
+	var push_dir: float = 1.0 if threat_x >= CAMP_CENTER_X else -1.0
+	var push_dist: float = BREACH_PUSHBACK_PX if threat_class == ThreatClass.BREACH_CAPABLE else ORDINARY_PUSHBACK_PX
+	var stagger_sec: float = BREACH_STAGGER_SEC if threat_class == ThreatClass.BREACH_CAPABLE else ORDINARY_STAGGER_SEC
+	var was_breached: bool = camp_breached
+
+	threat_x = clampf(threat_x + push_dir * push_dist, MIN_WORLD_X, MAX_WORLD_X)
+	threat_stagger_remaining = stagger_sec
+	defense_cooldown_remaining = DEFENSE_PULSE_COOLDOWN_SEC
+	defense_pulse_visual_remaining = DEFENSE_PULSE_VISUAL_SEC
+	defense_pulse_count += 1
+	threat_blocked = false
+	player_threatened = false
+
+	var repelled_breach: bool = false
+	if was_breached and not is_x_inside_camp_protection(threat_x, camp_built):
+		camp_breached = false
+		repelled_breach = true
+
+	defense_pulse_activated.emit(active_day, threat_class, threat_x, repelled_breach)
+	return {
+		"ok": true,
+		"day": active_day,
+		"threat_class": threat_class,
+		"new_threat_x": threat_x,
+		"pushback": push_dist,
+		"stagger_sec": stagger_sec,
+		"repelled_breach": repelled_breach,
+	}
+
+
 func tick(delta: float, player_x: float, camp_built: bool) -> void:
 	if not is_encounter_active() or delta <= 0.0:
+		return
+	if defense_cooldown_remaining > 0.0:
+		defense_cooldown_remaining = maxf(0.0, defense_cooldown_remaining - delta)
+	if defense_pulse_visual_remaining > 0.0:
+		defense_pulse_visual_remaining = maxf(0.0, defense_pulse_visual_remaining - delta)
+	if threat_stagger_remaining > 0.0:
+		threat_stagger_remaining = maxf(0.0, threat_stagger_remaining - delta)
+		player_threatened = false
 		return
 	var spd: float = BREACH_SPEED if threat_class == ThreatClass.BREACH_CAPABLE else ORDINARY_SPEED
 	var dir: float = signf(player_x - threat_x)
@@ -194,6 +268,9 @@ func resolve_encounter(survived: bool = true) -> bool:
 	state = EncounterState.RESOLVED
 	threat_blocked = false
 	player_threatened = false
+	defense_cooldown_remaining = 0.0
+	threat_stagger_remaining = 0.0
+	defense_pulse_visual_remaining = 0.0
 	encounter_resolved.emit(resolved_day, survived, was_breached)
 	return true
 
@@ -219,6 +296,8 @@ func get_status_text() -> String:
 		return ""
 	if camp_breached:
 		return "Night Threat: %s BREACHED First Camp!" % get_threat_display_name(threat_class)
+	if is_threat_staggered():
+		return "Ward Pulse: %s repelled and staggered!" % get_threat_display_name(threat_class)
 	if threat_blocked:
 		return "Night Threat: %s held outside First Camp." % get_threat_display_name(threat_class)
 	return "Night Threat: %s approaching (x=%.0f)" % [get_threat_display_name(threat_class), threat_x]
@@ -240,6 +319,10 @@ func apply_save_node_states(saved_node_states: Variant) -> void:
 	threat_blocked = false
 	camp_breached = false
 	player_threatened = false
+	defense_cooldown_remaining = 0.0
+	threat_stagger_remaining = 0.0
+	defense_pulse_visual_remaining = 0.0
+	defense_pulse_count = 0
 	if typeof(saved_node_states) != TYPE_DICTIONARY:
 		return
 	var d: Dictionary = saved_node_states as Dictionary

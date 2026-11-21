@@ -7,6 +7,15 @@ This changelog records repository changes that actually occurred. Planned featur
 
 ---
 
+## [2026-11-21] N6.6: First Camp Active Defense & Player Response
+
+**Type:** Gameplay milestone slice (N6.6)
+**Branch:** `feature/n66-first-camp-active-defense`
+
+- Added **First Camp Ward Pulse** (`[Space]` via existing `PlayerController.kindle_flare_requested`) in `scripts/world/EldergroveForestArrival.gd` and authoritative pushback/stagger/cooldown rules in `scripts/survival/EldergroveNightSurvival.gd` (`1 Wood` cost, `8.0s` cooldown, `84px` camp range).
+- Added restrained pixel-art pulse & staggered threat feedback in `scripts/survival/EldergroveThreatPresenter.gd`, strictly observing authoritative simulation state.
+- Added `tests/test_n66_first_camp_active_defense.gd` (registered in `tests/run_all.sh`), `docs/narrative/N66_IMPLEMENTATION_REPORT.md`, and updated roadmap while preserving `SaveManager` schema v2 and all N6.0–N6.5 / Forgotten Shore regressions.
+
 ## [2026-11-21] N6.5: Eldergrove Threat Encounters & Pixel-Art Presentation
 
 **Type:** Gameplay & pixel-art presentation milestone slice (N6.5)

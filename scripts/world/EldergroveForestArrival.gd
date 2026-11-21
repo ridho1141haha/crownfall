@@ -21,6 +21,7 @@ signal interaction_completed(target_id: String, resource_id: StringName, amount:
 signal camp_constructed(camp_id: String, cost: Dictionary)
 signal sunrise_renewal_applied(completed_day: int, refreshed_ids: Array[String])
 signal camp_rest_completed(previous_day: int, new_day: int)
+signal camp_defense_activated(day_number: int, threat_class: int, repelled_breach: bool)
 signal feedback_message(text: String)
 
 const SCENE_PATH: String = "res://scenes/world/EldergroveForest.tscn"
@@ -42,6 +43,10 @@ const CAMP_INTERACT_RANGE: float = 68.0
 const CAMP_BUILD_COST: Dictionary = {
 	"wood": 4,
 	"stone": 2,
+}
+const CAMP_DEFENSE_RANGE: float = EldergroveNightSurvival.CAMP_PROTECTION_RADIUS
+const CAMP_DEFENSE_COST: Dictionary = {
+	"wood": 1,
 }
 const SKY_COLOR_DAYLIGHT: Color = Color(0.18, 0.34, 0.36, 1.0)
 const SKY_COLOR_SUNSET: Color = Color(0.42, 0.24, 0.18, 1.0)
@@ -250,6 +255,81 @@ func get_camp_build_cost() -> Dictionary:
 	return CAMP_BUILD_COST.duplicate()
 
 
+func get_camp_defense_cost() -> Dictionary:
+	return CAMP_DEFENSE_COST.duplicate()
+
+
+func _get_defense_prompt_suffix() -> String:
+	if night_survival == null:
+		return "(Rest blocked)"
+	if night_survival.is_defense_on_cooldown():
+		return "([Space] Ward Pulse %.1fs)" % night_survival.defense_cooldown_remaining
+	if not ledger.can_afford(CAMP_DEFENSE_COST):
+		return "([Space] Ward Pulse: Need 1W)"
+	return "([Space] Ward Pulse 1W)"
+
+
+func can_activate_camp_defense(actor_x: float) -> bool:
+	if progression == null or not progression.has_fact(ProgressionState.FACT_ELDERGROVE_REACHED):
+		return false
+	if not _first_camp_built or night_survival == null:
+		return false
+	if not night_survival.is_encounter_active():
+		return false
+	if absf(actor_x - CAMP_SITE_X) > CAMP_DEFENSE_RANGE:
+		return false
+	if night_survival.is_defense_on_cooldown():
+		return false
+	return ledger.can_afford(CAMP_DEFENSE_COST)
+
+
+func try_activate_camp_defense(actor_x: float) -> Dictionary:
+	if progression == null or not progression.has_fact(ProgressionState.FACT_ELDERGROVE_REACHED):
+		_record_rejection("Eldergrove session is not active")
+		return {"ok": false, "reason": _last_rejection_reason}
+	if not _first_camp_built:
+		_record_rejection("Build First Camp before activating Ward Pulse.")
+		return {"ok": false, "reason": _last_rejection_reason}
+	if night_survival == null or not night_survival.is_encounter_active():
+		_record_rejection("Ward Pulse can only be used during an active night threat.")
+		return {"ok": false, "not_active": true, "reason": _last_rejection_reason}
+	if absf(actor_x - CAMP_SITE_X) > CAMP_DEFENSE_RANGE:
+		_record_rejection("Return to First Camp to trigger Ward Pulse.")
+		return {"ok": false, "out_of_range": true, "reason": _last_rejection_reason}
+	if night_survival.is_defense_on_cooldown():
+		_record_rejection("Ward Pulse recharging (%.1fs)." % night_survival.defense_cooldown_remaining)
+		return {
+			"ok": false,
+			"on_cooldown": true,
+			"cooldown_remaining": night_survival.defense_cooldown_remaining,
+			"reason": _last_rejection_reason,
+		}
+	if not ledger.can_afford(CAMP_DEFENSE_COST):
+		_record_rejection("Insufficient Wood for Ward Pulse (Need 1W).")
+		return {"ok": false, "insufficient_resources": true, "reason": _last_rejection_reason}
+	if not ledger.try_spend(CAMP_DEFENSE_COST):
+		_record_rejection("Failed to spend Wood for Ward Pulse.")
+		return {"ok": false, "insufficient_resources": true, "reason": _last_rejection_reason}
+
+	var res: Dictionary = night_survival.apply_camp_defense_pulse(_first_camp_built)
+	if not bool(res.get("ok", false)):
+		ledger.add_resource(&"wood", int(CAMP_DEFENSE_COST["wood"]))
+		_record_rejection(String(res.get("reason", "Ward Pulse failed.")))
+		return res
+
+	_has_unsaved_progress = true
+	_last_rejection_reason = ""
+	_refresh_gameplay_hud()
+	_sync_threat_presentation(0.0)
+	var repelled_breach: bool = bool(res.get("repelled_breach", false))
+	if repelled_breach:
+		_set_feedback("Ward Pulse drove the Breach Threat back outside First Camp! (-1W)")
+	else:
+		_set_feedback("Ward Pulse repelled and staggered the night threat! (-1W)")
+	camp_defense_activated.emit(int(res["day"]), int(res["threat_class"]), repelled_breach)
+	return res
+
+
 func can_rest_at_camp() -> bool:
 	if not _first_camp_built:
 		return false
@@ -271,9 +351,10 @@ func can_rest_at_camp() -> bool:
 func _get_camp_prompt_text() -> String:
 	if _first_camp_built:
 		if night_survival != null and night_survival.is_encounter_active():
+			var defense_hint: String = _get_defense_prompt_suffix()
 			if night_survival.camp_breached:
-				return "First Camp — BREACHED! (Rest blocked)"
-			return "First Camp — Threat active (Rest blocked)"
+				return "First Camp — BREACHED! %s" % defense_hint
+			return "First Camp — Threat active %s" % defense_hint
 		if time_manager != null and is_instance_valid(time_manager):
 			var in_rest_phase: bool = time_manager.current_phase == TimeManager.Phase.SUNSET or time_manager.current_phase == TimeManager.Phase.NIGHT
 			if in_rest_phase and night_survival != null:
@@ -548,6 +629,11 @@ func _on_player_interaction_requested(player_x: float) -> void:
 	try_interact_at(player_x)
 
 
+func _on_camp_defense_requested() -> void:
+	var px: float = player.global_position.x if (player != null and is_instance_valid(player)) else PLAYER_SPAWN_X
+	try_activate_camp_defense(px)
+
+
 func _wire_gameplay_connections() -> void:
 	if _signals_connected or player == null or not is_instance_valid(player):
 		return
@@ -557,6 +643,8 @@ func _wire_gameplay_connections() -> void:
 		player.manual_save_requested.connect(_on_manual_save)
 	if not player.fast_clock_toggled.is_connected(_on_toggle_fast_clock):
 		player.fast_clock_toggled.connect(_on_toggle_fast_clock)
+	if not player.kindle_flare_requested.is_connected(_on_camp_defense_requested):
+		player.kindle_flare_requested.connect(_on_camp_defense_requested)
 	_connect_night_survival_signals()
 	_signals_connected = true
 

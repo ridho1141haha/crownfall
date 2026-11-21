@@ -20,12 +20,15 @@ const COLOR_WARD_BLOCKED: Color = Color(1.0, 0.88, 0.45, 1.0)
 const COLOR_WARD_BREACHED: Color = Color(0.92, 0.28, 0.32, 0.95)
 const COLOR_TINT_BLOCKED: Color = Color(1.0, 0.92, 0.72, 1.0)
 const COLOR_TINT_BREACHED: Color = Color(0.95, 0.45, 0.52, 1.0)
+const COLOR_WARD_PULSE: Color = Color(1.0, 0.96, 0.72, 1.0)
+const COLOR_TINT_STAGGERED: Color = Color(0.76, 0.92, 1.0, 1.0)
 
 var threat_actor: Node2D = null
 var threat_sprite: Sprite2D = null
 var threat_label: Label = null
 var left_ward_post: ColorRect = null
 var right_ward_post: ColorRect = null
+var ward_pulse_bar: ColorRect = null
 
 var _visual_profiles: Dictionary = {}
 var _loaded_archetype: String = ""
@@ -108,6 +111,17 @@ func _ensure_nodes() -> void:
 		right_ward_post = _make_ward_post("RightWardPost", right_x)
 		add_child(right_ward_post)
 
+	if ward_pulse_bar == null:
+		var lx: float = roundf(EldergroveNightSurvival.CAMP_CENTER_X - EldergroveNightSurvival.CAMP_PROTECTION_RADIUS)
+		var rx: float = roundf(EldergroveNightSurvival.CAMP_CENTER_X + EldergroveNightSurvival.CAMP_PROTECTION_RADIUS)
+		ward_pulse_bar = ColorRect.new()
+		ward_pulse_bar.name = "WardPulseBar"
+		ward_pulse_bar.visible = false
+		ward_pulse_bar.position = Vector2(lx, -6.0)
+		ward_pulse_bar.size = Vector2(rx - lx, 4.0)
+		ward_pulse_bar.color = COLOR_WARD_PULSE
+		add_child(ward_pulse_bar)
+
 
 func _make_ward_post(post_name: String, world_x: float) -> ColorRect:
 	var post := ColorRect.new()
@@ -160,9 +174,15 @@ func set_perimeter_visible(active: bool, tint: Color = COLOR_WARD_IDLE) -> void:
 	right_ward_post.color = tint
 
 
+func is_pulse_visual_active() -> bool:
+	return ward_pulse_bar != null and ward_pulse_bar.visible
+
+
 func set_threat_hidden() -> void:
 	_ensure_nodes()
 	threat_actor.visible = false
+	if ward_pulse_bar != null:
+		ward_pulse_bar.visible = false
 	_anim_elapsed = 0.0
 	_last_visual_state = "hidden"
 
@@ -214,7 +234,17 @@ func sync_from_survival(survival: EldergroveNightSurvival, player_x: float, camp
 	_anim_elapsed += maxf(0.0, delta)
 	var frame_count: int = maxi(1, threat_sprite.hframes)
 
-	if survival.camp_breached:
+	var pulse_active: bool = survival.defense_pulse_visual_remaining > 0.0
+	if ward_pulse_bar != null:
+		ward_pulse_bar.visible = camp_built and pulse_active
+
+	if survival.is_threat_staggered():
+		_last_visual_state = "staggered"
+		threat_sprite.modulate = base_mod * COLOR_TINT_STAGGERED
+		threat_sprite.frame = mini(frame_count - 1, 1)
+		threat_label.text = "%s — Staggered" % display_name
+		set_perimeter_visible(camp_built, COLOR_WARD_PULSE if pulse_active else COLOR_WARD_BLOCKED)
+	elif survival.camp_breached:
 		_last_visual_state = "breached"
 		threat_sprite.modulate = COLOR_TINT_BREACHED
 		threat_sprite.frame = int(floor(_anim_elapsed * BREACH_FPS)) % frame_count
@@ -232,4 +262,4 @@ func sync_from_survival(survival: EldergroveNightSurvival, player_x: float, camp
 		threat_sprite.modulate = base_mod
 		threat_sprite.frame = int(floor(_anim_elapsed * WALK_FPS)) % frame_count
 		threat_label.text = display_name
-		set_perimeter_visible(camp_built, COLOR_WARD_IDLE)
+		set_perimeter_visible(camp_built, COLOR_WARD_PULSE if pulse_active else COLOR_WARD_IDLE)
