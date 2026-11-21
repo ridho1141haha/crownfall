@@ -129,6 +129,7 @@ var _survival_signals_connected: bool = false
 @onready var clock_label: Label = get_node_or_null("ArrivalHUD/MarginContainer/VBoxContainer/ClockLabel") as Label
 @onready var sky_background: ColorRect = get_node_or_null("SkyLayer/SkyBackground") as ColorRect
 @onready var day_night_modulate: CanvasModulate = get_node_or_null("DayNightModulate") as CanvasModulate
+@onready var threat_presenter: EldergroveThreatPresenter = get_node_or_null("WorldObjects/ThreatPresenter") as EldergroveThreatPresenter
 
 
 func _ready() -> void:
@@ -850,6 +851,7 @@ func _refresh_camp_visuals() -> void:
 			camp_label.text = "First Camp (Built)"
 		else:
 			camp_label.text = "Camp Site (%s)" % BuildingManager.format_cost_text(CAMP_BUILD_COST)
+	_sync_threat_presentation(0.0)
 
 
 func _refresh_resource_markers() -> void:
@@ -922,12 +924,21 @@ func _on_camp_protection_breached(_day_number: int, _archetype: String, _threat_
 		prompt_label.text = _get_camp_prompt_text()
 
 
+func _sync_threat_presentation(delta: float = 0.0) -> void:
+	if threat_presenter == null or not is_instance_valid(threat_presenter):
+		return
+	var px: float = player.global_position.x if (player != null and is_instance_valid(player)) else PLAYER_SPAWN_X
+	threat_presenter.sync_from_survival(night_survival, px, _first_camp_built, delta)
+
+
 func _on_night_encounter_resolved(day_number: int, _survived: bool, _was_breached: bool) -> void:
+	_sync_threat_presentation(0.0)
 	_set_feedback("Night %d survived — threat cleared." % day_number)
 
 
 func _update_night_survival(delta: float) -> void:
 	if night_survival == null or time_manager == null or not is_instance_valid(time_manager):
+		_sync_threat_presentation(0.0)
 		return
 	if time_manager.current_phase == TimeManager.Phase.NIGHT:
 		if night_survival.should_start_encounter(time_manager.current_day, time_manager.phase_elapsed):
@@ -936,6 +947,7 @@ func _update_night_survival(delta: float) -> void:
 		if night_survival.is_encounter_active():
 			var px: float = player.global_position.x if (player != null and is_instance_valid(player)) else PLAYER_SPAWN_X
 			night_survival.tick(delta, px, _first_camp_built)
+	_sync_threat_presentation(delta)
 
 
 func _on_sunrise_reached(completed_day: int) -> void:
@@ -944,6 +956,7 @@ func _on_sunrise_reached(completed_day: int) -> void:
 	_last_sunrise_completed_day = completed_day
 	if night_survival != null:
 		night_survival.on_sunrise_reached(completed_day)
+	_sync_threat_presentation(0.0)
 	_last_sunrise_refreshed_ids.clear()
 	resource_mgr.refresh_renewable_nodes()
 	_sunrise_renewal_count += 1
