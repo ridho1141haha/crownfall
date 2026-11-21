@@ -11,7 +11,7 @@ env:
 
 jobs:
   verify-vertical-slice:
-    name: Static Integrity & Headless Godot 4.7.2 Verification
+    name: Static Integrity & Full Headless Regression Suite (Godot 4.7.2)
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
@@ -86,12 +86,24 @@ jobs:
             echo "Godot class cache restored from cache; skipping cold bootstrap import."
           fi
 
-      - name: Run Sandboxed Static Integrity & Full Headless Suite (tests/run_all.sh)
+      - name: Run Full Sandboxed Regression Suite (tests/run_all.sh)
         run: |
           set -o pipefail
           bash tests/run_all.sh 2>&1 | tee /tmp/crownfall_run_all.log
           ! grep -E "(SCRIPT ERROR:|Parser Error:|TEST FAILURE:)" /tmp/crownfall_run_all.log
+          grep -q "SAVE GUARD OK:" /tmp/crownfall_run_all.log
+          grep -q "SUMMARY: passed=[0-9]\+ failed=0 skipped=0" /tmp/crownfall_run_all.log
           grep -q "ALL SUITES PASSED" /tmp/crownfall_run_all.log
+
+      - name: Verify Full Regression Coverage Inventory (Foundational + N4 + N5.0-N5.6 + N6.0 + N6.1)
+        run: |
+          set -euo pipefail
+          EXPECTED_COUNT="$(grep -c '^run_godot ' tests/run_all.sh)"
+          grep -q "SUMMARY: passed=${EXPECTED_COUNT} failed=0 skipped=0" /tmp/crownfall_run_all.log
+          for marker in             "PASS: runner sandbox gate"             "PASS: test_time_manager"             "PASS: All .* P0 Unit Checks"             "PASS: All .* M8 Multi-Frame Scene Transition"             "PASS: All 10 gameplay scenarios"             "PASS: All .* N50 Chapter I Boundary"             "PASS: All .* N51 First Foothold"             "PASS: All .* N52 First Night Narrative"             "PASS: All .* N53 Scientist Research Narrative"             "PASS: All .* N54 Vessel Readiness Narrative"             "PASS: All .* N55 Eldergrove Handoff"             "PASS: All .* N56 Island Continue"             "PASS: All .* N60 Eldergrove Playable"             "PASS: All .* N61 First Camp Construction"; do
+            grep -q "${marker}" /tmp/crownfall_run_all.log || { echo "MISSING REQUIRED COVERAGE MARKER: ${marker}"; exit 1; }
+          done
+          echo "COVERAGE GATE OK: all ${EXPECTED_COUNT} sandboxed Godot steps ran with failed=0 skipped=0."
 
   visual-evidence:
     name: N44B Windowed Visual Evidence (Xvfb, Godot 4.7.2)
