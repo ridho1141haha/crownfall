@@ -17,7 +17,8 @@ static func resolve_nearest(
 	specialist_domain: SpecialistDomain = null,
 	progression: ProgressionState = null,
 	research_mgr: ResearchManager = null,
-	structure_domain: StructureDomain = null
+	structure_domain: StructureDomain = null,
+	custom_targets: Array[Dictionary] = []
 ) -> Dictionary:
 	var best: Dictionary = {
 		"has_target": false,
@@ -256,5 +257,24 @@ static func resolve_nearest(
 					"prompt_text": prompt,
 					"distance": d_hearth,
 				}
+
+	# 7. Island-specific custom interaction targets (e.g., Eldergrove First Camp site)
+	for ct: Dictionary in custom_targets:
+		var cid: String = String(ct.get("id", ""))
+		if cid.is_empty():
+			continue
+		var cx: float = float(ct.get("x", 0.0))
+		var crange: float = float(ct.get("range", 72.0))
+		var d_ct: float = absf(actor_x - cx)
+		if d_ct <= crange and d_ct < float(best["distance"]):
+			best = {
+				"has_target": true,
+				"kind": String(ct.get("kind", "custom")),
+				"target_id": cid,
+				"primary_command": StringName(String(ct.get("primary_command", ""))),
+				"upgrade_command": &"",
+				"prompt_text": String(ct.get("prompt_text", "[E] Interact")),
+				"distance": d_ct,
+			}
 
 	return best

@@ -18,6 +18,7 @@ signal arrival_persistence_failed(reason: String)
 signal continue_restored(save_path: String)
 signal continue_restore_failed(reason: String)
 signal interaction_completed(target_id: String, resource_id: StringName, amount: int)
+signal camp_constructed(camp_id: String, cost: Dictionary)
 signal feedback_message(text: String)
 
 const SCENE_PATH: String = "res://scenes/world/EldergroveForest.tscn"
@@ -32,6 +33,14 @@ const PLAYER_SPAWN_X: float = -320.0
 const PLAYER_SPAWN_Y: float = 0.0
 const MAX_PERSIST_ATTEMPTS: int = 2
 const OFF_ISLAND_X: float = -99999.0
+const CAMP_SITE_ID: String = "eldergrove_first_camp"
+const CAMP_BUILT_STATE_KEY: String = "eldergrove_first_camp_built"
+const CAMP_SITE_X: float = 80.0
+const CAMP_INTERACT_RANGE: float = 68.0
+const CAMP_BUILD_COST: Dictionary = {
+	"wood": 4,
+	"stone": 2,
+}
 
 const ELDERGROVE_NODES: Array[Dictionary] = [
 	{
@@ -85,6 +94,7 @@ var _active_target: Dictionary = {}
 var _node_markers: Dictionary = {}
 var _signals_connected: bool = false
 var _scene_transition: Callable = Callable()
+var _first_camp_built: bool = false
 
 @onready var player: PlayerController = get_node_or_null("Player") as PlayerController
 @onready var ground: StaticBody2D = get_node_or_null("Ground") as StaticBody2D
@@ -96,6 +106,10 @@ var _scene_transition: Callable = Callable()
 @onready var prompt_label: Label = get_node_or_null("ArrivalHUD/BottomBar/PromptLabel") as Label
 @onready var feedback_label: Label = get_node_or_null("ArrivalHUD/BottomBar/FeedbackLabel") as Label
 @onready var pause_menu: PauseMenu = get_node_or_null("PauseMenu") as PauseMenu
+@onready var camp_site_node: Node2D = get_node_or_null("WorldObjects/FirstCampSite") as Node2D
+@onready var camp_site_marker: ColorRect = get_node_or_null("WorldObjects/FirstCampSite/SiteMarker") as ColorRect
+@onready var camp_shelter_sprite: Sprite2D = get_node_or_null("WorldObjects/FirstCampSite/CampShelterSprite") as Sprite2D
+@onready var camp_label: Label = get_node_or_null("WorldObjects/FirstCampSite/CampLabel") as Label
 
 
 func _ready() -> void:
@@ -103,6 +117,7 @@ func _ready() -> void:
 	_configure_player_bounds()
 	_place_player_at_spawn()
 	_build_resource_markers()
+	_refresh_camp_visuals()
 	_wire_gameplay_connections()
 	if pause_menu != null:
 		pause_menu.bind_session(self)
@@ -174,6 +189,7 @@ func _ready() -> void:
 	_show_arrival_presentation()
 	_refresh_gameplay_hud()
 	_refresh_resource_markers()
+	_refresh_camp_visuals()
 	_arrival_lock.unlock()
 	arrival_acknowledged.emit(int(ack.get("token", 0)))
 
@@ -199,6 +215,36 @@ func set_scene_transition(transition: Callable) -> void:
 	_scene_transition = transition
 
 
+func is_first_camp_built() -> bool:
+	return _first_camp_built
+
+
+func get_camp_build_cost() -> Dictionary:
+	return CAMP_BUILD_COST.duplicate()
+
+
+func _get_camp_prompt_text() -> String:
+	if _first_camp_built:
+		return "First Camp (Built)"
+	var cost_txt: String = BuildingManager.format_cost_text(CAMP_BUILD_COST)
+	if ledger.can_afford(CAMP_BUILD_COST):
+		return "[E] Build First Camp (%s)" % cost_txt
+	return "[E] Build First Camp (Need %s)" % cost_txt
+
+
+func _build_custom_interaction_targets() -> Array[Dictionary]:
+	return [
+		{
+			"id": CAMP_SITE_ID,
+			"kind": "camp_site",
+			"x": CAMP_SITE_X,
+			"range": CAMP_INTERACT_RANGE,
+			"primary_command": &"inspect_camp" if _first_camp_built else &"build_camp",
+			"prompt_text": _get_camp_prompt_text(),
+		},
+	]
+
+
 func resolve_nearest_interaction(actor_x: float) -> Dictionary:
 	return InteractionResolver.resolve_nearest(
 		actor_x,
@@ -209,7 +255,14 @@ func resolve_nearest_interaction(actor_x: float) -> Dictionary:
 		0,
 		OFF_ISLAND_X,
 		-OFF_ISLAND_X,
-		true
+		true,
+		false,
+		null,
+		null,
+		null,
+		null,
+		null,
+		_build_custom_interaction_targets()
 	)
 
 
@@ -243,8 +296,40 @@ func try_interact_at(actor_x: float) -> Dictionary:
 		_set_feedback(msg)
 		interaction_completed.emit(target_id, res_id, amount)
 		return res
+	if cmd == &"build_camp":
+		return try_build_first_camp(actor_x)
+	if cmd == &"inspect_camp":
+		_set_feedback("First Camp is already built.")
+		return {"ok": false, "already_built": true, "reason": "First Camp already constructed"}
 	_record_rejection("Unsupported interaction command")
 	return {"ok": false, "reason": _last_rejection_reason}
+
+
+func try_build_first_camp(actor_x: float) -> Dictionary:
+	if progression == null or not progression.has_fact(ProgressionState.FACT_ELDERGROVE_REACHED):
+		_record_rejection("Eldergrove session is not active")
+		return {"ok": false, "reason": _last_rejection_reason}
+	if _first_camp_built:
+		_set_feedback("First Camp is already built.")
+		return {"ok": false, "already_built": true, "reason": "First Camp already constructed"}
+	if absf(actor_x - CAMP_SITE_X) > CAMP_INTERACT_RANGE:
+		_record_rejection("Move closer to the Camp Site")
+		return {"ok": false, "reason": _last_rejection_reason}
+	if not ledger.can_afford(CAMP_BUILD_COST):
+		var cost_txt: String = BuildingManager.format_cost_text(CAMP_BUILD_COST)
+		_record_rejection("Insufficient resources to build First Camp (Need %s)" % cost_txt)
+		return {"ok": false, "reason": _last_rejection_reason}
+	if not ledger.try_spend(CAMP_BUILD_COST):
+		_record_rejection("Failed to deduct resources for First Camp")
+		return {"ok": false, "reason": _last_rejection_reason}
+	_first_camp_built = true
+	_has_unsaved_progress = true
+	_last_rejection_reason = ""
+	_refresh_camp_visuals()
+	_refresh_gameplay_hud()
+	_set_feedback("First Camp constructed!")
+	camp_constructed.emit(CAMP_SITE_ID, CAMP_BUILD_COST.duplicate())
+	return {"ok": true, "camp_id": CAMP_SITE_ID, "cost": CAMP_BUILD_COST.duplicate()}
 
 
 func build_save_payload() -> Dictionary:
@@ -268,6 +353,7 @@ func build_save_payload() -> Dictionary:
 	var eg_nodes: Dictionary = resource_mgr.to_save_dict()
 	for nid: String in eg_nodes.keys():
 		merged_nodes[nid] = bool(eg_nodes[nid])
+	merged_nodes[CAMP_BUILT_STATE_KEY] = _first_camp_built
 	pf["node_states"] = merged_nodes
 	return payload
 
@@ -352,7 +438,11 @@ func _hydrate_gameplay_from_payload(payload: Dictionary, restore_player_position
 	if payload.has("progression_flags") and typeof(payload["progression_flags"]) == TYPE_DICTIONARY:
 		var pf: Dictionary = payload["progression_flags"] as Dictionary
 		if pf.has("node_states") and typeof(pf["node_states"]) == TYPE_DICTIONARY:
-			resource_mgr.apply_save_state(pf["node_states"])
+			var ns: Dictionary = pf["node_states"] as Dictionary
+			resource_mgr.apply_save_state(ns)
+			_first_camp_built = bool(ns.get(CAMP_BUILT_STATE_KEY, false))
+		else:
+			_first_camp_built = false
 	if restore_player_position and player != null and is_instance_valid(player):
 		var placed: bool = false
 		if payload.has("player") and typeof(payload["player"]) == TYPE_DICTIONARY:
@@ -418,6 +508,7 @@ func _restore_from_continue_save() -> void:
 	_show_restored_presentation()
 	_refresh_gameplay_hud()
 	_refresh_resource_markers()
+	_refresh_camp_visuals()
 	_arrival_lock.unlock()
 	continue_restored.emit(save_path)
 
@@ -599,6 +690,18 @@ func _build_resource_markers() -> void:
 		marker.add_child(lbl)
 		container.add_child(marker)
 		_node_markers[nid] = marker
+
+
+func _refresh_camp_visuals() -> void:
+	if camp_site_marker != null and is_instance_valid(camp_site_marker):
+		camp_site_marker.visible = not _first_camp_built
+	if camp_shelter_sprite != null and is_instance_valid(camp_shelter_sprite):
+		camp_shelter_sprite.visible = _first_camp_built
+	if camp_label != null and is_instance_valid(camp_label):
+		if _first_camp_built:
+			camp_label.text = "First Camp (Built)"
+		else:
+			camp_label.text = "Camp Site (%s)" % BuildingManager.format_cost_text(CAMP_BUILD_COST)
 
 
 func _refresh_resource_markers() -> void:
