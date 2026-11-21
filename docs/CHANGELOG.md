@@ -7,6 +7,16 @@ This changelog records repository changes that actually occurred. Planned featur
 
 ---
 
+## [2026-11-21] N6.8: Gloom Brute Combat & Threat Defeat
+
+**Type:** Gameplay milestone slice (N6.8)
+**Branch:** `feature/n68-gloom-brute-combat`
+
+- Added dedicated `attack` input action mapped to `[J]` in `project.godot` and `PlayerController.attack_requested(player_x, facing_dir)` (no key echo) in `scripts/player/Player.gd`.
+- Implemented authoritative Gloom Brute combat (`3 HP`, `1 dmg`, `64px` reach, `0.45s` cooldown, facing check, single defeat & encounter resolution) in `scripts/survival/EldergroveNightSurvival.gd` and wired discrete HUD feedback in `scripts/world/EldergroveForestArrival.gd`.
+- Added restrained pixel-aligned Brute HP bar and hit-flash feedback in `scripts/survival/EldergroveThreatPresenter.gd`.
+- Added `tests/test_n68_gloom_brute_combat.gd` (registered in `tests/run_all.sh`), `docs/narrative/N68_IMPLEMENTATION_REPORT.md`, and updated roadmap while preserving N6.3–N6.7, Forgotten Shore, and `SaveManager` schema v2.
+
 ## [2026-11-21] N6.7: First Camp Breach Damage & Repair
 
 **Type:** Gameplay milestone slice (N6.7)

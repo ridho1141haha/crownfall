@@ -1,6 +1,6 @@
 # Crownfall — N5 Chapter I Implementation Roadmap
 
-**Status (updated 2026-11-21):** N5.0–N5.6 and N6.0–N6.6 are IMPLEMENTED & MERGED on `main` @ `beb4502d8a61cc6e42ee9e3cbc5531b19a6262e3`; N6.7 (First Camp Breach Damage & Repair) is IMPLEMENTED on `feature/n67-first-camp-integrity-repair` (see [`N67_IMPLEMENTATION_REPORT.md`](N67_IMPLEMENTATION_REPORT.md)). Stage-3 vessel readiness != Set Sail != voyage != Eldergrove arrival.
+**Status (updated 2026-11-21):** N5.0–N5.6 and N6.0–N6.7 are IMPLEMENTED & MERGED on `main` @ `e94f8b58ac83f0b4b4a0ecf3a9e587a49decc3fd`; N6.8 (Gloom Brute Combat & Threat Defeat) is IMPLEMENTED on `feature/n68-gloom-brute-combat` (see [`N68_IMPLEMENTATION_REPORT.md`](N68_IMPLEMENTATION_REPORT.md)). Stage-3 vessel readiness != Set Sail != voyage != Eldergrove arrival.
 **Base `main` SHA audited:** `287feeb930870f39081740e373b097d81076f58c` (2026-11-20)
 **Owner decisions docket:** [`N5_OWNER_DECISIONS.md`](N5_OWNER_DECISIONS.md)
 **Candidate beat sheet (DRAFT / NON-CANON):** [`../CHAPTER_01_BEAT_SHEET.md`](../CHAPTER_01_BEAT_SHEET.md)

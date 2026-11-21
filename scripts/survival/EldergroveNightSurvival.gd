@@ -19,6 +19,8 @@ signal camp_protection_breached(day_number: int, archetype: String, threat_x: fl
 signal encounter_resolved(day_number: int, survived: bool, camp_breached: bool)
 signal defense_pulse_activated(day_number: int, threat_class: int, new_threat_x: float, repelled_breach: bool)
 signal camp_integrity_changed(current_integrity: int, max_integrity: int, delta: int)
+signal threat_health_changed(day_number: int, current_hp: int, max_hp: int, damage: int)
+signal threat_defeated(day_number: int, archetype: String)
 
 enum ThreatClass {
 	ORDINARY,
@@ -61,6 +63,11 @@ const BREACH_DAMAGE: int = 1
 const CAMP_REPAIR_AMOUNT: int = 1
 const CAMP_INTEGRITY_TRACKED_KEY: String = "eldergrove_camp_integrity_tracked"
 const CAMP_INTEGRITY_BIT_PREFIX: String = "eldergrove_camp_integrity_"
+const BRUTE_MAX_HP: int = 3
+const PLAYER_ATTACK_DAMAGE: int = 1
+const PLAYER_ATTACK_REACH: float = 64.0
+const PLAYER_ATTACK_COOLDOWN_SEC: float = 0.45
+const HIT_FLASH_VISUAL_SEC: float = 0.2
 
 var state: EncounterState = EncounterState.IDLE
 var active_day: int = 0
@@ -75,6 +82,11 @@ var threat_stagger_remaining: float = 0.0
 var defense_pulse_visual_remaining: float = 0.0
 var defense_pulse_count: int = 0
 var camp_integrity: int = 0
+var threat_hp: int = 0
+var threat_max_hp: int = 0
+var threat_is_defeated: bool = false
+var attack_cooldown_remaining: float = 0.0
+var hit_flash_remaining: float = 0.0
 var _day_outcomes: Dictionary = {}
 
 
@@ -212,6 +224,15 @@ func start_encounter(day_number: int, forced_class: int = -1) -> bool:
 	threat_stagger_remaining = 0.0
 	defense_pulse_visual_remaining = 0.0
 	defense_pulse_count = 0
+	threat_is_defeated = false
+	attack_cooldown_remaining = 0.0
+	hit_flash_remaining = 0.0
+	if threat_class == ThreatClass.BREACH_CAPABLE:
+		threat_max_hp = BRUTE_MAX_HP
+		threat_hp = BRUTE_MAX_HP
+	else:
+		threat_max_hp = 0
+		threat_hp = 0
 	encounter_started.emit(active_day, threat_class, threat_archetype)
 	return true
 
@@ -224,10 +245,71 @@ func is_threat_staggered() -> bool:
 	return threat_stagger_remaining > 0.0
 
 
+func is_attack_on_cooldown() -> bool:
+	return attack_cooldown_remaining > 0.0
+
+
+func is_threat_defeated() -> bool:
+	return threat_is_defeated
+
+
+func can_player_attack(player_x: float, facing_dir: int) -> Dictionary:
+	if not is_encounter_active():
+		return {"ok": false, "not_active": true, "reason": "No active Gloom Brute to attack."}
+	if threat_is_defeated:
+		return {"ok": false, "already_defeated": true, "reason": "Gloom Brute is already defeated."}
+	if threat_class != ThreatClass.BREACH_CAPABLE:
+		return {"ok": false, "wrong_target": true, "reason": "Only Gloom Brute can be attacked."}
+	if is_attack_on_cooldown():
+		return {
+			"ok": false,
+			"on_cooldown": true,
+			"cooldown_remaining": attack_cooldown_remaining,
+			"reason": "Attack recharging (%.2fs)." % attack_cooldown_remaining,
+		}
+	var dx: float = threat_x - player_x
+	if absf(dx) > PLAYER_ATTACK_REACH:
+		return {"ok": false, "out_of_range": true, "distance": absf(dx), "reason": "Move closer to attack Gloom Brute."}
+	var norm_facing: int = -1 if facing_dir < 0 else 1
+	if not is_zero_approx(dx) and ((dx > 0.0 and norm_facing < 0) or (dx < 0.0 and norm_facing > 0)):
+		return {"ok": false, "wrong_facing": true, "reason": "Face Gloom Brute to attack."}
+	return {"ok": true}
+
+
+func apply_player_attack(player_x: float, facing_dir: int) -> Dictionary:
+	var check: Dictionary = can_player_attack(player_x, facing_dir)
+	if not bool(check.get("ok", false)):
+		return check
+	var target_day: int = active_day
+	var target_arch: String = threat_archetype
+	attack_cooldown_remaining = PLAYER_ATTACK_COOLDOWN_SEC
+	var prev_hp: int = threat_hp
+	threat_hp = maxi(0, threat_hp - PLAYER_ATTACK_DAMAGE)
+	var dealt: int = prev_hp - threat_hp
+	hit_flash_remaining = HIT_FLASH_VISUAL_SEC
+	threat_health_changed.emit(target_day, threat_hp, threat_max_hp, dealt)
+
+	var defeated_now: bool = false
+	if threat_hp <= 0 and not threat_is_defeated:
+		threat_is_defeated = true
+		defeated_now = true
+		threat_defeated.emit(target_day, target_arch)
+		resolve_encounter(true)
+
+	return {
+		"ok": true,
+		"day": target_day,
+		"damage": dealt,
+		"remaining_hp": threat_hp,
+		"max_hp": threat_max_hp,
+		"defeated": defeated_now,
+	}
+
+
 func apply_camp_defense_pulse(camp_built: bool) -> Dictionary:
 	if not camp_built:
 		return {"ok": false, "reason": "Build First Camp before activating Ward Pulse."}
-	if not is_encounter_active():
+	if not is_encounter_active() or threat_is_defeated:
 		return {"ok": false, "not_active": true, "reason": "Ward Pulse can only be used during an active night threat."}
 	if is_defense_on_cooldown():
 		return {
@@ -268,7 +350,13 @@ func apply_camp_defense_pulse(camp_built: bool) -> Dictionary:
 
 
 func tick(delta: float, player_x: float, camp_built: bool) -> void:
-	if not is_encounter_active() or delta <= 0.0:
+	if delta <= 0.0:
+		return
+	if attack_cooldown_remaining > 0.0:
+		attack_cooldown_remaining = maxf(0.0, attack_cooldown_remaining - delta)
+	if hit_flash_remaining > 0.0:
+		hit_flash_remaining = maxf(0.0, hit_flash_remaining - delta)
+	if not is_encounter_active() or threat_is_defeated:
 		return
 	if defense_cooldown_remaining > 0.0:
 		defense_cooldown_remaining = maxf(0.0, defense_cooldown_remaining - delta)
@@ -325,6 +413,8 @@ func resolve_encounter(survived: bool = true) -> bool:
 	defense_cooldown_remaining = 0.0
 	threat_stagger_remaining = 0.0
 	defense_pulse_visual_remaining = 0.0
+	attack_cooldown_remaining = 0.0
+	hit_flash_remaining = 0.0
 	encounter_resolved.emit(resolved_day, survived, was_breached)
 	return true
 
@@ -382,6 +472,11 @@ func apply_save_node_states(saved_node_states: Variant, camp_built: bool = false
 	threat_stagger_remaining = 0.0
 	defense_pulse_visual_remaining = 0.0
 	defense_pulse_count = 0
+	threat_hp = 0
+	threat_max_hp = 0
+	threat_is_defeated = false
+	attack_cooldown_remaining = 0.0
+	hit_flash_remaining = 0.0
 	camp_integrity = MAX_CAMP_INTEGRITY if camp_built else 0
 	if typeof(saved_node_states) != TYPE_DICTIONARY:
 		return

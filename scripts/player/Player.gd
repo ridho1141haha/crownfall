@@ -9,6 +9,7 @@ signal repair_wall_requested(player_x: float)
 signal manual_save_requested()
 signal fast_clock_toggled()
 signal kindle_flare_requested()
+signal attack_requested(player_x: float, facing_dir: int)
 
 @export var move_speed: float = 240.0
 @export var min_bound_x: float = WorldConstants.MIN_PLAYABLE_X
@@ -54,6 +55,8 @@ func _unhandled_input(event: InputEvent) -> void:
 		fast_clock_toggled.emit()
 	elif event.is_action_pressed("kindle_flare"):
 		kindle_flare_requested.emit()
+	elif event.is_action_pressed("attack", false):
+		attack_requested.emit(global_position.x, facing_direction)
 
 
 func _update_sprite_animation(delta: float, is_moving: bool) -> void:
