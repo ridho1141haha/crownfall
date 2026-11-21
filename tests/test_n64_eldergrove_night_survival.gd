@@ -15,6 +15,7 @@ var _failures: int = 0
 var _stage: int = 0
 var _wait_frames: int = 0
 var _base_payload: Dictionary = {}
+var _started_events: int = 0
 var _blocked_events: int = 0
 var _breach_events: int = 0
 var _resolved_events: int = 0
@@ -106,16 +107,18 @@ func _process(_delta: float) -> bool:
 		_wait_frames = 0
 		return false
 
-	# Stage 2: Test unbuilt protection, ordinary blocking, breach-capable penetration, rest guard, sunrise & save
+	# Stage 2: Verify all N6.4 survival, protection, rest policy, resolution semantics, and save rules
 	if _stage == 2:
 		if current_scene == null or not (current_scene is EldergroveForestArrival):
 			return false
 		var eg: EldergroveForestArrival = current_scene as EldergroveForestArrival
 		eg.time_manager.auto_advance = false
 		var surv: EldergroveNightSurvival = eg.night_survival
+		_started_events = 0
 		_blocked_events = 0
 		_breach_events = 0
 		_resolved_events = 0
+		surv.encounter_started.connect(func(_d: int, _c: int, _a: String) -> void: _started_events += 1)
 		surv.threat_blocked_by_camp.connect(func(_d: int, _x: float) -> void: _blocked_events += 1)
 		surv.camp_protection_breached.connect(func(_d: int, _a: String, _x: float) -> void: _breach_events += 1)
 		surv.encounter_resolved.connect(func(_d: int, _s: bool, _b: bool) -> void: _resolved_events += 1)
@@ -124,54 +127,89 @@ func _process(_delta: float) -> bool:
 		_check(not surv.is_camp_protection_active(eg.is_first_camp_built()), "First Camp protection unavailable before construction")
 		_check(not surv.is_x_inside_camp_protection(EldergroveForestArrival.CAMP_SITE_X, eg.is_first_camp_built()), "Camp coordinates unprotected when camp is unbuilt")
 
-		# 2. Construct First Camp and enter Day 2 Night (Ordinary threat scheduled on Day 2)
+		# 2. Sunrise without an encounter does NOT falsely mark encounter as resolved
+		eg.time_manager.advance_time(eg.time_manager.daylight_duration + eg.time_manager.sunset_duration + eg.time_manager.night_duration)
+		_check(eg.time_manager.current_day == 3 and eg.time_manager.current_phase == TimeManager.Phase.DAYLIGHT, "Day 2 passed to Day 3 Daylight without starting an encounter")
+		_check(not surv.is_day_resolved(2) and surv.is_day_passed_without_encounter(2), "Sunrise without encounter marks Day 2 PASSED_NO_ENCOUNTER, not RESOLVED")
+		_check(_resolved_events == 0 and not surv.to_save_node_states().has("eldergrove_night_resolved_day_2"), "Unstarted night emits no resolution and does not persist as resolved")
+
+		# 3. Construct First Camp and verify threat class capabilities
 		_check(bool(eg.try_interact_at(EldergroveForestArrival.CAMP_SITE_X).get("ok", false)), "Constructed First Camp (4W 2S)")
 		_check(surv.is_camp_protection_active(eg.is_first_camp_built()), "First Camp protection active after construction")
 		_check(not EldergroveNightSurvival.can_penetrate_camp_protection(EldergroveNightSurvival.ThreatClass.ORDINARY), "Ordinary threat explicitly cannot penetrate camp protection")
 		_check(EldergroveNightSurvival.can_penetrate_camp_protection(EldergroveNightSurvival.ThreatClass.BREACH_CAPABLE), "Breach-capable threat explicitly can penetrate camp protection")
 
-		eg.player.global_position.x = EldergroveForestArrival.CAMP_SITE_X
-		eg.time_manager.advance_time(eg.time_manager.daylight_duration + eg.time_manager.sunset_duration + EldergroveNightSurvival.ENCOUNTER_START_OFFSET_SEC)
-		eg._update_night_survival(0.1)
-		_check(surv.is_encounter_active() and surv.threat_class == EldergroveNightSurvival.ThreatClass.ORDINARY, "Day 2 Night spawns Ordinary threat deterministically")
+		# 4. Day 3 Sunset rest (Ordinary night): MUST process encounter (never silently bypass)
+		eg.time_manager.advance_time(eg.time_manager.get_current_phase_duration() - eg.time_manager.phase_elapsed + 1.0)
+		_check(eg.time_manager.current_day == 3 and eg.time_manager.current_phase == TimeManager.Phase.SUNSET, "Advanced to Day 3 Sunset (Ordinary night)")
+		var res_sunset_ord: Dictionary = eg.try_interact_at(EldergroveForestArrival.CAMP_SITE_X)
+		_check(bool(res_sunset_ord.get("ok", false)) and eg.time_manager.current_day == 4 and eg.time_manager.current_phase == TimeManager.Phase.DAYLIGHT, "Day 3 Sunset rest on Ordinary night advances cleanly to Day 4 Daylight")
+		_check(_started_events == 1 and _blocked_events == 1 and _resolved_events == 1, "Day 3 Sunset rest processed Ordinary encounter (started, blocked by camp, resolved once)")
+		_check(surv.is_day_resolved(3) and surv.get_day_outcome(3) == EldergroveNightSurvival.DayOutcome.RESOLVED, "Day 3 marked RESOLVED after legitimate processing")
 
-		# 3. Tick Ordinary threat heavily toward player inside First Camp -> strictly blocked outside boundary
+		# 5. Day 4 Night: before activation follows policy; at/past activation rejects rest; ordinary threat strictly blocked
+		eg.player.global_position.x = EldergroveForestArrival.CAMP_SITE_X
+		eg.time_manager.advance_time(eg.time_manager.get_current_phase_duration() - eg.time_manager.phase_elapsed + eg.time_manager.sunset_duration + 20.0)
+		_check(eg.time_manager.current_day == 4 and eg.time_manager.current_phase == TimeManager.Phase.NIGHT, "Advanced to Day 4 Night (20s, pre-activation)")
+		_check(eg.can_rest_at_camp(), "Ordinary Night rest before activation offset is eligible under documented policy")
+
+		# Advance past activation offset without ticking _process -> rest MUST NOT bypass due encounter
+		eg.time_manager.advance_time(EldergroveNightSurvival.ENCOUNTER_START_OFFSET_SEC)
+		_check(not eg.can_rest_at_camp(), "can_rest_at_camp() is false once Night reaches encounter activation offset")
+		var res_due_rest: Dictionary = eg.try_interact_at(EldergroveForestArrival.CAMP_SITE_X)
+		_check(not bool(res_due_rest.get("ok", true)) and bool(res_due_rest.get("encounter_active", false)), "Night rest at/past activation offset activates encounter and rejects rest")
+		_check(surv.is_encounter_active() and surv.threat_class == EldergroveNightSurvival.ThreatClass.ORDINARY, "Day 4 Ordinary encounter is active")
+
+		# Tick Ordinary threat heavily toward player inside First Camp -> strictly blocked outside boundary
 		for _i: int in range(20):
 			eg._update_night_survival(0.5)
 		var right_edge: float = EldergroveNightSurvival.CAMP_CENTER_X + EldergroveNightSurvival.CAMP_PROTECTION_RADIUS
-		_check(surv.threat_x >= right_edge and not surv.is_x_inside_camp_protection(surv.threat_x, true), "Ordinary threat blocked outside First Camp protected boundary")
-		_check(surv.threat_blocked and _blocked_events == 1, "Ordinary threat block recorded cleanly")
+		_check(surv.threat_x > right_edge and not surv.is_x_inside_camp_protection(surv.threat_x, true), "Ordinary threat blocked strictly outside First Camp protected boundary")
+		_check(surv.threat_blocked and _blocked_events == 2, "Ordinary threat block recorded cleanly")
 		_check(not surv.camp_breached and _breach_events == 0, "Ordinary threat cannot breach camp through any fallback path")
 
-		# 4. Rest is rejected while night encounter remains unresolved
-		_check(not eg.can_rest_at_camp(), "can_rest_at_camp() is false while night encounter is active")
-		var res_blocked_rest: Dictionary = eg.try_interact_at(EldergroveForestArrival.CAMP_SITE_X)
-		_check(not bool(res_blocked_rest.get("ok", true)) and bool(res_blocked_rest.get("encounter_active", false)), "Rest rejected with clear feedback while encounter is active")
-		_check(eg.time_manager.current_day == 2 and eg.time_manager.current_phase == TimeManager.Phase.NIGHT, "Rejected rest during active encounter does not skip Night")
+		# Rest during active encounter remains rejected
+		var res_active_rest: Dictionary = eg.try_interact_at(EldergroveForestArrival.CAMP_SITE_X)
+		_check(not bool(res_active_rest.get("ok", true)) and bool(res_active_rest.get("encounter_active", false)), "Rest rejected with clear feedback while encounter is active")
+		_check(eg.time_manager.current_day == 4 and eg.time_manager.current_phase == TimeManager.Phase.NIGHT, "Rejected rest during active encounter does not skip Night")
 
-		# 5. Survive until Sunrise -> encounter resolves, sunrise renewal runs exactly once
-		_check(bool(eg.try_interact_at(-60.0).get("ok", false)), "Gathered Timber before Day 3 sunrise (+4W)")
+		# Sunrise with active encounter resolves it exactly once and renews Timber
+		_check(bool(eg.try_interact_at(-60.0).get("ok", false)), "Gathered Timber before Day 5 sunrise (+4W)")
 		eg.player.global_position.x = EldergroveForestArrival.CAMP_SITE_X
-		eg.time_manager.advance_time(eg.time_manager.night_duration)
-		_check(eg.time_manager.current_day == 3 and eg.time_manager.current_phase == TimeManager.Phase.DAYLIGHT, "Sunrise transitions to Day 3 Daylight")
-		_check(not surv.is_encounter_active() and surv.is_day_resolved(2) and _resolved_events == 1, "Day 2 encounter resolved cleanly at sunrise")
-		_check(eg.get_sunrise_renewal_count() == 1 and not eg.resource_mgr.is_collected("eldergrove_fallen_timber_01"), "Sunrise renewal ran exactly once and replenished Timber")
+		var prev_renewals: int = eg.get_sunrise_renewal_count()
+		eg.time_manager.advance_time(eg.time_manager.get_current_phase_duration() - eg.time_manager.phase_elapsed + 1.0)
+		_check(eg.time_manager.current_day == 5 and eg.time_manager.current_phase == TimeManager.Phase.DAYLIGHT, "Sunrise transitions to Day 5 Daylight")
+		_check(not surv.is_encounter_active() and surv.is_day_resolved(4) and _resolved_events == 2, "Sunrise with active Day 4 encounter resolved it exactly once")
+		_check(eg.get_sunrise_renewal_count() == prev_renewals + 1 and not eg.resource_mgr.is_collected("eldergrove_fallen_timber_01"), "Sunrise renewal ran once and replenished Timber")
 
-		# 6. Day 3 Night (day % 3 == 0): Breach-capable threat penetrates First Camp protection explicitly
-		eg.time_manager.advance_time(eg.time_manager.daylight_duration + eg.time_manager.sunset_duration + EldergroveNightSurvival.ENCOUNTER_START_OFFSET_SEC)
+		# 6. Day 5 (day % 5 == 0, Breach Night): Sunset rest AND pre-activation Night rest MUST BE REJECTED
+		eg.time_manager.advance_time(eg.time_manager.get_current_phase_duration() - eg.time_manager.phase_elapsed + 1.0)
+		_check(eg.time_manager.current_day == 5 and eg.time_manager.current_phase == TimeManager.Phase.SUNSET, "Advanced to Day 5 Sunset (Breach night)")
+		_check(not eg.can_rest_at_camp(), "can_rest_at_camp() is false on Breach night Sunset")
+		var res_sunset_breach: Dictionary = eg.try_interact_at(EldergroveForestArrival.CAMP_SITE_X)
+		_check(not bool(res_sunset_breach.get("ok", true)) and bool(res_sunset_breach.get("breach_night", false)), "Sunset rest cannot bypass Breach night encounter")
+		_check(eg.time_manager.current_day == 5 and eg.time_manager.current_phase == TimeManager.Phase.SUNSET, "Rejected Breach Sunset rest does not advance clock")
+
+		eg.time_manager.advance_time(eg.time_manager.get_current_phase_duration() - eg.time_manager.phase_elapsed + 15.0)
+		_check(eg.time_manager.current_day == 5 and eg.time_manager.current_phase == TimeManager.Phase.NIGHT, "Advanced to Day 5 Night (15s, pre-activation Breach night)")
+		var res_early_breach: Dictionary = eg.try_interact_at(EldergroveForestArrival.CAMP_SITE_X)
+		_check(not bool(res_early_breach.get("ok", true)) and bool(res_early_breach.get("breach_night", false)), "Pre-activation Night rest rejected on Breach night")
+
+		# Activate Day 5 Breach-Capable threat -> penetrates First Camp protection with player-visible feedback
+		eg.time_manager.advance_time(EldergroveNightSurvival.ENCOUNTER_START_OFFSET_SEC)
 		eg._update_night_survival(0.1)
-		_check(surv.is_encounter_active() and surv.threat_class == EldergroveNightSurvival.ThreatClass.BREACH_CAPABLE, "Day 3 Night spawns Breach-Capable threat deterministically")
+		_check(surv.is_encounter_active() and surv.threat_class == EldergroveNightSurvival.ThreatClass.BREACH_CAPABLE, "Day 5 Night spawns Breach-Capable threat deterministically")
 		for _i: int in range(30):
 			eg._update_night_survival(0.5)
 		_check(surv.camp_breached and _breach_events == 1, "Breach-capable threat explicitly penetrates First Camp protection")
 		_check(surv.is_x_inside_camp_protection(surv.threat_x, true), "Breach-capable threat entered protected zone")
+		_check(eg.feedback_label != null and eg.feedback_label.text.contains("BREACHED"), "Player-visible HUD feedback shown when First Camp is breached")
 
-		# Resolve Day 3 encounter explicitly, then verify rest works with no active encounter + save/load
-		_check(surv.resolve_encounter(true), "Resolved Day 3 encounter explicitly")
-		_check(not surv.is_encounter_active() and surv.is_day_resolved(3), "Day 3 marked resolved")
-		_check(eg.save_game_state(SAVE_ELDERGROVE), "Saved Day 3 Night resolved state under SaveManager schema v2")
+		# Resolve Day 5 encounter explicitly, save, and verify malformed state fail-safety
+		_check(surv.resolve_encounter(true), "Resolved Day 5 Breach encounter explicitly")
+		_check(not surv.is_encounter_active() and surv.is_day_resolved(5) and _resolved_events == 3, "Day 5 marked resolved cleanly")
+		_check(eg.save_game_state(SAVE_ELDERGROVE), "Saved Day 5 Night resolved state under SaveManager schema v2")
 
-		# Verify malformed node_states fails safely
 		var probe := EldergroveNightSurvival.new()
 		probe.apply_save_node_states({"eldergrove_night_resolved_day_bad": true, "eldergrove_night_resolved_day_2": "not_bool"})
 		_check(not probe.is_day_resolved(2), "Malformed saved survival state fails safely")
@@ -181,7 +219,7 @@ func _process(_delta: float) -> bool:
 		_wait_frames = 0
 		return false
 
-	# Stage 3: Verify Forgotten Shore Continue regression, then Continue back into Day 3 Night (resolved)
+	# Stage 3: Verify Forgotten Shore Continue regression, then Continue back into Day 5 Night (resolved)
 	if _stage == 3:
 		if current_scene == null or current_scene.name != "Main":
 			return false
@@ -201,7 +239,7 @@ func _process(_delta: float) -> bool:
 		_wait_frames = 0
 		return false
 
-	# Stage 4: Continue must NOT replay resolved Day 3 encounter, and rest without active encounter advances to Day 4
+	# Stage 4: Continue must NOT replay resolved Day 5 encounter; Day 2 (unstarted) stays unresolved; rest advances to Day 6
 	if _stage == 4:
 		if current_scene == null or not (current_scene is EldergroveForestArrival):
 			return false
@@ -209,12 +247,13 @@ func _process(_delta: float) -> bool:
 		eg2.time_manager.auto_advance = false
 		_check(eg2.is_restored_from_continue(), "Eldergrove restored via Continue")
 		_check(eg2.is_first_camp_built(), "First Camp protection state preserved after Continue")
-		_check(eg2.night_survival.is_day_resolved(3), "Resolved Day 3 encounter state persisted under SaveManager v2")
+		_check(eg2.night_survival.is_day_resolved(5) and eg2.night_survival.is_day_restored_from_save(5), "Resolved Day 5 encounter restored with RESTORED_RESOLVED outcome")
+		_check(not eg2.night_survival.is_day_resolved(2), "Unstarted Day 2 was never falsely saved as resolved")
 		eg2._update_night_survival(0.5)
-		_check(not eg2.night_survival.is_encounter_active(), "Continue does NOT replay already-resolved Day 3 encounter")
-		_check(eg2.can_rest_at_camp(), "Rest is available when no encounter is active after Continue")
+		_check(not eg2.night_survival.is_encounter_active(), "Continue does NOT replay already-resolved Day 5 encounter")
+		_check(eg2.can_rest_at_camp(), "Rest is available after Continue once Breach encounter is resolved")
 		var res_rest: Dictionary = eg2.try_interact_at(EldergroveForestArrival.CAMP_SITE_X)
-		_check(bool(res_rest.get("ok", false)) and eg2.time_manager.current_day == 4 and eg2.time_manager.current_phase == TimeManager.Phase.DAYLIGHT, "Rest without active encounter advances cleanly to Day 4 Daylight")
+		_check(bool(res_rest.get("ok", false)) and eg2.time_manager.current_day == 6 and eg2.time_manager.current_phase == TimeManager.Phase.DAYLIGHT, "Rest after resolved encounter advances cleanly to Day 6 Daylight")
 		_check(SaveManager.SCHEMA_VERSION == 2, "SaveManager schema version remains v2")
 
 		_cleanup()

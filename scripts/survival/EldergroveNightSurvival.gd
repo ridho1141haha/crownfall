@@ -7,8 +7,10 @@ extends RefCounted
 ##   - ThreatClass.ORDINARY ("raider"): blocked strictly outside First Camp's
 ##     protected zone when First Camp is constructed (zero random bypass).
 ##   - ThreatClass.BREACH_CAPABLE ("brute"): explicitly capable of penetrating
-##     First Camp's protective boundary on scheduled breach nights (every 3rd day).
+##     First Camp's protective boundary on scheduled breach nights (every 5th day).
 ##
+## Tracks explicit per-day outcomes (DayOutcome) so sunrise without an encounter
+## never falsely marks an encounter as resolved.
 ## Driven strictly by existing TimeManager phases/signals; no parallel clock.
 
 signal encounter_started(day_number: int, threat_class: int, archetype: String)
@@ -27,6 +29,13 @@ enum EncounterState {
 	RESOLVED,
 }
 
+enum DayOutcome {
+	UNPROCESSED,
+	PASSED_NO_ENCOUNTER,
+	RESOLVED,
+	RESTORED_RESOLVED,
+}
+
 const CAMP_CENTER_X: float = 80.0
 const CAMP_PROTECTION_RADIUS: float = 84.0
 const CAMP_BLOCK_MARGIN: float = 1.0
@@ -37,7 +46,7 @@ const ENCOUNTER_START_OFFSET_SEC: float = 45.0
 const THREAT_CONTACT_RANGE: float = 28.0
 const ORDINARY_SPEED: float = 95.0
 const BREACH_SPEED: float = 55.0
-const BREACH_NIGHT_INTERVAL: int = 3
+const BREACH_NIGHT_INTERVAL: int = 5
 const RESOLVED_DAY_KEY_PREFIX: String = "eldergrove_night_resolved_day_"
 
 var state: EncounterState = EncounterState.IDLE
@@ -48,7 +57,7 @@ var threat_x: float = THREAT_SPAWN_X
 var threat_blocked: bool = false
 var camp_breached: bool = false
 var player_threatened: bool = false
-var _resolved_days: Dictionary = {}
+var _day_outcomes: Dictionary = {}
 
 
 static func can_penetrate_camp_protection(t_class: ThreatClass) -> bool:
@@ -59,6 +68,10 @@ static func get_scheduled_threat_class(day_number: int) -> ThreatClass:
 	if day_number > 0 and (day_number % BREACH_NIGHT_INTERVAL) == 0:
 		return ThreatClass.BREACH_CAPABLE
 	return ThreatClass.ORDINARY
+
+
+static func is_breach_night(day_number: int) -> bool:
+	return get_scheduled_threat_class(day_number) == ThreatClass.BREACH_CAPABLE
 
 
 static func get_archetype_for_class(t_class: ThreatClass) -> String:
@@ -83,8 +96,29 @@ func is_encounter_active() -> bool:
 	return state == EncounterState.ACTIVE
 
 
+func get_day_outcome(day_number: int) -> DayOutcome:
+	return int(_day_outcomes.get(day_number, DayOutcome.UNPROCESSED)) as DayOutcome
+
+
 func is_day_resolved(day_number: int) -> bool:
-	return bool(_resolved_days.get(day_number, false))
+	var outcome: DayOutcome = get_day_outcome(day_number)
+	return outcome == DayOutcome.RESOLVED or outcome == DayOutcome.RESTORED_RESOLVED
+
+
+func is_day_passed_without_encounter(day_number: int) -> bool:
+	return get_day_outcome(day_number) == DayOutcome.PASSED_NO_ENCOUNTER
+
+
+func is_day_restored_from_save(day_number: int) -> bool:
+	return get_day_outcome(day_number) == DayOutcome.RESTORED_RESOLVED
+
+
+func is_rest_blocked_by_breach_night(day_number: int) -> bool:
+	if day_number <= 0:
+		return false
+	if is_day_resolved(day_number):
+		return false
+	return is_breach_night(day_number)
 
 
 func should_start_encounter(day_number: int, phase_elapsed: float) -> bool:
@@ -156,7 +190,7 @@ func resolve_encounter(survived: bool = true) -> bool:
 		return false
 	var resolved_day: int = active_day
 	var was_breached: bool = camp_breached
-	_resolved_days[resolved_day] = true
+	_day_outcomes[resolved_day] = DayOutcome.RESOLVED
 	state = EncounterState.RESOLVED
 	threat_blocked = false
 	player_threatened = false
@@ -169,10 +203,15 @@ func on_sunrise_reached(completed_day: int) -> void:
 		return
 	if is_encounter_active() and active_day == completed_day:
 		resolve_encounter(true)
-	else:
-		_resolved_days[completed_day] = true
+		return
+	if is_day_resolved(completed_day):
 		if state == EncounterState.RESOLVED:
 			state = EncounterState.IDLE
+		return
+	# Night passed without an encounter being scheduled/started: do NOT mark resolved.
+	_day_outcomes[completed_day] = DayOutcome.PASSED_NO_ENCOUNTER
+	if state == EncounterState.RESOLVED:
+		state = EncounterState.IDLE
 
 
 func get_status_text() -> String:
@@ -187,15 +226,15 @@ func get_status_text() -> String:
 
 func to_save_node_states() -> Dictionary:
 	var out: Dictionary = {}
-	for day_key: Variant in _resolved_days.keys():
+	for day_key: Variant in _day_outcomes.keys():
 		var day_num: int = int(day_key)
-		if day_num > 0 and bool(_resolved_days[day_key]):
+		if day_num > 0 and is_day_resolved(day_num):
 			out[RESOLVED_DAY_KEY_PREFIX + str(day_num)] = true
 	return out
 
 
 func apply_save_node_states(saved_node_states: Variant) -> void:
-	_resolved_days.clear()
+	_day_outcomes.clear()
 	state = EncounterState.IDLE
 	active_day = 0
 	threat_blocked = false
@@ -214,4 +253,4 @@ func apply_save_node_states(saved_node_states: Variant) -> void:
 		if suffix.is_valid_int():
 			var day_num: int = int(suffix)
 			if day_num > 0:
-				_resolved_days[day_num] = true
+				_day_outcomes[day_num] = DayOutcome.RESTORED_RESOLVED

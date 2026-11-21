@@ -9,14 +9,13 @@ This changelog records repository changes that actually occurred. Planned featur
 
 ## [2026-11-21] N6.4: Eldergrove Night Survival & First Camp Defense
 
-**Type:** Gameplay milestone slice (N6.4)
+**Type:** Gameplay milestone slice (N6.4, revised per PR #50 review)
 **Branch:** `feature/n64-eldergrove-night-survival`
 
-- Added modular `scripts/survival/EldergroveNightSurvival.gd` distinguishing `ThreatClass.ORDINARY` (strictly blocked outside constructed First Camp's protected zone) from `ThreatClass.BREACH_CAPABLE` (explicitly able to penetrate camp protection on scheduled breach nights, `day % 3 == 0`).
-- Integrated encounter lifecycle into `scripts/world/EldergroveForestArrival.gd` via existing `TimeManager`, rejecting First Camp rest with clear feedback while an encounter is active and resolving cleanly at sunrise.
-- Persisted resolved night days (`eldergrove_night_resolved_day_<N>`) inside existing `SaveManager` schema v2 `progression_flags["node_states"]` without schema changes.
-- Added `tests/test_n64_eldergrove_night_survival.gd`, registered it in `tests/run_all.sh`, updated `docs/narrative/N5_IMPLEMENTATION_ROADMAP.md`, and created `docs/narrative/N64_IMPLEMENTATION_REPORT.md`.
-
+- Added modular `scripts/survival/EldergroveNightSurvival.gd` with explicit `DayOutcome` semantics (`UNPROCESSED`, `PASSED_NO_ENCOUNTER`, `RESOLVED`, `RESTORED_RESOLVED`) and two threat classes: `ThreatClass.ORDINARY` (strictly blocked outside constructed First Camp's perimeter) and `ThreatClass.BREACH_CAPABLE` (explicitly able to penetrate camp protection on scheduled breach nights, `day % 5 == 0`, with player-visible HUD breach feedback).
+- Updated `scripts/world/EldergroveForestArrival.gd` so Sunset and pre-activation Night rest never silently bypass encounters: Ordinary nights legitimately process the encounter against First Camp protection before Sunrise, Breach nights reject unattended Sunset/pre-activation rest, and Night rest at/past activation or during an active encounter is strictly rejected.
+- Ensured `on_sunrise_reached()` never marks an unstarted night as resolved, preserving `SaveManager` schema v2 (`progression_flags["node_states"]`) without schema changes.
+- Extended `tests/test_n64_eldergrove_night_survival.gd` across all rest-bypass, resolution, breach-feedback, and Continue regression scenarios while preserving N6.3 rest compatibility and `tests/run_all.sh`.
 ## [2026-11-21] N6.3: First Camp Rest & Time Skip
 
 **Type:** Gameplay milestone slice (N6.3)
