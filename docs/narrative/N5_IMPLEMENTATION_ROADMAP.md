@@ -1,6 +1,6 @@
 # Crownfall — N5 Chapter I Implementation Roadmap
 
-**Status (updated 2026-11-21):** N5.0–N5.6 and N6.0–N6.4 are IMPLEMENTED & MERGED on `main`; N6.5 (Eldergrove Threat Encounters & Pixel-Art Presentation) is IMPLEMENTED on `feature/n65-eldergrove-threat-encounters` (see [`N65_IMPLEMENTATION_REPORT.md`](N65_IMPLEMENTATION_REPORT.md)). Stage-3 vessel readiness != Set Sail != voyage != Eldergrove arrival.
+**Status (updated 2026-11-21):** N5.0–N5.6 and N6.0–N6.5 are IMPLEMENTED & MERGED on `main` @ `40ca990dcf989d6f966e8fa5db5ee5ecb52b9a41`; N6.6 (First Camp Active Defense & Player Response) is IMPLEMENTED on `feature/n66-first-camp-active-defense` (see [`N66_IMPLEMENTATION_REPORT.md`](N66_IMPLEMENTATION_REPORT.md)). Stage-3 vessel readiness != Set Sail != voyage != Eldergrove arrival.
 **Base `main` SHA audited:** `287feeb930870f39081740e373b097d81076f58c` (2026-11-20)
 **Owner decisions docket:** [`N5_OWNER_DECISIONS.md`](N5_OWNER_DECISIONS.md)
 **Candidate beat sheet (DRAFT / NON-CANON):** [`../CHAPTER_01_BEAT_SHEET.md`](../CHAPTER_01_BEAT_SHEET.md)
