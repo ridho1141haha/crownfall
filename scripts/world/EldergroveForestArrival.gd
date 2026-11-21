@@ -20,6 +20,7 @@ signal continue_restore_failed(reason: String)
 signal interaction_completed(target_id: String, resource_id: StringName, amount: int)
 signal camp_constructed(camp_id: String, cost: Dictionary)
 signal sunrise_renewal_applied(completed_day: int, refreshed_ids: Array[String])
+signal camp_rest_completed(previous_day: int, new_day: int)
 signal feedback_message(text: String)
 
 const SCENE_PATH: String = "res://scenes/world/EldergroveForest.tscn"
@@ -245,9 +246,19 @@ func get_camp_build_cost() -> Dictionary:
 	return CAMP_BUILD_COST.duplicate()
 
 
+func can_rest_at_camp() -> bool:
+	if not _first_camp_built:
+		return false
+	if time_manager == null or not is_instance_valid(time_manager):
+		return false
+	return time_manager.current_phase == TimeManager.Phase.SUNSET or time_manager.current_phase == TimeManager.Phase.NIGHT
+
+
 func _get_camp_prompt_text() -> String:
 	if _first_camp_built:
-		return "First Camp (Built)"
+		if can_rest_at_camp():
+			return "[E] Rest until Sunrise"
+		return "First Camp (Built) — Rest available at Sunset/Night"
 	var cost_txt: String = BuildingManager.format_cost_text(CAMP_BUILD_COST)
 	if ledger.can_afford(CAMP_BUILD_COST):
 		return "[E] Build First Camp (%s)" % cost_txt
@@ -261,7 +272,7 @@ func _build_custom_interaction_targets() -> Array[Dictionary]:
 			"kind": "camp_site",
 			"x": CAMP_SITE_X,
 			"range": CAMP_INTERACT_RANGE,
-			"primary_command": &"inspect_camp" if _first_camp_built else &"build_camp",
+			"primary_command": &"rest_camp" if _first_camp_built else &"build_camp",
 			"prompt_text": _get_camp_prompt_text(),
 		},
 	]
@@ -320,9 +331,8 @@ func try_interact_at(actor_x: float) -> Dictionary:
 		return res
 	if cmd == &"build_camp":
 		return try_build_first_camp(actor_x)
-	if cmd == &"inspect_camp":
-		_set_feedback("First Camp is already built.")
-		return {"ok": false, "already_built": true, "reason": "First Camp already constructed"}
+	if cmd == &"rest_camp":
+		return try_rest_at_camp(actor_x)
 	_record_rejection("Unsupported interaction command")
 	return {"ok": false, "reason": _last_rejection_reason}
 
@@ -352,6 +362,45 @@ func try_build_first_camp(actor_x: float) -> Dictionary:
 	_set_feedback("First Camp constructed!")
 	camp_constructed.emit(CAMP_SITE_ID, CAMP_BUILD_COST.duplicate())
 	return {"ok": true, "camp_id": CAMP_SITE_ID, "cost": CAMP_BUILD_COST.duplicate()}
+
+
+func try_rest_at_camp(actor_x: float) -> Dictionary:
+	if progression == null or not progression.has_fact(ProgressionState.FACT_ELDERGROVE_REACHED):
+		_record_rejection("Eldergrove session is not active")
+		return {"ok": false, "reason": _last_rejection_reason}
+	if time_manager == null or not is_instance_valid(time_manager):
+		_record_rejection("World clock unavailable")
+		return {"ok": false, "reason": _last_rejection_reason}
+	if not _first_camp_built:
+		_record_rejection("Build First Camp before resting.")
+		return {"ok": false, "reason": _last_rejection_reason}
+	if absf(actor_x - CAMP_SITE_X) > CAMP_INTERACT_RANGE:
+		_record_rejection("Move closer to First Camp to rest.")
+		return {"ok": false, "reason": _last_rejection_reason}
+	if not can_rest_at_camp():
+		_record_rejection("First Camp is built — rest is only available at Sunset or Night.")
+		return {"ok": false, "already_built": true, "reason": _last_rejection_reason}
+
+	var prev_day: int = time_manager.current_day
+	var remaining_phase: float = maxf(0.0, time_manager.get_current_phase_duration() - time_manager.phase_elapsed)
+	var advance_sec: float = remaining_phase + 0.001
+	if time_manager.current_phase == TimeManager.Phase.SUNSET:
+		advance_sec += maxf(time_manager.night_duration, 0.01)
+
+	time_manager.advance_time(advance_sec)
+	_has_unsaved_progress = true
+	_last_rejection_reason = ""
+	_apply_phase_visuals()
+	_refresh_clock_hud()
+	_refresh_resource_markers()
+	_set_feedback("Rested until sunrise — Day %d begins." % time_manager.current_day)
+	camp_rest_completed.emit(prev_day, time_manager.current_day)
+	return {
+		"ok": true,
+		"previous_day": prev_day,
+		"new_day": time_manager.current_day,
+		"phase": time_manager.get_phase_id(),
+	}
 
 
 func build_save_payload() -> Dictionary:
