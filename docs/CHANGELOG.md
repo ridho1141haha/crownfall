@@ -7,6 +7,16 @@ This changelog records repository changes that actually occurred. Planned featur
 
 ---
 
+## [2026-11-21] N6.7: First Camp Breach Damage & Repair
+
+**Type:** Gameplay milestone slice (N6.7)
+**Branch:** `feature/n67-first-camp-integrity-repair`
+
+- Added deterministic First Camp structural integrity (`MAX_CAMP_INTEGRITY = 3`, `BREACH_DAMAGE = 1` once per breach event) and zero-integrity protection loss in `scripts/survival/EldergroveNightSurvival.gd`.
+- Added `[F]` First Camp repair interaction (`2 Wood` via `EconomyLedger` -> `+1` integrity, clamped to `3`, debounced) wired through existing `PlayerController.repair_wall_requested` in `scripts/world/EldergroveForestArrival.gd`, plus damaged/compromised visuals in `EldergroveForestArrival.gd` and `EldergroveThreatPresenter.gd`.
+- Persisted camp integrity inside existing `SaveManager` schema v2 `progression_flags["node_states"]` using strict boolean keys with safe legacy fallback and malformed-data protection.
+- Added `tests/test_n67_first_camp_integrity_repair.gd` (registered in `tests/run_all.sh`), `docs/narrative/N67_IMPLEMENTATION_REPORT.md`, and updated roadmap.
+
 ## [2026-11-21] N6.6: First Camp Active Defense & Player Response
 
 **Type:** Gameplay milestone slice (N6.6)
