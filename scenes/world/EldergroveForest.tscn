@@ -1,4 +1,4 @@
-[gd_scene load_steps=11 format=3]
+[gd_scene load_steps=12 format=3]
 
 [ext_resource type="Script" path="res://scripts/world/EldergroveForestArrival.gd" id="1_arrival"]
 [ext_resource type="PackedScene" path="res://scenes/player/Player.tscn" id="2_player"]
@@ -8,6 +8,7 @@
 [ext_resource type="Texture2D" path="res://assets/environment/vegetation/env_pine_tree_states.png" id="6_tree_tex"]
 [ext_resource type="Texture2D" path="res://assets/buildings/shipwreck/building_shipwreck_stages.png" id="7_ship_tex"]
 [ext_resource type="Script" path="res://scripts/ui/PauseMenu.gd" id="8_pause_menu"]
+[ext_resource type="Texture2D" path="res://assets/buildings/camp/building_vagrant_tent.png" id="9_tent_tex"]
 
 [sub_resource type="RectangleShape2D" id="RectangleShape2D_floor"]
 size = Vector2(1600, 120)
@@ -104,7 +105,7 @@ centered = false
 hframes = 2
 
 [node name="PineTree2" type="Sprite2D" parent="WorldObjects"]
-position = Vector2(80, -64)
+position = Vector2(150, -64)
 texture = ExtResource("6_tree_tex")
 centered = false
 hframes = 2
@@ -120,6 +121,29 @@ position = Vector2(600, -64)
 texture = ExtResource("6_tree_tex")
 centered = false
 hframes = 2
+
+[node name="FirstCampSite" type="Node2D" parent="WorldObjects"]
+position = Vector2(80, 0)
+
+[node name="SiteMarker" type="ColorRect" parent="WorldObjects/FirstCampSite"]
+offset_left = -24.0
+offset_top = -14.0
+offset_right = 24.0
+color = Color(0.62, 0.48, 0.28, 0.85)
+
+[node name="CampShelterSprite" type="Sprite2D" parent="WorldObjects/FirstCampSite"]
+visible = false
+position = Vector2(-24, -32)
+texture = ExtResource("9_tent_tex")
+centered = false
+
+[node name="CampLabel" type="Label" parent="WorldObjects/FirstCampSite"]
+offset_left = -90.0
+offset_top = -56.0
+offset_right = 90.0
+offset_bottom = -32.0
+text = "Camp Site (4W 2S)"
+horizontal_alignment = 1
 
 [node name="Player" parent="." instance=ExtResource("2_player")]
 position = Vector2(-320, 0)

@@ -7,6 +7,15 @@ This changelog records repository changes that actually occurred. Planned featur
 
 ---
 
+## [2026-11-21] N6.1: Eldergrove First Camp Construction Loop
+
+**Type:** Gameplay milestone slice (N6.1)
+**Baseline:** `main` @ `28bc0638a6fc3bcd932afc47e050cd32f10572ad` (PR #45); branch `feature/n61-first-camp-construction`
+
+- Added the First Camp construction site (`x = 80.0`, cost `4W 2S`) in `scenes/world/EldergroveForest.tscn` and `scripts/world/EldergroveForestArrival.gd`, reusing `EconomyLedger`, `InteractionResolver` (via backwards-compatible `custom_targets`), and `assets/buildings/camp/building_vagrant_tent.png`.
+- Persisted `eldergrove_first_camp_built` inside existing `SaveManager` schema v2 `progression_flags["node_states"]` without modifying `SaveManager.gd` or bumping schema version.
+- Added `tests/test_n61_first_camp_construction.gd`, registered it in `tests/run_all.sh` and `.github/workflows/godot-ci.yml`, updated `docs/narrative/N5_IMPLEMENTATION_ROADMAP.md`, and created `docs/narrative/N61_IMPLEMENTATION_REPORT.md`.
+
 ## [2026-11-20] N6.0: Eldergrove First Playable Slice
 
 **Type:** Gameplay milestone slice (N6.0)
