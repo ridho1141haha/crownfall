@@ -17,14 +17,50 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Generate P0 Pixel-Art Assets if Missing
+      - name: Generate P0 Pixel-Art & SFX Assets if Missing
         run: |
-          python3 -m pip install --quiet pillow
-          python3 scripts/tools/generate_pixel_assets.py
-          python3 scripts/tools/generate_sfx_assets.py
+          set -euo pipefail
+          REQUIRED_ASSETS=(
+            "assets/characters/player/player_monarch_sheet.png"
+            "assets/characters/npc/npc_builder_sheet.png"
+            "assets/enemies/first_enemy/enemy_greedling_raider_sheet.png"
+            "assets/buildings/town_center/building_town_center_sheet.png"
+            "assets/buildings/wooden_wall/building_wooden_wall_states.png"
+            "assets/items/resources/items_resources_sheet.png"
+            "assets/environment/terrain/terrain_shore_tile.png"
+            "assets/audio/sfx_coin.wav"
+            "assets/audio/sfx_build.wav"
+            "assets/audio/sfx_hit.wav"
+            "assets/audio/sfx_bow.wav"
+            "assets/audio/sfx_sunset.wav"
+            "assets/audio/sfx_night.wav"
+          )
+          missing=0
+          for asset in "${REQUIRED_ASSETS[@]}"; do
+            if [ ! -f "${asset}" ]; then
+              missing=1
+              break
+            fi
+          done
+          if [ "${missing}" -eq 1 ]; then
+            echo "Missing P0 asset(s) detected; installing pillow and regenerating..."
+            python3 -m pip install --quiet pillow
+            python3 scripts/tools/generate_pixel_assets.py
+            python3 scripts/tools/generate_sfx_assets.py
+          else
+            echo "All P0 pixel-art and SFX assets present; skipping regeneration."
+          fi
 
-      - name: Run Repository Static, Scene-Graph & OD-01..OD-10 Consistency Verifier
-        run: python3 tests/verify_repo_integrity.py
+      - name: Cache Godot 4.7.2 Project Import Metadata (Read-Only Assets Only — Never User Saves)
+        uses: actions/cache@v4
+        with:
+          path: |
+            .godot/imported
+            .godot/uid_cache.bin
+            .godot/global_script_class_cache.cfg
+          key: godot-4.7.2-import-${{ runner.os }}-${{ hashFiles('project.godot', 'assets/**', 'scenes/**', 'scripts/**') }}
+          restore-keys: |
+            godot-4.7.2-import-${{ runner.os }}-
 
       - name: Setup Godot 4.7.2 Headless (Explicit Version Lock — No Silent Fallback)
         uses: chickensoft-games/setup-godot@v2
@@ -38,311 +74,94 @@ jobs:
           echo "Detected Godot version: ${ACTUAL_VERSION}"
           echo "${ACTUAL_VERSION}" | grep -E "^4\.7\.2\."
 
-      - name: Initialize CI Sandbox (Step 3)
+      - name: Bootstrap Project Class Cache if Missing (Isolated Temp Env)
+        run: |
+          set -o pipefail
+          if [ ! -f ".godot/global_script_class_cache.cfg" ]; then
+            TMP_BOOT="$(mktemp -d /tmp/godot_import_boot_XXXXXXXX)"
+            trap 'rm -rf -- "${TMP_BOOT}"' EXIT
+            HOME="${TMP_BOOT}/home" XDG_DATA_HOME="${TMP_BOOT}/xdg-data" XDG_CACHE_HOME="${TMP_BOOT}/xdg-cache"               godot --headless --import 2>&1 | tee /tmp/godot_bootstrap_import.log
+            ! grep -E "(SCRIPT ERROR:|Parser Error:|TEST FAILURE:)" /tmp/godot_bootstrap_import.log
+          else
+            echo "Godot class cache restored from cache; skipping cold bootstrap import."
+          fi
+
+      - name: Run Sandboxed Static Integrity & Full Headless Suite (tests/run_all.sh)
+        run: |
+          set -o pipefail
+          bash tests/run_all.sh 2>&1 | tee /tmp/crownfall_run_all.log
+          ! grep -E "(SCRIPT ERROR:|Parser Error:|TEST FAILURE:)" /tmp/crownfall_run_all.log
+          grep -q "ALL SUITES PASSED" /tmp/crownfall_run_all.log
+
+  visual-evidence:
+    name: N44B Windowed Visual Evidence (Xvfb, Godot 4.7.2)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Cache Godot 4.7.2 Project Import Metadata (Read-Only Assets Only — Never User Saves)
+        uses: actions/cache@v4
+        with:
+          path: |
+            .godot/imported
+            .godot/uid_cache.bin
+            .godot/global_script_class_cache.cfg
+          key: godot-4.7.2-import-${{ runner.os }}-${{ hashFiles('project.godot', 'assets/**', 'scenes/**', 'scripts/**') }}
+          restore-keys: |
+            godot-4.7.2-import-${{ runner.os }}-
+
+      - name: Setup Godot 4.7.2 Headless (Explicit Version Lock — No Silent Fallback)
+        uses: chickensoft-games/setup-godot@v2
+        with:
+          version: 4.7.2
+          use-dotnet: false
+
+      - name: Enforce Exact Godot 4.7.2 Runtime Version
+        run: |
+          ACTUAL_VERSION="$(godot --version)"
+          echo "Detected Godot version: ${ACTUAL_VERSION}"
+          echo "${ACTUAL_VERSION}" | grep -E "^4\.7\.2\."
+
+      - name: Initialize Isolated CI Sandbox (Step 3)
         run: |
           set -euo pipefail
           RUNNER_SANDBOX_BASE="$(mktemp -d /tmp/step3_runner_iso_XXXXXXXX)"
-          cleanup_init_sandbox() {
-            case "${RUNNER_SANDBOX_BASE:-}" in
-              /tmp/step3_runner_iso_*)
-                local canon
-                canon="$(readlink -m -- "${RUNNER_SANDBOX_BASE}" 2>/dev/null || true)"
-                if [ "${canon}" = "${RUNNER_SANDBOX_BASE}" ] && [ -d "${RUNNER_SANDBOX_BASE}" ]; then
-                  rm -rf -- "${RUNNER_SANDBOX_BASE}"
-                fi
-                ;;
-            esac
-          }
-          trap cleanup_init_sandbox EXIT
-          case "${RUNNER_SANDBOX_BASE}" in
-            /tmp/step3_runner_iso_*) ;;
-            *) echo "Unexpected sandbox path: ${RUNNER_SANDBOX_BASE}"; exit 1 ;;
-          esac
           SANDBOX_CANON="$(readlink -m -- "${RUNNER_SANDBOX_BASE}")"
           if [ "${SANDBOX_CANON}" != "${RUNNER_SANDBOX_BASE}" ]; then
             echo "Sandbox base does not canonicalize to itself: ${RUNNER_SANDBOX_BASE} -> ${SANDBOX_CANON}"
+            rm -rf -- "${RUNNER_SANDBOX_BASE}"
             exit 1
           fi
           HOME="${RUNNER_SANDBOX_BASE}/home"
           XDG_DATA_HOME="${RUNNER_SANDBOX_BASE}/xdg-data"
           XDG_CACHE_HOME="${RUNNER_SANDBOX_BASE}/xdg-cache"
           mkdir -p "${HOME}" "${XDG_DATA_HOME}" "${XDG_CACHE_HOME}"
-          export HOME XDG_DATA_HOME XDG_CACHE_HOME RUNNER_SANDBOX_BASE
           {
             echo "HOME=${HOME}"
             echo "XDG_DATA_HOME=${XDG_DATA_HOME}"
             echo "XDG_CACHE_HOME=${XDG_CACHE_HOME}"
             echo "RUNNER_SANDBOX_BASE=${RUNNER_SANDBOX_BASE}"
           } >> "${GITHUB_ENV}"
-          trap - EXIT
 
-      - name: Verify Project Import & Parser
+      - name: Verify Project Import & Runner Sandbox Gate
         run: |
           set -o pipefail
-          godot --headless --import 2>&1 | tee /tmp/godot_import.log
-          ! grep -E "(SCRIPT ERROR:|Parser Error:|TEST FAILURE:)" /tmp/godot_import.log
-
-      - name: Run Runner Sandbox Gate (Step 3)
-        run: |
-          set -o pipefail
-          godot --headless --script res://tests/test_runner_sandbox_gate.gd 2>&1 | tee /tmp/godot_sandbox_gate.log
-          ! grep -E "(SCRIPT ERROR:|Parser Error:|TEST FAILURE:)" /tmp/godot_sandbox_gate.log
-          ! grep -q "^SKIP:" /tmp/godot_sandbox_gate.log
-          grep -q "PASS: runner sandbox gate" /tmp/godot_sandbox_gate.log
-
-      - name: Run Standalone World Clock Test
-        run: |
-          set -o pipefail
-          godot --headless --script res://tests/test_time_manager.gd 2>&1 | tee /tmp/godot_tm.log
-          ! grep -E "(SCRIPT ERROR:|Parser Error:|TEST FAILURE:)" /tmp/godot_tm.log
-          grep -q "PASS: test_time_manager" /tmp/godot_tm.log
-
-      - name: Run P0 Unit Tests (M2-M7 + Extreme Save Rollback)
-        run: |
-          set -o pipefail
-          godot --headless --script res://tests/test_unit_m2_m7.gd 2>&1 | tee /tmp/godot_unit.log
-          ! grep -E "(SCRIPT ERROR:|Parser Error:|TEST FAILURE:)" /tmp/godot_unit.log
-          grep -q "PASS: All .* P0 Unit Checks" /tmp/godot_unit.log
-
-      - name: Run P0 Scene Integration Test (M8 Real Scene Transitions & Full Loop)
-        run: |
-          set -o pipefail
-          godot --headless --script res://tests/test_integration_m8_slice.gd 2>&1 | tee /tmp/godot_m8.log
-          ! grep -E "(SCRIPT ERROR:|Parser Error:|TEST FAILURE:)" /tmp/godot_m8.log
-          grep -q "PASS: All .* M8 Multi-Frame Scene Transition" /tmp/godot_m8.log
-
-      - name: Run Experimental P1 Skeleton Tests (M9-M10)
-        run: |
-          set -o pipefail
-          godot --headless --script res://tests/test_experimental_p1_m9_m10.gd 2>&1 | tee /tmp/godot_p1.log
-          ! grep -E "(SCRIPT ERROR:|Parser Error:|TEST FAILURE:)" /tmp/godot_p1.log
-          grep -q "PASS: All .* Experimental P1 Skeleton Checks" /tmp/godot_p1.log
-
-      - name: Run Progression Foundation Tests (Phase 1)
-        run: |
-          set -o pipefail
-          godot --headless --script res://tests/test_progression_foundation.gd 2>&1 | tee /tmp/godot_progression.log
-          ! grep -E "(SCRIPT ERROR:|Parser Error:|TEST FAILURE:)" /tmp/godot_progression.log
-          grep -q "PASS: All .* Progression Foundation" /tmp/godot_progression.log
-
-      - name: Run Phase 2 Era Correction Tests
-        run: |
-          set -o pipefail
-          godot --headless --script res://tests/test_progression_phase2_era_correction.gd 2>&1 | tee /tmp/godot_progression_phase2.log
-          ! grep -E "(SCRIPT ERROR:|Parser Error:|TEST FAILURE:)" /tmp/godot_progression_phase2.log
-          grep -q "PASS: All .* Phase 2 Era Correction" /tmp/godot_progression_phase2.log
-
-      - name: Run Specialist Domain Foundation Tests (Phase 3)
-        run: |
-          set -o pipefail
-          godot --headless --script res://tests/test_specialist_domain.gd 2>&1 | tee /tmp/godot_specialists.log
-          ! grep -E "(SCRIPT ERROR:|Parser Error:|TEST FAILURE:)" /tmp/godot_specialists.log
-          grep -q "PASS: All .* Specialist Domain Foundation" /tmp/godot_specialists.log
-
-      - name: Run Research System Foundation Tests (Phase 4)
-        run: |
-          set -o pipefail
-          godot --headless --script res://tests/test_research_foundation.gd 2>&1 | tee /tmp/godot_research.log
-          ! grep -E "(SCRIPT ERROR:|Parser Error:|TEST FAILURE:)" /tmp/godot_research.log
-          grep -q "PASS: All .* Research System Foundation" /tmp/godot_research.log
-
-      - name: Run Phase 5 Structure & Buff Foundation Tests
-        run: |
-          set -o pipefail
-          godot --headless --script res://tests/test_structure_buff_phase5.gd 2>&1 | tee /tmp/godot_phase5.log
-          ! grep -E "(SCRIPT ERROR:|Parser Error:|TEST FAILURE:)" /tmp/godot_phase5.log
-          grep -q "PASS: All .* Phase 5 Structure & Buff Foundation" /tmp/godot_phase5.log
-
-      - name: Run Automated Gameplay Scenarios (Headless, 10 scenarios)
-        run: |
-          set -o pipefail
-          godot --headless --script res://tests/gameplay_scenarios.gd 2>&1 | tee /tmp/godot_gameplay.log
-          ! grep -E "(SCRIPT ERROR:|Parser Error:|TEST FAILURE:)" /tmp/godot_gameplay.log
-          grep -q "PASS: All 10 gameplay scenarios passed" /tmp/godot_gameplay.log
-
-      - name: Run Narrative Foundation Tests (N1)
-        run: |
-          set -o pipefail
-          godot --headless --script res://tests/test_narrative_foundation.gd 2>&1 | tee /tmp/godot_narrative.log
-          ! grep -E "(SCRIPT ERROR:|Parser Error:|TEST FAILURE:)" /tmp/godot_narrative.log
-          grep -q "PASS: All .* Narrative Foundation" /tmp/godot_narrative.log
-
-      - name: Run Dialogue Panel Tests (N2)
-        run: |
-          set -o pipefail
-          godot --headless --script res://tests/test_dialogue_panel.gd 2>&1 | tee /tmp/godot_dialogue.log
-          ! grep -E "(SCRIPT ERROR:|Parser Error:|TEST FAILURE:)" /tmp/godot_dialogue.log
-          grep -q "PASS: All .* Dialogue Panel" /tmp/godot_dialogue.log
-
-      - name: Run Sequence Runner Tests (N3)
-        run: |
-          set -o pipefail
-          godot --headless --script res://tests/test_sequence_runner.gd 2>&1 | tee /tmp/godot_sequence.log
-          ! grep -E "(SCRIPT ERROR:|Parser Error:|TEST FAILURE:)" /tmp/godot_sequence.log
-          grep -q "PASS: All .* Sequence Runner" /tmp/godot_sequence.log
-
-      - name: Run N4.0 Profile & Entry Gate Tests
-        run: |
-          set -o pipefail
-          godot --headless --script res://tests/test_n40_profile_entry_gate.gd 2>&1 | tee /tmp/godot_n40.log
-          ! grep -E "(SCRIPT ERROR:|Parser Error:|TEST FAILURE:)" /tmp/godot_n40.log
-          grep -q "PASS: All .* N4.0 Profile & Entry Gate" /tmp/godot_n40.log
-
-      - name: Run N4.1 Prologue Shell Tests
-        run: |
-          set -o pipefail
-          godot --headless --script res://tests/test_n41_prologue_shell.gd 2>&1 | tee /tmp/godot_n41.log
-          ! grep -E "(SCRIPT ERROR:|Parser Error:|TEST FAILURE:)" /tmp/godot_n41.log
-          grep -q "PASS: All .* N4.1 Prologue Shell" /tmp/godot_n41.log
-
-      - name: Run N4.2 Prologue Beat Tests
-        run: |
-          set -o pipefail
-          godot --headless --script res://tests/test_n42_prologue_beats.gd 2>&1 | tee /tmp/godot_n42.log
-          ! grep -E "(SCRIPT ERROR:|Parser Error:|TEST FAILURE:)" /tmp/godot_n42.log
-          grep -q "PASS: All .* N4.2 Prologue Beats" /tmp/godot_n42.log
-
-      - name: Run N43A Exploration Stage Tests
-        run: |
-          set -o pipefail
-          godot --headless --script res://tests/test_n43a_exploration_stage.gd 2>&1 | tee /tmp/godot_n43a.log
-          ! grep -E "(SCRIPT ERROR:|Parser Error:|TEST FAILURE:)" /tmp/godot_n43a.log
-          grep -q "PASS: All .* N43A Exploration Stage" /tmp/godot_n43a.log
-
-      - name: Run N43B Mark Inspection Tests
-        run: |
-          set -o pipefail
-          godot --headless --script res://tests/test_n43b_mark_inspection.gd 2>&1 | tee /tmp/godot_n43b.log
-          ! grep -E "(SCRIPT ERROR:|Parser Error:|TEST FAILURE:)" /tmp/godot_n43b.log
-          grep -q "PASS: All .* N43B Mark Inspection" /tmp/godot_n43b.log
-
-      - name: Run N43C Full Flow Integration Tests
-        run: |
-          set -o pipefail
-          godot --headless --script res://tests/test_n43c_full_flow.gd 2>&1 | tee /tmp/godot_n43c.log
-          ! grep -E "(SCRIPT ERROR:|Parser Error:|TEST FAILURE:)" /tmp/godot_n43c.log
-          grep -q "PASS: All .* N43C Full Flow" /tmp/godot_n43c.log
-
-      - name: Run N44A Ruins Foundation Tests
-        run: |
-          set -o pipefail
-          godot --headless --script res://tests/test_n44a_ruins_foundation.gd 2>&1 | tee /tmp/godot_n44a.log
-          ! grep -E "(SCRIPT ERROR:|Parser Error:|TEST FAILURE:)" /tmp/godot_n44a.log
-          grep -q "PASS: All .* N44A Ruins Foundation" /tmp/godot_n44a.log
-
-      - name: Run N44B Chamber Presentation Tests
-        run: |
-          set -o pipefail
-          godot --headless --script res://tests/test_n44b_chamber_presentation.gd 2>&1 | tee /tmp/godot_n44b.log
-          ! grep -E "(SCRIPT ERROR:|Parser Error:|TEST FAILURE:)" /tmp/godot_n44b.log
-          grep -q "PASS: All .* N44B Chamber Presentation" /tmp/godot_n44b.log
-
-      - name: Run N44C Crown Interaction Tests
-        run: |
-          set -o pipefail
-          godot --headless --script res://tests/test_n44c_crown_interaction.gd 2>&1 | tee /tmp/godot_n44c.log
-          ! grep -E "(SCRIPT ERROR:|Parser Error:|TEST FAILURE:)" /tmp/godot_n44c.log
-          grep -q "PASS: All .* N44C Crown Interaction" /tmp/godot_n44c.log
-
-      - name: Run N44D Vision Sequence Tests
-        run: |
-          set -o pipefail
-          godot --headless --script res://tests/test_n44d_vision_sequence.gd 2>&1 | tee /tmp/godot_n44d.log
-          ! grep -E "(SCRIPT ERROR:|Parser Error:|TEST FAILURE:)" /tmp/godot_n44d.log
-          grep -q "PASS: All .* N44D Vision Sequence" /tmp/godot_n44d.log
-
-      - name: Run N44 Full Flow Integration Tests
-        run: |
-          set -o pipefail
-          godot --headless --script res://tests/test_n44_full_flow.gd 2>&1 | tee /tmp/godot_n44_full_flow.log
-          ! grep -E "(SCRIPT ERROR:|Parser Error:|TEST FAILURE:)" /tmp/godot_n44_full_flow.log
-          grep -q "PASS: All .* N44 Full Flow" /tmp/godot_n44_full_flow.log
-
-      - name: Run N45A Voyage & Shipwreck Tests
-        run: |
-          set -o pipefail
-          godot --headless --script res://tests/test_n45a_voyage_shipwreck.gd 2>&1 | tee /tmp/godot_n45a.log
-          ! grep -E "(SCRIPT ERROR:|Parser Error:|TEST FAILURE:)" /tmp/godot_n45a.log
-          grep -q "PASS: All .* N45A Voyage Shipwreck" /tmp/godot_n45a.log
-
-      - name: Run N45B Forgotten Shore Handoff Tests
-        run: |
-          set -o pipefail
-          godot --headless --script res://tests/test_n45b_forgotten_shore_handoff.gd 2>&1 | tee /tmp/godot_n45b.log
-          ! grep -E "(SCRIPT ERROR:|Parser Error:|TEST FAILURE:)" /tmp/godot_n45b.log
-          grep -q "PASS: All .* N45B Forgotten Shore Handoff" /tmp/godot_n45b.log
-
-      - name: Run N45C Real Handoff Integration Tests
-        run: |
-          set -o pipefail
-          godot --headless --script res://tests/test_n45c_real_handoff_integration.gd 2>&1 | tee /tmp/godot_n45c.log
-          ! grep -E "(SCRIPT ERROR:|Parser Error:|TEST FAILURE:)" /tmp/godot_n45c.log
-          grep -q "PASS: All .* N45C Real Handoff Integration" /tmp/godot_n45c.log
-
-      - name: Run N50 Chapter I Narrative Boundary Tests
-        run: |
-          set -o pipefail
-          godot --headless --script res://tests/test_n50_chapter1_boundary.gd 2>&1 | tee /tmp/godot_n50.log
-          ! grep -E "(SCRIPT ERROR:|Parser Error:|TEST FAILURE:)" /tmp/godot_n50.log
-          grep -q "PASS: All .* N50 Chapter I Boundary" /tmp/godot_n50.log
-
-      - name: Run N51 First Foothold Beat Tests
-        run: |
-          set -o pipefail
-          godot --headless --script res://tests/test_n51_foothold_beat.gd 2>&1 | tee /tmp/godot_n51.log
-          ! grep -E "(SCRIPT ERROR:|Parser Error:|TEST FAILURE:)" /tmp/godot_n51.log
-          grep -q "PASS: All .* N51 First Foothold" /tmp/godot_n51.log
-
-      - name: Run N52 First Night Narrative Tests
-        run: |
-          set -o pipefail
-          godot --headless --script res://tests/test_n52_first_night_narrative.gd 2>&1 | tee /tmp/godot_n52.log
-          ! grep -E "(SCRIPT ERROR:|Parser Error:|TEST FAILURE:)" /tmp/godot_n52.log
-          grep -q "PASS: All .* N52 First Night Narrative" /tmp/godot_n52.log
-
-      - name: Run N53 Scientist & Research Narrative Tests
-        run: |
-          set -o pipefail
-          godot --headless --script res://tests/test_n53_scientist_research_narrative.gd 2>&1 | tee /tmp/godot_n53.log
-          ! grep -E "(SCRIPT ERROR:|Parser Error:|TEST FAILURE:)" /tmp/godot_n53.log
-          grep -q "PASS: All .* N53 Scientist Research Narrative" /tmp/godot_n53.log
-
-      - name: Run N54 Vessel Readiness Narrative Tests
-        run: |
-          set -o pipefail
-          godot --headless --script res://tests/test_n54_vessel_readiness_narrative.gd 2>&1 | tee /tmp/godot_n54.log
-          ! grep -E "(SCRIPT ERROR:|Parser Error:|TEST FAILURE:)" /tmp/godot_n54.log
-          grep -q "PASS: All .* N54 Vessel Readiness Narrative" /tmp/godot_n54.log
-
-      - name: Run N44 Step 3A Shrine Autosave Tests
-        run: |
-          set -o pipefail
-          godot --headless --script res://tests/test_n44_step3a_shrine_autosave.gd 2>&1 | tee /tmp/godot_n44_step3a.log
-          ! grep -E "(SCRIPT ERROR:|Parser Error:|TEST FAILURE:)" /tmp/godot_n44_step3a.log
-          grep -q "PASS: All .* N44 Step3 3A" /tmp/godot_n44_step3a.log
-
-      - name: Run N44 Step 3B World Time Types Tests
-        run: |
-          set -o pipefail
-          godot --headless --script res://tests/test_n44_step3b_world_time_types.gd 2>&1 | tee /tmp/godot_n44_step3b.log
-          ! grep -E "(SCRIPT ERROR:|Parser Error:|TEST FAILURE:)" /tmp/godot_n44_step3b.log
-          grep -q "PASS: All .* N44 Step3 3B" /tmp/godot_n44_step3b.log
-
-      - name: Run N44 Step 3C Rollback Era Tests
-        run: |
-          set -o pipefail
-          godot --headless --script res://tests/test_n44_step3c_rollback_era.gd 2>&1 | tee /tmp/godot_n44_step3c.log
-          ! grep -E "(SCRIPT ERROR:|Parser Error:|TEST FAILURE:)" /tmp/godot_n44_step3c.log
-          grep -q "PASS: All .* N44 Step3 3C" /tmp/godot_n44_step3c.log
+          godot --headless --import 2>&1 | tee /tmp/godot_visual_import.log
+          ! grep -E "(SCRIPT ERROR:|Parser Error:|TEST FAILURE:)" /tmp/godot_visual_import.log
+          godot --headless --script res://tests/test_runner_sandbox_gate.gd 2>&1 | tee /tmp/godot_visual_sandbox_gate.log
+          ! grep -E "(SCRIPT ERROR:|Parser Error:|TEST FAILURE:)" /tmp/godot_visual_sandbox_gate.log
+          ! grep -q "^SKIP:" /tmp/godot_visual_sandbox_gate.log
+          grep -q "PASS: runner sandbox gate" /tmp/godot_visual_sandbox_gate.log
 
       - name: Run N44B Windowed Visual Pass (Xvfb)
         run: |
           set -o pipefail
-          sudo apt-get update
-          sudo apt-get install -y xvfb
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq --no-install-recommends xvfb
           mkdir -p /tmp/crownfall_n44b_visual
           N44B_VISUAL_DIR=/tmp/crownfall_n44b_visual xvfb-run -a -s "-screen 0 1280x720x24" godot --rendering-method gl_compatibility --script res://scripts/tools/n44b_visual_pass.gd 2>&1 | tee /tmp/godot_n44b_visual.log
-          ! grep -E "(SCRIPT ERROR:|Parser Error:|N44B VISUAL PASS FAILED)" /tmp/godot_n44b_visual.log
+          ! grep -E "(SCRIPT ERROR:|Parser Error:|TEST FAILURE:|N44B VISUAL PASS FAILED)" /tmp/godot_n44b_visual.log
           test "$(find /tmp/crownfall_n44b_visual -maxdepth 1 -name '*.png' | wc -l)" -eq 11
 
       - name: Upload N44B Visual Evidence
@@ -352,32 +171,7 @@ jobs:
           path: /tmp/crownfall_n44b_visual/*.png
           if-no-files-found: error
 
-      - name: Run N55 Eldergrove Handoff Tests
-        run: |
-          set -o pipefail
-          godot --headless --script res://tests/test_n55_eldergrove_handoff.gd 2>&1 | tee /tmp/godot_n55.log
-          ! grep -E "(SCRIPT ERROR:|Parser Error:|TEST FAILURE:)" /tmp/godot_n55.log
-          grep -q "PASS: All .* N55 Eldergrove Handoff" /tmp/godot_n55.log
-
-      - name: Run N56 Island-Aware Continue Tests
-        run: |
-          set -o pipefail
-          godot --headless --script res://tests/test_n56_island_continue.gd 2>&1 | tee /tmp/godot_n56.log
-          ! grep -E "(SCRIPT ERROR:|Parser Error:|TEST FAILURE:)" /tmp/godot_n56.log
-          grep -q "PASS: All .* N56 Island Continue" /tmp/godot_n56.log
-
-      - name: Run N60 Eldergrove Playable Slice Tests
-        run: |
-          set -o pipefail
-          godot --headless --script res://tests/test_n60_eldergrove_playable.gd 2>&1 | tee /tmp/godot_n60.log
-          ! grep -E "(SCRIPT ERROR:|Parser Error:|TEST FAILURE:)" /tmp/godot_n60.log
-          grep -q "PASS: All .* N60 Eldergrove Playable" /tmp/godot_n60.log
-
-      - name: Run aggregate test runner
-        run: |
-          set -o pipefail
-          bash tests/run_all.sh 2>&1 | tee /tmp/crownfall_run_all.log
-      - name: Cleanup CI Sandbox
+      - name: Cleanup Isolated CI Sandbox
         if: always()
         run: |
           if [ -z "${RUNNER_SANDBOX_BASE:-}" ]; then

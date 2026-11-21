@@ -37,11 +37,20 @@ passed=0
 skipped=0
 skipped_names=""
 LAST_STEP_RC=0
+RUNNER_START_MS="$(date +%s%3N)"
+_format_elapsed_s() {
+  local start_ms="$1" end_ms="$2" diff_ms
+  diff_ms=$((end_ms - start_ms))
+  printf "%d.%03ds" $((diff_ms / 1000)) $((diff_ms % 1000))
+}
 run_godot() {
-  local name="$1" args="$2" pass="${3:-}" log="${LOG_DIR}/${1// /_}.log" rc=0
+  local name="$1" args="$2" pass="${3:-}" log="${LOG_DIR}/${1// /_}.log" rc=0 step_start_ms step_end_ms
+  step_start_ms="$(date +%s%3N)"
   echo "== ${name}"
   "${GODOT}" --headless ${args} 2>&1 | tee "${log}" || rc=$?
   LAST_STEP_RC="${rc}"
+  step_end_ms="$(date +%s%3N)"
+  echo "TIMING: ${name} = $(_format_elapsed_s "${step_start_ms}" "${step_end_ms}")"
   if grep -E "(SCRIPT ERROR:|Parser Error:|TEST FAILURE:)" "${log}" > /dev/null; then
     echo "FAILED: ${name} (error marker found in log)"
     failed=$((failed + 1))
@@ -71,7 +80,9 @@ if [ "${PLATFORM}" != "Linux" ]; then
   exit 3
 fi
 echo "== Repository static verifier"
+_verifier_start_ms="$(date +%s%3N)"
 python3 tests/verify_repo_integrity.py || failed=$((failed + 1))
+echo "TIMING: Repository static verifier = $(_format_elapsed_s "${_verifier_start_ms}" "$(date +%s%3N)")"
 # --- Save guard: fingerprint the developer's REAL user data dir up front ---
 REAL_HOME="${HOME}"
 REAL_XDG_DATA="${XDG_DATA_HOME:-}"
@@ -202,6 +213,7 @@ else
 fi
 # --- Guarded cleanup: only our own mktemp bases are ever removed ---
 rm -rf -- "${RUNNER_SANDBOX_BASE}"
+echo "TIMING_TOTAL: $(_format_elapsed_s "${RUNNER_START_MS}" "$(date +%s%3N)")"
 if [ "${skipped}" -gt 0 ]; then
   echo "SUMMARY: passed=${passed} failed=${failed} skipped=${skipped} [${skipped_names}]"
 else
