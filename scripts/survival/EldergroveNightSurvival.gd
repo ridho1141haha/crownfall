@@ -18,6 +18,7 @@ signal threat_blocked_by_camp(day_number: int, threat_x: float)
 signal camp_protection_breached(day_number: int, archetype: String, threat_x: float)
 signal encounter_resolved(day_number: int, survived: bool, camp_breached: bool)
 signal defense_pulse_activated(day_number: int, threat_class: int, new_threat_x: float, repelled_breach: bool)
+signal camp_integrity_changed(current_integrity: int, max_integrity: int, delta: int)
 
 enum ThreatClass {
 	ORDINARY,
@@ -55,6 +56,11 @@ const ORDINARY_PUSHBACK_PX: float = 140.0
 const ORDINARY_STAGGER_SEC: float = 3.0
 const BREACH_PUSHBACK_PX: float = 96.0
 const BREACH_STAGGER_SEC: float = 1.5
+const MAX_CAMP_INTEGRITY: int = 3
+const BREACH_DAMAGE: int = 1
+const CAMP_REPAIR_AMOUNT: int = 1
+const CAMP_INTEGRITY_TRACKED_KEY: String = "eldergrove_camp_integrity_tracked"
+const CAMP_INTEGRITY_BIT_PREFIX: String = "eldergrove_camp_integrity_"
 
 var state: EncounterState = EncounterState.IDLE
 var active_day: int = 0
@@ -68,6 +74,7 @@ var defense_cooldown_remaining: float = 0.0
 var threat_stagger_remaining: float = 0.0
 var defense_pulse_visual_remaining: float = 0.0
 var defense_pulse_count: int = 0
+var camp_integrity: int = 0
 var _day_outcomes: Dictionary = {}
 
 
@@ -93,12 +100,55 @@ static func get_threat_display_name(t_class: ThreatClass) -> String:
 	return "Breach Threat (Gloom Brute)" if t_class == ThreatClass.BREACH_CAPABLE else "Ordinary Threat (Night Raider)"
 
 
+func get_camp_integrity() -> int:
+	return camp_integrity
+
+
+func get_max_camp_integrity() -> int:
+	return MAX_CAMP_INTEGRITY
+
+
+func is_camp_compromised(camp_built: bool) -> bool:
+	return camp_built and camp_integrity <= 0
+
+
+func is_camp_damaged(camp_built: bool) -> bool:
+	return camp_built and camp_integrity < MAX_CAMP_INTEGRITY
+
+
+func on_first_camp_built() -> void:
+	var prev: int = camp_integrity
+	camp_integrity = MAX_CAMP_INTEGRITY
+	if camp_integrity != prev:
+		camp_integrity_changed.emit(camp_integrity, MAX_CAMP_INTEGRITY, camp_integrity - prev)
+
+
+func repair_camp(camp_built: bool, amount: int = CAMP_REPAIR_AMOUNT) -> Dictionary:
+	if not camp_built:
+		return {"ok": false, "unbuilt": true, "reason": "Build First Camp before repairing."}
+	if amount <= 0:
+		return {"ok": false, "reason": "Invalid repair amount."}
+	if camp_integrity >= MAX_CAMP_INTEGRITY:
+		return {"ok": false, "already_full": true, "reason": "First Camp is already at full integrity (%d/%d)." % [camp_integrity, MAX_CAMP_INTEGRITY]}
+	var prev: int = camp_integrity
+	camp_integrity = mini(MAX_CAMP_INTEGRITY, camp_integrity + amount)
+	var restored: int = camp_integrity - prev
+	camp_integrity_changed.emit(camp_integrity, MAX_CAMP_INTEGRITY, restored)
+	return {
+		"ok": true,
+		"previous_integrity": prev,
+		"new_integrity": camp_integrity,
+		"max_integrity": MAX_CAMP_INTEGRITY,
+		"restored": restored,
+	}
+
+
 func is_camp_protection_active(camp_built: bool) -> bool:
-	return camp_built
+	return camp_built and camp_integrity > 0
 
 
 func is_x_inside_camp_protection(world_x: float, camp_built: bool) -> bool:
-	if not camp_built:
+	if not is_camp_protection_active(camp_built):
 		return false
 	return absf(world_x - CAMP_CENTER_X) <= CAMP_PROTECTION_RADIUS
 
@@ -235,8 +285,8 @@ func tick(delta: float, player_x: float, camp_built: bool) -> void:
 	var desired_x: float = clampf(threat_x + dir * spd * delta, MIN_WORLD_X, MAX_WORLD_X)
 
 	# Explicit First Camp protection enforcement:
-	# Ordinary threats are strictly blocked outside the protected zone with no fallback bypass.
-	if camp_built and not can_penetrate_camp_protection(threat_class):
+	# Ordinary threats are strictly blocked outside the protected zone when protection is active (built & integrity > 0).
+	if is_camp_protection_active(camp_built) and not can_penetrate_camp_protection(threat_class):
 		var left_edge: float = CAMP_CENTER_X - CAMP_PROTECTION_RADIUS
 		var right_edge: float = CAMP_CENTER_X + CAMP_PROTECTION_RADIUS
 		var would_enter: bool = desired_x >= left_edge and desired_x <= right_edge
@@ -251,9 +301,13 @@ func tick(delta: float, player_x: float, camp_built: bool) -> void:
 			return
 
 	threat_x = desired_x
-	if camp_built and can_penetrate_camp_protection(threat_class) and is_x_inside_camp_protection(threat_x, camp_built):
+	if is_camp_protection_active(camp_built) and can_penetrate_camp_protection(threat_class) and is_x_inside_camp_protection(threat_x, camp_built):
 		if not camp_breached:
 			camp_breached = true
+			var prev_int: int = camp_integrity
+			camp_integrity = maxi(0, camp_integrity - BREACH_DAMAGE)
+			if camp_integrity != prev_int:
+				camp_integrity_changed.emit(camp_integrity, MAX_CAMP_INTEGRITY, camp_integrity - prev_int)
 			camp_protection_breached.emit(active_day, threat_archetype, threat_x)
 
 	player_threatened = absf(threat_x - player_x) <= THREAT_CONTACT_RANGE
@@ -303,16 +357,21 @@ func get_status_text() -> String:
 	return "Night Threat: %s approaching (x=%.0f)" % [get_threat_display_name(threat_class), threat_x]
 
 
-func to_save_node_states() -> Dictionary:
+func to_save_node_states(camp_built: bool = false) -> Dictionary:
 	var out: Dictionary = {}
 	for day_key: Variant in _day_outcomes.keys():
 		var day_num: int = int(day_key)
 		if day_num > 0 and is_day_resolved(day_num):
 			out[RESOLVED_DAY_KEY_PREFIX + str(day_num)] = true
+	if camp_built:
+		var clamped: int = clampi(camp_integrity, 0, MAX_CAMP_INTEGRITY)
+		out[CAMP_INTEGRITY_TRACKED_KEY] = true
+		for level: int in range(1, MAX_CAMP_INTEGRITY + 1):
+			out[CAMP_INTEGRITY_BIT_PREFIX + str(level)] = (clamped >= level)
 	return out
 
 
-func apply_save_node_states(saved_node_states: Variant) -> void:
+func apply_save_node_states(saved_node_states: Variant, camp_built: bool = false) -> void:
 	_day_outcomes.clear()
 	state = EncounterState.IDLE
 	active_day = 0
@@ -323,6 +382,7 @@ func apply_save_node_states(saved_node_states: Variant) -> void:
 	threat_stagger_remaining = 0.0
 	defense_pulse_visual_remaining = 0.0
 	defense_pulse_count = 0
+	camp_integrity = MAX_CAMP_INTEGRITY if camp_built else 0
 	if typeof(saved_node_states) != TYPE_DICTIONARY:
 		return
 	var d: Dictionary = saved_node_states as Dictionary
@@ -337,3 +397,45 @@ func apply_save_node_states(saved_node_states: Variant) -> void:
 			var day_num: int = int(suffix)
 			if day_num > 0:
 				_day_outcomes[day_num] = DayOutcome.RESTORED_RESOLVED
+
+	if not camp_built:
+		camp_integrity = 0
+		return
+
+	var tracked_val: Variant = d.get(CAMP_INTEGRITY_TRACKED_KEY, null)
+	if typeof(tracked_val) != TYPE_BOOL or not bool(tracked_val):
+		return
+
+	var valid_bits: bool = true
+	for raw_k: Variant in d.keys():
+		var k: String = String(raw_k)
+		if k == CAMP_INTEGRITY_TRACKED_KEY or not k.begins_with(CAMP_INTEGRITY_BIT_PREFIX):
+			continue
+		var suffix: String = k.substr(CAMP_INTEGRITY_BIT_PREFIX.length())
+		if not suffix.is_valid_int() or typeof(d[raw_k]) != TYPE_BOOL:
+			valid_bits = false
+			break
+		var idx: int = int(suffix)
+		if idx < 1 or idx > MAX_CAMP_INTEGRITY:
+			valid_bits = false
+			break
+	if not valid_bits:
+		camp_integrity = MAX_CAMP_INTEGRITY
+		return
+
+	var restored_val: int = 0
+	var saw_false: bool = false
+	for level: int in range(1, MAX_CAMP_INTEGRITY + 1):
+		var bit_key: String = CAMP_INTEGRITY_BIT_PREFIX + str(level)
+		if not d.has(bit_key) or typeof(d[bit_key]) != TYPE_BOOL:
+			valid_bits = false
+			break
+		var bit_on: bool = bool(d[bit_key])
+		if bit_on:
+			if saw_false:
+				valid_bits = false
+				break
+			restored_val = level
+		else:
+			saw_false = true
+	camp_integrity = clampi(restored_val, 0, MAX_CAMP_INTEGRITY) if valid_bits else MAX_CAMP_INTEGRITY

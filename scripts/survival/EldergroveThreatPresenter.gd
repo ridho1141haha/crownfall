@@ -211,9 +211,10 @@ func _apply_archetype_profile(archetype: String) -> void:
 
 func sync_from_survival(survival: EldergroveNightSurvival, player_x: float, camp_built: bool, delta: float = 0.0) -> void:
 	_ensure_nodes()
+	var protection_active: bool = survival != null and survival.is_camp_protection_active(camp_built)
 	if survival == null or not survival.is_encounter_active():
 		set_threat_hidden()
-		set_perimeter_visible(camp_built, COLOR_WARD_IDLE)
+		set_perimeter_visible(protection_active, COLOR_WARD_IDLE)
 		return
 
 	if _loaded_archetype != survival.threat_archetype:
@@ -236,30 +237,30 @@ func sync_from_survival(survival: EldergroveNightSurvival, player_x: float, camp
 
 	var pulse_active: bool = survival.defense_pulse_visual_remaining > 0.0
 	if ward_pulse_bar != null:
-		ward_pulse_bar.visible = camp_built and pulse_active
+		ward_pulse_bar.visible = protection_active and pulse_active
 
 	if survival.is_threat_staggered():
 		_last_visual_state = "staggered"
 		threat_sprite.modulate = base_mod * COLOR_TINT_STAGGERED
 		threat_sprite.frame = mini(frame_count - 1, 1)
 		threat_label.text = "%s — Staggered" % display_name
-		set_perimeter_visible(camp_built, COLOR_WARD_PULSE if pulse_active else COLOR_WARD_BLOCKED)
+		set_perimeter_visible(protection_active, COLOR_WARD_PULSE if pulse_active else COLOR_WARD_BLOCKED)
 	elif survival.camp_breached:
 		_last_visual_state = "breached"
 		threat_sprite.modulate = COLOR_TINT_BREACHED
 		threat_sprite.frame = int(floor(_anim_elapsed * BREACH_FPS)) % frame_count
 		threat_label.text = "%s — BREACHED!" % display_name
-		set_perimeter_visible(camp_built, COLOR_WARD_BREACHED)
+		set_perimeter_visible(protection_active, COLOR_WARD_BREACHED)
 	elif survival.threat_blocked:
 		_last_visual_state = "blocked"
 		threat_sprite.modulate = base_mod * COLOR_TINT_BLOCKED
 		var pulse: int = int(floor(_anim_elapsed * BLOCKED_FPS)) % 2
 		threat_sprite.frame = mini(frame_count - 1, 1 + pulse)
 		threat_label.text = "%s — Blocked" % display_name
-		set_perimeter_visible(camp_built, COLOR_WARD_BLOCKED)
+		set_perimeter_visible(protection_active, COLOR_WARD_BLOCKED)
 	else:
 		_last_visual_state = "approaching"
 		threat_sprite.modulate = base_mod
 		threat_sprite.frame = int(floor(_anim_elapsed * WALK_FPS)) % frame_count
 		threat_label.text = display_name
-		set_perimeter_visible(camp_built, COLOR_WARD_PULSE if pulse_active else COLOR_WARD_IDLE)
+		set_perimeter_visible(protection_active, COLOR_WARD_PULSE if pulse_active else COLOR_WARD_IDLE)

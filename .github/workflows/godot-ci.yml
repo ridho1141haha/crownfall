@@ -105,7 +105,8 @@ jobs:
             "PASS: All .* N63 First Camp Rest" \
             "PASS: All .* N64 Eldergrove Night Survival" \
             "PASS: All .* N65 Eldergrove Threat Encounters" \
-            "PASS: All .* N66 First Camp Active Defense"; do
+            "PASS: All .* N66 First Camp Active Defense" \
+            "PASS: All .* N67 First Camp Integrity & Repair"; do
             grep -q "${marker}" /tmp/crownfall_run_all.log || { echo "MISSING REQUIRED COVERAGE MARKER: ${marker}"; exit 1; }
           done
           echo "COVERAGE GATE OK: all ${EXPECTED_COUNT} sandboxed Godot steps ran with failed=0 skipped=0."

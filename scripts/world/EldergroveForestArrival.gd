@@ -22,6 +22,7 @@ signal camp_constructed(camp_id: String, cost: Dictionary)
 signal sunrise_renewal_applied(completed_day: int, refreshed_ids: Array[String])
 signal camp_rest_completed(previous_day: int, new_day: int)
 signal camp_defense_activated(day_number: int, threat_class: int, repelled_breach: bool)
+signal camp_repaired(new_integrity: int, max_integrity: int, wood_spent: int)
 signal feedback_message(text: String)
 
 const SCENE_PATH: String = "res://scenes/world/EldergroveForest.tscn"
@@ -48,6 +49,10 @@ const CAMP_DEFENSE_RANGE: float = EldergroveNightSurvival.CAMP_PROTECTION_RADIUS
 const CAMP_DEFENSE_COST: Dictionary = {
 	"wood": 1,
 }
+const CAMP_REPAIR_COST: Dictionary = {
+	"wood": 2,
+}
+const CAMP_REPAIR_DEBOUNCE_MSEC: int = 120
 const SKY_COLOR_DAYLIGHT: Color = Color(0.18, 0.34, 0.36, 1.0)
 const SKY_COLOR_SUNSET: Color = Color(0.42, 0.24, 0.18, 1.0)
 const SKY_COLOR_NIGHT: Color = Color(0.06, 0.09, 0.16, 1.0)
@@ -115,6 +120,8 @@ var _last_sunrise_refreshed_ids: Array[String] = []
 var _sunrise_renewal_count: int = 0
 var _clock_signals_connected: bool = false
 var _survival_signals_connected: bool = false
+var _repair_in_progress: bool = false
+var _last_repair_msec: int = -1000
 
 @onready var player: PlayerController = get_node_or_null("Player") as PlayerController
 @onready var ground: StaticBody2D = get_node_or_null("Ground") as StaticBody2D
@@ -330,6 +337,80 @@ func try_activate_camp_defense(actor_x: float) -> Dictionary:
 	return res
 
 
+func get_camp_repair_cost() -> Dictionary:
+	return CAMP_REPAIR_COST.duplicate()
+
+
+func get_camp_integrity() -> int:
+	if night_survival == null or not _first_camp_built:
+		return 0
+	return night_survival.get_camp_integrity()
+
+
+func get_max_camp_integrity() -> int:
+	return EldergroveNightSurvival.MAX_CAMP_INTEGRITY
+
+
+func can_repair_first_camp(actor_x: float) -> bool:
+	if progression == null or not progression.has_fact(ProgressionState.FACT_ELDERGROVE_REACHED):
+		return false
+	if not _first_camp_built or night_survival == null:
+		return false
+	if absf(actor_x - CAMP_SITE_X) > CAMP_INTERACT_RANGE:
+		return false
+	if not night_survival.is_camp_damaged(_first_camp_built):
+		return false
+	return ledger.can_afford(CAMP_REPAIR_COST)
+
+
+func try_repair_first_camp(actor_x: float, ignore_debounce: bool = false) -> Dictionary:
+	if _repair_in_progress:
+		return {"ok": false, "duplicate": true, "reason": "Repair already in progress."}
+	if progression == null or not progression.has_fact(ProgressionState.FACT_ELDERGROVE_REACHED):
+		_record_rejection("Eldergrove session is not active")
+		return {"ok": false, "reason": _last_rejection_reason}
+	if not _first_camp_built or night_survival == null:
+		_record_rejection("Build First Camp before repairing.")
+		return {"ok": false, "unbuilt": true, "reason": _last_rejection_reason}
+	if absf(actor_x - CAMP_SITE_X) > CAMP_INTERACT_RANGE:
+		_record_rejection("Move closer to First Camp to repair.")
+		return {"ok": false, "out_of_range": true, "reason": _last_rejection_reason}
+	if not night_survival.is_camp_damaged(_first_camp_built):
+		_record_rejection("First Camp is already at full integrity (%d/%d)." % [get_camp_integrity(), get_max_camp_integrity()])
+		return {"ok": false, "already_full": true, "reason": _last_rejection_reason}
+	var now_msec: int = Time.get_ticks_msec()
+	if not ignore_debounce and (now_msec - _last_repair_msec) < CAMP_REPAIR_DEBOUNCE_MSEC:
+		return {"ok": false, "debounced": true, "reason": "Repair input ignored (too fast)."}
+	if not ledger.can_afford(CAMP_REPAIR_COST):
+		_record_rejection("Insufficient Wood to repair First Camp (Need 2W).")
+		return {"ok": false, "insufficient_resources": true, "reason": _last_rejection_reason}
+
+	_repair_in_progress = true
+	if not ledger.try_spend(CAMP_REPAIR_COST):
+		_repair_in_progress = false
+		_record_rejection("Failed to spend Wood to repair First Camp.")
+		return {"ok": false, "insufficient_resources": true, "reason": _last_rejection_reason}
+
+	var res: Dictionary = night_survival.repair_camp(_first_camp_built, EldergroveNightSurvival.CAMP_REPAIR_AMOUNT)
+	if not bool(res.get("ok", false)):
+		ledger.try_add(&"wood", int(CAMP_REPAIR_COST["wood"]))
+		_repair_in_progress = false
+		_record_rejection(String(res.get("reason", "Repair failed.")))
+		return res
+
+	_last_repair_msec = now_msec
+	_repair_in_progress = false
+	_has_unsaved_progress = true
+	_last_rejection_reason = ""
+	_refresh_camp_visuals()
+	_refresh_gameplay_hud()
+	var new_int: int = int(res["new_integrity"])
+	var max_int: int = int(res["max_integrity"])
+	_set_feedback("First Camp repaired! (Integrity %d/%d, -2W)" % [new_int, max_int])
+	camp_repaired.emit(new_int, max_int, int(CAMP_REPAIR_COST["wood"]))
+	return res
+
+
 func can_rest_at_camp() -> bool:
 	if not _first_camp_built:
 		return false
@@ -342,6 +423,8 @@ func can_rest_at_camp() -> bool:
 		if night_survival.is_encounter_active():
 			return false
 		if time_manager.current_phase == TimeManager.Phase.NIGHT and night_survival.should_start_encounter(time_manager.current_day, time_manager.phase_elapsed):
+			return false
+		if night_survival.is_camp_compromised(_first_camp_built) and not night_survival.is_day_resolved(time_manager.current_day):
 			return false
 		if night_survival.is_rest_blocked_by_breach_night(time_manager.current_day):
 			return false
@@ -362,9 +445,14 @@ func _get_camp_prompt_text() -> String:
 					return "First Camp — Threat active (Rest blocked)"
 				if night_survival.is_rest_blocked_by_breach_night(time_manager.current_day):
 					return "First Camp — Breach night approaching (Rest blocked)"
+		var repair_suffix: String = ""
+		if night_survival != null and night_survival.is_camp_compromised(_first_camp_built):
+			return "First Camp — Compromised (0/%d) | [F] Repair (2W)" % get_max_camp_integrity()
+		if night_survival != null and night_survival.is_camp_damaged(_first_camp_built):
+			repair_suffix = " | [F] Repair (2W)"
 		if can_rest_at_camp():
-			return "[E] Rest until Sunrise"
-		return "First Camp (Built) — Rest available at Sunset/Night"
+			return "[E] Rest until Sunrise" + repair_suffix
+		return "First Camp (Built) — Rest available at Sunset/Night" + repair_suffix
 	var cost_txt: String = BuildingManager.format_cost_text(CAMP_BUILD_COST)
 	if ledger.can_afford(CAMP_BUILD_COST):
 		return "[E] Build First Camp (%s)" % cost_txt
@@ -461,6 +549,8 @@ func try_build_first_camp(actor_x: float) -> Dictionary:
 		_record_rejection("Failed to deduct resources for First Camp")
 		return {"ok": false, "reason": _last_rejection_reason}
 	_first_camp_built = true
+	if night_survival != null:
+		night_survival.on_first_camp_built()
 	_has_unsaved_progress = true
 	_last_rejection_reason = ""
 	_refresh_camp_visuals()
@@ -496,6 +586,9 @@ func try_rest_at_camp(actor_x: float) -> Dictionary:
 			night_survival.start_encounter(prev_day)
 			_record_rejection("Cannot rest while a night threat is active.")
 			return {"ok": false, "encounter_active": true, "reason": _last_rejection_reason}
+		if night_survival.is_camp_compromised(_first_camp_built) and not night_survival.is_day_resolved(prev_day):
+			_record_rejection("First Camp is compromised (0/%d) — repair it with [F] (2W) before resting." % get_max_camp_integrity())
+			return {"ok": false, "camp_compromised": true, "reason": _last_rejection_reason}
 		if night_survival.is_rest_blocked_by_breach_night(prev_day):
 			_record_rejection("Cannot rest before a breach night — First Camp cannot hold a breach threat unattended.")
 			return {"ok": false, "breach_night": true, "reason": _last_rejection_reason}
@@ -567,7 +660,7 @@ func build_save_payload() -> Dictionary:
 		merged_nodes[nid] = bool(eg_nodes[nid])
 	merged_nodes[CAMP_BUILT_STATE_KEY] = _first_camp_built
 	if night_survival != null:
-		var surv_states: Dictionary = night_survival.to_save_node_states()
+		var surv_states: Dictionary = night_survival.to_save_node_states(_first_camp_built)
 		for sk: String in surv_states.keys():
 			merged_nodes[sk] = bool(surv_states[sk])
 	pf["node_states"] = merged_nodes
@@ -634,6 +727,10 @@ func _on_camp_defense_requested() -> void:
 	try_activate_camp_defense(px)
 
 
+func _on_camp_repair_requested(player_x: float) -> void:
+	try_repair_first_camp(player_x)
+
+
 func _wire_gameplay_connections() -> void:
 	if _signals_connected or player == null or not is_instance_valid(player):
 		return
@@ -645,6 +742,8 @@ func _wire_gameplay_connections() -> void:
 		player.fast_clock_toggled.connect(_on_toggle_fast_clock)
 	if not player.kindle_flare_requested.is_connected(_on_camp_defense_requested):
 		player.kindle_flare_requested.connect(_on_camp_defense_requested)
+	if not player.repair_wall_requested.is_connected(_on_camp_repair_requested):
+		player.repair_wall_requested.connect(_on_camp_repair_requested)
 	_connect_night_survival_signals()
 	_signals_connected = true
 
@@ -671,11 +770,11 @@ func _hydrate_gameplay_from_payload(payload: Dictionary, restore_player_position
 			resource_mgr.apply_save_state(ns)
 			_first_camp_built = bool(ns.get(CAMP_BUILT_STATE_KEY, false))
 			if night_survival != null:
-				night_survival.apply_save_node_states(ns)
+				night_survival.apply_save_node_states(ns, _first_camp_built)
 		else:
 			_first_camp_built = false
 			if night_survival != null:
-				night_survival.apply_save_node_states({})
+				night_survival.apply_save_node_states({}, false)
 	if restore_player_position and player != null and is_instance_valid(player):
 		var placed: bool = false
 		if payload.has("player") and typeof(payload["player"]) == TYPE_DICTIONARY:
@@ -934,9 +1033,21 @@ func _refresh_camp_visuals() -> void:
 		camp_site_marker.visible = not _first_camp_built
 	if camp_shelter_sprite != null and is_instance_valid(camp_shelter_sprite):
 		camp_shelter_sprite.visible = _first_camp_built
+		if _first_camp_built and night_survival != null:
+			if night_survival.is_camp_compromised(_first_camp_built):
+				camp_shelter_sprite.modulate = Color(0.52, 0.44, 0.44, 1.0)
+			elif night_survival.is_camp_damaged(_first_camp_built):
+				camp_shelter_sprite.modulate = Color(0.88, 0.72, 0.62, 1.0)
+			else:
+				camp_shelter_sprite.modulate = Color(1.0, 1.0, 1.0, 1.0)
 	if camp_label != null and is_instance_valid(camp_label):
 		if _first_camp_built:
-			camp_label.text = "First Camp (Built)"
+			if night_survival != null and night_survival.is_camp_compromised(_first_camp_built):
+				camp_label.text = "First Camp (0/%d — Compromised)" % get_max_camp_integrity()
+			elif night_survival != null and night_survival.is_camp_damaged(_first_camp_built):
+				camp_label.text = "First Camp (%d/%d — Damaged)" % [get_camp_integrity(), get_max_camp_integrity()]
+			else:
+				camp_label.text = "First Camp (%d/%d)" % [get_camp_integrity(), get_max_camp_integrity()]
 		else:
 			camp_label.text = "Camp Site (%s)" % BuildingManager.format_cost_text(CAMP_BUILD_COST)
 	_sync_threat_presentation(0.0)
@@ -1006,8 +1117,12 @@ func _on_night_threat_blocked(_day_number: int, _threat_x: float) -> void:
 
 
 func _on_camp_protection_breached(_day_number: int, _archetype: String, _threat_x: float) -> void:
+	_refresh_camp_visuals()
 	if night_survival != null:
-		_set_feedback(night_survival.get_status_text())
+		if night_survival.is_camp_compromised(_first_camp_built):
+			_set_feedback("%s First Camp COMPROMISED (0/%d) — protection lost!" % [night_survival.get_status_text(), get_max_camp_integrity()])
+		else:
+			_set_feedback("%s (Integrity %d/%d)" % [night_survival.get_status_text(), get_camp_integrity(), get_max_camp_integrity()])
 	if prompt_label != null:
 		prompt_label.text = _get_camp_prompt_text()
 
