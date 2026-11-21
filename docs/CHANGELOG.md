@@ -7,6 +7,16 @@ This changelog records repository changes that actually occurred. Planned featur
 
 ---
 
+## [2026-11-21] N6.2: Eldergrove Day Cycle & Resource Renewal
+
+**Type:** Gameplay milestone slice (N6.2)
+**Baseline:** `main` @ `696f981034af0f0f24f973fd6fd24098705ddaa1` (PR #47); branch `feature/n62-eldergrove-day-cycle`
+
+- Wired existing authoritative `TimeManager` into `scenes/world/EldergroveForest.tscn` and `scripts/world/EldergroveForestArrival.gd` with HUD clock/phase display (`ClockLabel`), restrained daylight/sunset/night sky & `CanvasModulate` lighting, and `[T]` fast-clock toggle.
+- Enabled deterministic once-per-sunrise renewal (`ResourceNodeManager.refresh_renewable_nodes()`) for Eldergrove Fallen Timber (+4W) and Mossy Outcrop (+3S) while keeping Weathered Supply Crate (+3G) strictly non-renewable.
+- Persisted `day_count`, `world_time`, `world_phase`, node states, and First Camp state through existing `SaveManager` schema v2 without schema changes.
+- Added `tests/test_n62_eldergrove_day_cycle.gd`, registered it in `tests/run_all.sh`, updated `docs/narrative/N5_IMPLEMENTATION_ROADMAP.md`, and created `docs/narrative/N62_IMPLEMENTATION_REPORT.md`.
+
 ## [2026-11-21] N6.1: Eldergrove First Camp Construction Loop
 
 **Type:** Gameplay milestone slice (N6.1)
