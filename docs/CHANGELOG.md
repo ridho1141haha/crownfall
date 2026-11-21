@@ -7,6 +7,15 @@ This changelog records repository changes that actually occurred. Planned featur
 
 ---
 
+## [2026-11-21] N6.3: First Camp Rest & Time Skip
+
+**Type:** Gameplay milestone slice (N6.3)
+**Baseline:** `main` @ `02d6ed3cb88133d9806ee8fb6fc0c9040f6ddfbc`; branch `feature/n63-first-camp-rest`
+
+- Integrated First Camp rest (`can_rest_at_camp()`, `try_rest_at_camp()`) into `scripts/world/EldergroveForestArrival.gd` via existing `InteractionResolver` and authoritative `TimeManager.advance_time()`.
+- Enabled resting during Sunset or Night to advance cleanly to next Daylight, triggering existing N6.2 sunrise resource renewal exactly once without modifying `EconomyLedger` balances or `SaveManager` schema v2.
+- Added `tests/test_n63_first_camp_rest.gd`, registered it in `tests/run_all.sh`, updated `docs/narrative/N5_IMPLEMENTATION_ROADMAP.md`, and created `docs/narrative/N63_IMPLEMENTATION_REPORT.md`.
+
 ## [2026-11-21] N6.2: Eldergrove Day Cycle & Resource Renewal
 
 **Type:** Gameplay milestone slice (N6.2)
