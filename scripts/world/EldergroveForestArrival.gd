@@ -23,6 +23,7 @@ signal sunrise_renewal_applied(completed_day: int, refreshed_ids: Array[String])
 signal camp_rest_completed(previous_day: int, new_day: int)
 signal camp_defense_activated(day_number: int, threat_class: int, repelled_breach: bool)
 signal camp_repaired(new_integrity: int, max_integrity: int, wood_spent: int)
+signal brute_attacked(remaining_hp: int, max_hp: int, defeated: bool)
 signal feedback_message(text: String)
 
 const SCENE_PATH: String = "res://scenes/world/EldergroveForest.tscn"
@@ -731,6 +732,35 @@ func _on_camp_repair_requested(player_x: float) -> void:
 	try_repair_first_camp(player_x)
 
 
+func _on_player_attack_requested(player_x: float, facing_dir: int) -> void:
+	try_attack_threat(player_x, facing_dir)
+
+
+func try_attack_threat(actor_x: float, facing_dir: int) -> Dictionary:
+	if progression == null or not progression.has_fact(ProgressionState.FACT_ELDERGROVE_REACHED):
+		_record_rejection("Eldergrove session is not active")
+		return {"ok": false, "reason": _last_rejection_reason}
+	if night_survival == null:
+		_record_rejection("Night survival controller unavailable.")
+		return {"ok": false, "reason": _last_rejection_reason}
+	var res: Dictionary = night_survival.apply_player_attack(actor_x, facing_dir)
+	if not bool(res.get("ok", false)):
+		_record_rejection(String(res.get("reason", "Attack unavailable.")))
+		return res
+	_has_unsaved_progress = true
+	_last_rejection_reason = ""
+	_sync_threat_presentation(0.0)
+	var rem_hp: int = int(res["remaining_hp"])
+	var max_hp: int = int(res["max_hp"])
+	var defeated: bool = bool(res["defeated"])
+	if defeated:
+		_set_feedback("Gloom Brute defeated! Night %d secured." % int(res["day"]))
+	else:
+		_set_feedback("Hit Gloom Brute! (HP %d/%d)" % [rem_hp, max_hp])
+	brute_attacked.emit(rem_hp, max_hp, defeated)
+	return res
+
+
 func _wire_gameplay_connections() -> void:
 	if _signals_connected or player == null or not is_instance_valid(player):
 		return
@@ -744,6 +774,8 @@ func _wire_gameplay_connections() -> void:
 		player.kindle_flare_requested.connect(_on_camp_defense_requested)
 	if not player.repair_wall_requested.is_connected(_on_camp_repair_requested):
 		player.repair_wall_requested.connect(_on_camp_repair_requested)
+	if not player.attack_requested.is_connected(_on_player_attack_requested):
+		player.attack_requested.connect(_on_player_attack_requested)
 	_connect_night_survival_signals()
 	_signals_connected = true
 

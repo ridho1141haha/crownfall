@@ -22,6 +22,11 @@ const COLOR_TINT_BLOCKED: Color = Color(1.0, 0.92, 0.72, 1.0)
 const COLOR_TINT_BREACHED: Color = Color(0.95, 0.45, 0.52, 1.0)
 const COLOR_WARD_PULSE: Color = Color(1.0, 0.96, 0.72, 1.0)
 const COLOR_TINT_STAGGERED: Color = Color(0.76, 0.92, 1.0, 1.0)
+const COLOR_TINT_HIT_FLASH: Color = Color(1.0, 0.86, 0.86, 1.0)
+const COLOR_HP_BG: Color = Color(0.14, 0.1, 0.12, 0.9)
+const COLOR_HP_FILL: Color = Color(0.86, 0.24, 0.28, 1.0)
+const HP_BAR_WIDTH: float = 36.0
+const HP_BAR_HEIGHT: float = 4.0
 
 var threat_actor: Node2D = null
 var threat_sprite: Sprite2D = null
@@ -29,6 +34,8 @@ var threat_label: Label = null
 var left_ward_post: ColorRect = null
 var right_ward_post: ColorRect = null
 var ward_pulse_bar: ColorRect = null
+var brute_hp_bg: ColorRect = null
+var brute_hp_fill: ColorRect = null
 
 var _visual_profiles: Dictionary = {}
 var _loaded_archetype: String = ""
@@ -100,6 +107,24 @@ func _ensure_nodes() -> void:
 		threat_label.offset_bottom = -34.0
 		threat_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		threat_actor.add_child(threat_label)
+
+	if brute_hp_bg == null:
+		brute_hp_bg = ColorRect.new()
+		brute_hp_bg.name = "BruteHpBg"
+		brute_hp_bg.visible = false
+		brute_hp_bg.position = Vector2(-HP_BAR_WIDTH * 0.5, -72.0)
+		brute_hp_bg.size = Vector2(HP_BAR_WIDTH, HP_BAR_HEIGHT)
+		brute_hp_bg.color = COLOR_HP_BG
+		threat_actor.add_child(brute_hp_bg)
+
+	if brute_hp_fill == null:
+		brute_hp_fill = ColorRect.new()
+		brute_hp_fill.name = "BruteHpFill"
+		brute_hp_fill.visible = false
+		brute_hp_fill.position = Vector2(-HP_BAR_WIDTH * 0.5, -72.0)
+		brute_hp_fill.size = Vector2(HP_BAR_WIDTH, HP_BAR_HEIGHT)
+		brute_hp_fill.color = COLOR_HP_FILL
+		threat_actor.add_child(brute_hp_fill)
 
 	if left_ward_post == null:
 		var left_x: float = roundf(EldergroveNightSurvival.CAMP_CENTER_X - EldergroveNightSurvival.CAMP_PROTECTION_RADIUS)
@@ -178,11 +203,19 @@ func is_pulse_visual_active() -> bool:
 	return ward_pulse_bar != null and ward_pulse_bar.visible
 
 
+func is_hp_bar_visible() -> bool:
+	return brute_hp_bg != null and brute_hp_bg.visible
+
+
 func set_threat_hidden() -> void:
 	_ensure_nodes()
 	threat_actor.visible = false
 	if ward_pulse_bar != null:
 		ward_pulse_bar.visible = false
+	if brute_hp_bg != null:
+		brute_hp_bg.visible = false
+	if brute_hp_fill != null:
+		brute_hp_fill.visible = false
 	_anim_elapsed = 0.0
 	_last_visual_state = "hidden"
 
@@ -239,6 +272,15 @@ func sync_from_survival(survival: EldergroveNightSurvival, player_x: float, camp
 	if ward_pulse_bar != null:
 		ward_pulse_bar.visible = protection_active and pulse_active
 
+	var show_hp: bool = survival.threat_max_hp > 0 and not survival.is_threat_defeated()
+	if brute_hp_bg != null and brute_hp_fill != null:
+		brute_hp_bg.visible = show_hp
+		brute_hp_fill.visible = show_hp
+		if show_hp:
+			var ratio: float = clampf(float(survival.threat_hp) / float(maxi(1, survival.threat_max_hp)), 0.0, 1.0)
+			brute_hp_fill.size.x = roundf(HP_BAR_WIDTH * ratio)
+			display_name = "%s [%d/%d]" % [display_name, survival.threat_hp, survival.threat_max_hp]
+
 	if survival.is_threat_staggered():
 		_last_visual_state = "staggered"
 		threat_sprite.modulate = base_mod * COLOR_TINT_STAGGERED
@@ -264,3 +306,6 @@ func sync_from_survival(survival: EldergroveNightSurvival, player_x: float, camp
 		threat_sprite.frame = int(floor(_anim_elapsed * WALK_FPS)) % frame_count
 		threat_label.text = display_name
 		set_perimeter_visible(protection_active, COLOR_WARD_PULSE if pulse_active else COLOR_WARD_IDLE)
+
+	if survival.hit_flash_remaining > 0.0:
+		threat_sprite.modulate = COLOR_TINT_HIT_FLASH
