@@ -7,6 +7,15 @@ This changelog records repository changes that actually occurred. Planned featur
 
 ---
 
+## [2026-11-23] N6.10: Player Threat Vulnerability & Retreat Recovery
+
+**Type:** Gameplay milestone slice (N6.10)
+**Branch:** `feature/n610-player-threat-vulnerability`
+
+- Added authoritative player vitality (`3/3`), contact strike knockback (`48px`), hit invulnerability (`1.2s`), and Kingdom-style overwhelmed retreat to First Camp (`-1 Gold` if affordable, `2.0s` recovery invulnerability) in `scripts/survival/EldergroveNightSurvival.gd` and `scripts/world/EldergroveForestArrival.gd`.
+- Added HUD vitality readout and brief pixel-art player hit flash (`0.2s`), keeping First Camp shielding, Ward Pulse stagger immunity, Sunrise vitality restore, and `SaveManager` schema v2 intact.
+- Added `tests/test_n610_player_threat_vulnerability.gd` (registered in `tests/run_all.sh`), `docs/narrative/N610_IMPLEMENTATION_REPORT.md`, and updated roadmap & CI coverage gate.
+
 ## [2026-11-22] N6.9: Melee Combat Presentation & Feedback
 
 **Type:** Gameplay presentation milestone slice (N6.9)

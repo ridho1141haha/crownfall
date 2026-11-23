@@ -21,6 +21,8 @@ signal defense_pulse_activated(day_number: int, threat_class: int, new_threat_x:
 signal camp_integrity_changed(current_integrity: int, max_integrity: int, delta: int)
 signal threat_health_changed(day_number: int, current_hp: int, max_hp: int, damage: int)
 signal threat_defeated(day_number: int, archetype: String)
+signal player_hit_by_threat(day_number: int, current_vitality: int, max_vitality: int, knockback_dir: int)
+signal player_overwhelmed(day_number: int, archetype: String)
 
 enum ThreatClass {
 	ORDINARY,
@@ -68,6 +70,11 @@ const PLAYER_ATTACK_DAMAGE: int = 1
 const PLAYER_ATTACK_REACH: float = 64.0
 const PLAYER_ATTACK_COOLDOWN_SEC: float = 0.45
 const HIT_FLASH_VISUAL_SEC: float = 0.2
+const PLAYER_MAX_VITALITY: int = 3
+const PLAYER_HIT_INVULN_SEC: float = 1.2
+const PLAYER_RETREAT_INVULN_SEC: float = 2.0
+const PLAYER_HIT_FLASH_SEC: float = 0.2
+const PLAYER_KNOCKBACK_PX: float = 48.0
 
 var state: EncounterState = EncounterState.IDLE
 var active_day: int = 0
@@ -87,6 +94,10 @@ var threat_max_hp: int = 0
 var threat_is_defeated: bool = false
 var attack_cooldown_remaining: float = 0.0
 var hit_flash_remaining: float = 0.0
+var player_vitality: int = PLAYER_MAX_VITALITY
+var player_invuln_remaining: float = 0.0
+var player_hit_flash_remaining: float = 0.0
+var player_overwhelmed_count: int = 0
 var _day_outcomes: Dictionary = {}
 
 
@@ -253,6 +264,28 @@ func is_threat_defeated() -> bool:
 	return threat_is_defeated
 
 
+func get_player_vitality() -> int:
+	return player_vitality
+
+
+func get_player_max_vitality() -> int:
+	return PLAYER_MAX_VITALITY
+
+
+func is_player_invulnerable() -> bool:
+	return player_invuln_remaining > 0.0
+
+
+func is_player_hit_flash_active() -> bool:
+	return player_hit_flash_remaining > 0.0
+
+
+func restore_player_vitality() -> void:
+	player_vitality = PLAYER_MAX_VITALITY
+	player_invuln_remaining = 0.0
+	player_hit_flash_remaining = 0.0
+
+
 func can_player_attack(player_x: float, facing_dir: int) -> Dictionary:
 	if not is_encounter_active():
 		return {"ok": false, "not_active": true, "reason": "No active Gloom Brute to attack."}
@@ -356,6 +389,10 @@ func tick(delta: float, player_x: float, camp_built: bool) -> void:
 		attack_cooldown_remaining = maxf(0.0, attack_cooldown_remaining - delta)
 	if hit_flash_remaining > 0.0:
 		hit_flash_remaining = maxf(0.0, hit_flash_remaining - delta)
+	if player_invuln_remaining > 0.0:
+		player_invuln_remaining = maxf(0.0, player_invuln_remaining - delta)
+	if player_hit_flash_remaining > 0.0:
+		player_hit_flash_remaining = maxf(0.0, player_hit_flash_remaining - delta)
 	if not is_encounter_active() or threat_is_defeated:
 		return
 	if defense_cooldown_remaining > 0.0:
@@ -399,6 +436,21 @@ func tick(delta: float, player_x: float, camp_built: bool) -> void:
 			camp_protection_breached.emit(active_day, threat_archetype, threat_x)
 
 	player_threatened = absf(threat_x - player_x) <= THREAT_CONTACT_RANGE
+	if player_threatened and not is_player_invulnerable():
+		var shielded_by_camp: bool = threat_class == ThreatClass.ORDINARY and is_x_inside_camp_protection(player_x, camp_built)
+		if not shielded_by_camp:
+			var knock_dir: int = -1 if player_x <= threat_x else 1
+			player_vitality = maxi(0, player_vitality - 1)
+			player_hit_flash_remaining = PLAYER_HIT_FLASH_SEC
+			if player_vitality <= 0:
+				player_overwhelmed_count += 1
+				player_vitality = PLAYER_MAX_VITALITY
+				player_invuln_remaining = PLAYER_RETREAT_INVULN_SEC
+				player_hit_by_threat.emit(active_day, 0, PLAYER_MAX_VITALITY, knock_dir)
+				player_overwhelmed.emit(active_day, threat_archetype)
+			else:
+				player_invuln_remaining = PLAYER_HIT_INVULN_SEC
+				player_hit_by_threat.emit(active_day, player_vitality, PLAYER_MAX_VITALITY, knock_dir)
 
 
 func resolve_encounter(survived: bool = true) -> bool:
@@ -422,6 +474,7 @@ func resolve_encounter(survived: bool = true) -> bool:
 func on_sunrise_reached(completed_day: int) -> void:
 	if completed_day <= 0:
 		return
+	restore_player_vitality()
 	if is_encounter_active() and active_day == completed_day:
 		resolve_encounter(true)
 		return
@@ -477,6 +530,10 @@ func apply_save_node_states(saved_node_states: Variant, camp_built: bool = false
 	threat_is_defeated = false
 	attack_cooldown_remaining = 0.0
 	hit_flash_remaining = 0.0
+	player_vitality = PLAYER_MAX_VITALITY
+	player_invuln_remaining = 0.0
+	player_hit_flash_remaining = 0.0
+	player_overwhelmed_count = 0
 	camp_integrity = MAX_CAMP_INTEGRITY if camp_built else 0
 	if typeof(saved_node_states) != TYPE_DICTIONARY:
 		return
