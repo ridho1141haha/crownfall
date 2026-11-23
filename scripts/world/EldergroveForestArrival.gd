@@ -759,10 +759,11 @@ func try_attack_threat(actor_x: float, facing_dir: int) -> Dictionary:
 	_sync_threat_presentation(0.0)
 	var rem_hp: int = int(res["remaining_hp"])
 	var max_hp: int = int(res["max_hp"])
+	var target_name: String = "Gloom Brute" if night_survival.threat_class == EldergroveNightSurvival.ThreatClass.BREACH_CAPABLE else "Night Raider"
 	if defeated:
-		_set_feedback("Gloom Brute defeated! Night %d secured." % int(res["day"]))
+		_set_feedback("%s defeated! Night %d secured." % [target_name, int(res["day"])])
 	else:
-		_set_feedback("Hit Gloom Brute! (HP %d/%d)" % [rem_hp, max_hp])
+		_set_feedback("Hit %s! (HP %d/%d)" % [target_name, rem_hp, max_hp])
 	brute_attacked.emit(rem_hp, max_hp, defeated)
 	return res
 

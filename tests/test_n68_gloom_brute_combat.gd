@@ -125,12 +125,12 @@ func _process(_delta: float) -> bool:
 		var res_idle: Dictionary = eg.try_attack_threat(EldergroveForestArrival.CAMP_SITE_X, 1)
 		_check(not bool(res_idle.get("ok", true)) and bool(res_idle.get("not_active", false)), "Attack rejected when no encounter is active")
 
-		# 2. Ordinary Threat cannot be attacked
+		# 2. Day 4 Ordinary Threat (N6.11 enables Ordinary melee: 1 hit leaves 1/2 HP, resolves at Sunrise)
 		eg.time_manager.advance_time(eg.time_manager.get_current_phase_duration() - eg.time_manager.phase_elapsed + eg.time_manager.sunset_duration + EldergroveNightSurvival.ENCOUNTER_START_OFFSET_SEC)
 		eg._update_night_survival(0.1)
 		_check(surv.is_encounter_active() and surv.threat_class == EldergroveNightSurvival.ThreatClass.ORDINARY, "Day 4 Ordinary Threat active")
 		var res_ord: Dictionary = eg.try_attack_threat(surv.threat_x - 20.0, 1)
-		_check(not bool(res_ord.get("ok", true)) and bool(res_ord.get("wrong_target", false)), "Ordinary Threat cannot be attacked")
+		_check(bool(res_ord.get("ok", false)) and surv.threat_hp == 1 and not bool(res_ord.get("defeated", true)), "Ordinary Threat melee hit deals 1 damage (2 -> 1) without premature defeat")
 		eg.time_manager.advance_time(eg.time_manager.get_current_phase_duration() - eg.time_manager.phase_elapsed + 1.0)
 		_check(eg.time_manager.current_day == 5 and _resolved_signals == 1, "Day 4 Ordinary encounter resolved at Day 5 Sunrise")
 
@@ -167,7 +167,7 @@ func _process(_delta: float) -> bool:
 		press_ev.pressed = true
 		press_ev.echo = false
 		eg.player._unhandled_input(press_ev)
-		_check(surv.threat_hp == 2 and _hp_signals == 1 and surv.is_attack_on_cooldown(), "Single [J] press deals exactly 1 damage (3 -> 2) and starts cooldown")
+		_check(surv.threat_hp == 2 and _hp_signals == 2 and surv.is_attack_on_cooldown(), "Single [J] press deals exactly 1 damage (3 -> 2) and starts cooldown")
 
 		# Cooldown rejects immediate second attack
 		var res_cd: Dictionary = eg.try_attack_threat(surv.threat_x - 32.0, 1)

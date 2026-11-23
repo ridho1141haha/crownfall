@@ -1,6 +1,6 @@
 # Crownfall — N5 Chapter I Implementation Roadmap
 
-**Status (updated 2026-11-23):** N5.0–N5.6 and N6.0–N6.9 are IMPLEMENTED & MERGED on `main` @ `4889580021658b7acd75424d4d3fa86790368790`; N6.10 (Player Threat Vulnerability & Retreat Recovery) is IMPLEMENTED on `feature/n610-player-threat-vulnerability` (see [`N610_IMPLEMENTATION_REPORT.md`](N610_IMPLEMENTATION_REPORT.md)). Stage-3 vessel readiness != Set Sail != voyage != Eldergrove arrival.
+**Status (updated 2026-11-23):** N5.0–N5.6 and N6.0–N6.10 are IMPLEMENTED & MERGED on `main` @ `f5757f3a5d1716a74780a9fe9a88b3c49bafe0c4`; N6.11 (Ordinary Threat Melee Combat) is IMPLEMENTED on `feature/n611-ordinary-threat-combat` (see [`N611_IMPLEMENTATION_REPORT.md`](N611_IMPLEMENTATION_REPORT.md)). Stage-3 vessel readiness != Set Sail != voyage != Eldergrove arrival.
 **Base `main` SHA audited:** `287feeb930870f39081740e373b097d81076f58c` (2026-11-20)
 **Owner decisions docket:** [`N5_OWNER_DECISIONS.md`](N5_OWNER_DECISIONS.md)
 **Candidate beat sheet (DRAFT / NON-CANON):** [`../CHAPTER_01_BEAT_SHEET.md`](../CHAPTER_01_BEAT_SHEET.md)

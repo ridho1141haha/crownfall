@@ -212,6 +212,7 @@ run_godot "N67 First camp integrity repair" "--script res://tests/test_n67_first
 run_godot "N68 Gloom brute combat" "--script res://tests/test_n68_gloom_brute_combat.gd" "PASS: All .* N68 Gloom Brute Combat"
 run_godot "N69 Melee combat presentation" "--script res://tests/test_n69_melee_combat_presentation.gd" "PASS: All .* N69 Melee Combat Presentation"
 run_godot "N610 Player threat vulnerability" "--script res://tests/test_n610_player_threat_vulnerability.gd" "PASS: All .* N610 Player Threat Vulnerability"
+run_godot "N611 Ordinary threat combat" "--script res://tests/test_n611_ordinary_threat_combat.gd" "PASS: All .* N611 Ordinary Threat Combat"
 # --- Save guard (after): the real user data dir must be unchanged ---
 FP_AFTER="$(real_dir_fingerprint)"
 echo "== Save guard (after): real user data fingerprint = ${FP_AFTER}"

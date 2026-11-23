@@ -65,6 +65,7 @@ const BREACH_DAMAGE: int = 1
 const CAMP_REPAIR_AMOUNT: int = 1
 const CAMP_INTEGRITY_TRACKED_KEY: String = "eldergrove_camp_integrity_tracked"
 const CAMP_INTEGRITY_BIT_PREFIX: String = "eldergrove_camp_integrity_"
+const ORDINARY_MAX_HP: int = 2
 const BRUTE_MAX_HP: int = 3
 const PLAYER_ATTACK_DAMAGE: int = 1
 const PLAYER_ATTACK_REACH: float = 64.0
@@ -242,8 +243,8 @@ func start_encounter(day_number: int, forced_class: int = -1) -> bool:
 		threat_max_hp = BRUTE_MAX_HP
 		threat_hp = BRUTE_MAX_HP
 	else:
-		threat_max_hp = 0
-		threat_hp = 0
+		threat_max_hp = ORDINARY_MAX_HP
+		threat_hp = ORDINARY_MAX_HP
 	encounter_started.emit(active_day, threat_class, threat_archetype)
 	return true
 
@@ -288,11 +289,11 @@ func restore_player_vitality() -> void:
 
 func can_player_attack(player_x: float, facing_dir: int) -> Dictionary:
 	if not is_encounter_active():
-		return {"ok": false, "not_active": true, "reason": "No active Gloom Brute to attack."}
+		return {"ok": false, "not_active": true, "reason": "No active night threat to attack."}
 	if threat_is_defeated:
-		return {"ok": false, "already_defeated": true, "reason": "Gloom Brute is already defeated."}
-	if threat_class != ThreatClass.BREACH_CAPABLE:
-		return {"ok": false, "wrong_target": true, "reason": "Only Gloom Brute can be attacked."}
+		return {"ok": false, "already_defeated": true, "reason": "Threat is already defeated."}
+	if threat_class == ThreatClass.ORDINARY and is_threat_staggered():
+		return {"ok": false, "staggered": true, "reason": "Ordinary Threat is staggered and cannot be struck right now."}
 	if is_attack_on_cooldown():
 		return {
 			"ok": false,
@@ -300,12 +301,13 @@ func can_player_attack(player_x: float, facing_dir: int) -> Dictionary:
 			"cooldown_remaining": attack_cooldown_remaining,
 			"reason": "Attack recharging (%.2fs)." % attack_cooldown_remaining,
 		}
+	var target_name: String = "Gloom Brute" if threat_class == ThreatClass.BREACH_CAPABLE else "Night Raider"
 	var dx: float = threat_x - player_x
 	if absf(dx) > PLAYER_ATTACK_REACH:
-		return {"ok": false, "out_of_range": true, "distance": absf(dx), "reason": "Move closer to attack Gloom Brute."}
+		return {"ok": false, "out_of_range": true, "distance": absf(dx), "reason": "Move closer to attack %s." % target_name}
 	var norm_facing: int = -1 if facing_dir < 0 else 1
 	if not is_zero_approx(dx) and ((dx > 0.0 and norm_facing < 0) or (dx < 0.0 and norm_facing > 0)):
-		return {"ok": false, "wrong_facing": true, "reason": "Face Gloom Brute to attack."}
+		return {"ok": false, "wrong_facing": true, "reason": "Face %s to attack." % target_name}
 	return {"ok": true}
 
 
