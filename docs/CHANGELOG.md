@@ -7,6 +7,15 @@ This changelog records repository changes that actually occurred. Planned featur
 
 ---
 
+## [2026-11-23] N6.11: Ordinary Threat Melee Combat
+
+**Type:** Gameplay milestone slice (N6.11)
+**Branch:** `feature/n611-ordinary-threat-combat`
+
+- Extended authoritative melee combat (`[J]`, `64px` reach, `0.45s` cooldown, `1 dmg`) in `scripts/survival/EldergroveNightSurvival.gd` to `ThreatClass.ORDINARY` (`ORDINARY_MAX_HP = 2`), rejecting damage on staggered/defeated Ordinary Threats while keeping Gloom Brute (`3 HP`), First Camp protection/repair, and N6.10 player vitality/retreat unchanged.
+- Adapted HP bar vertical alignment in `scripts/survival/EldergroveThreatPresenter.gd` and target-aware HUD feedback in `scripts/world/EldergroveForestArrival.gd`.
+- Added `tests/test_n611_ordinary_threat_combat.gd` (registered in `tests/run_all.sh` and `.github/workflows/godot-ci.yml`), updated the superseded Ordinary-rejection assertion in `tests/test_n68_gloom_brute_combat.gd`, and documented N6.11 in `docs/narrative/N611_IMPLEMENTATION_REPORT.md` & roadmap.
+
 ## [2026-11-23] N6.10: Player Threat Vulnerability & Retreat Recovery
 
 **Type:** Gameplay milestone slice (N6.10)

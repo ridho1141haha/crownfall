@@ -374,6 +374,11 @@ func _apply_archetype_profile(archetype: String) -> void:
 	var label_y: float = -34.0 * maxf(1.0, s.y) - 20.0
 	threat_label.offset_top = label_y
 	threat_label.offset_bottom = label_y + 20.0
+	var hp_y: float = -34.0 * maxf(1.0, s.y) - 6.0
+	if brute_hp_bg != null:
+		brute_hp_bg.position.y = hp_y
+	if brute_hp_fill != null:
+		brute_hp_fill.position.y = hp_y
 	_loaded_archetype = archetype
 
 
