@@ -745,14 +745,19 @@ func try_attack_threat(actor_x: float, facing_dir: int) -> Dictionary:
 		return {"ok": false, "reason": _last_rejection_reason}
 	var res: Dictionary = night_survival.apply_player_attack(actor_x, facing_dir)
 	if not bool(res.get("ok", false)):
+		if threat_presenter != null and is_instance_valid(threat_presenter) and not bool(res.get("on_cooldown", false)):
+			threat_presenter.trigger_player_attack_cue(actor_x, facing_dir, false)
 		_record_rejection(String(res.get("reason", "Attack unavailable.")))
 		return res
 	_has_unsaved_progress = true
 	_last_rejection_reason = ""
+	var defeated: bool = bool(res["defeated"])
+	if threat_presenter != null and is_instance_valid(threat_presenter):
+		threat_presenter.trigger_player_attack_cue(actor_x, facing_dir, true)
+		threat_presenter.trigger_hit_impact(night_survival.threat_x, facing_dir, defeated)
 	_sync_threat_presentation(0.0)
 	var rem_hp: int = int(res["remaining_hp"])
 	var max_hp: int = int(res["max_hp"])
-	var defeated: bool = bool(res["defeated"])
 	if defeated:
 		_set_feedback("Gloom Brute defeated! Night %d secured." % int(res["day"]))
 	else:

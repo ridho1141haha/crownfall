@@ -27,6 +27,17 @@ const COLOR_HP_BG: Color = Color(0.14, 0.1, 0.12, 0.9)
 const COLOR_HP_FILL: Color = Color(0.86, 0.24, 0.28, 1.0)
 const HP_BAR_WIDTH: float = 36.0
 const HP_BAR_HEIGHT: float = 4.0
+const ATTACK_CUE_DURATION_SEC: float = 0.16
+const IMPACT_CUE_DURATION_SEC: float = 0.20
+const BRUTE_RECOIL_DURATION_SEC: float = 0.12
+const BRUTE_RECOIL_PX: float = 4.0
+const ATTACK_CUE_OFFSET_X: float = 20.0
+const ATTACK_CUE_Y: float = -18.0
+const IMPACT_CUE_Y: float = -28.0
+const COLOR_ATTACK_HIT: Color = Color(1.0, 0.96, 0.78, 0.95)
+const COLOR_ATTACK_MISS: Color = Color(0.72, 0.76, 0.82, 0.65)
+const COLOR_IMPACT_HIT: Color = Color(1.0, 0.92, 0.72, 1.0)
+const COLOR_IMPACT_DEFEAT: Color = Color(1.0, 0.82, 0.42, 1.0)
 
 var threat_actor: Node2D = null
 var threat_sprite: Sprite2D = null
@@ -36,12 +47,23 @@ var right_ward_post: ColorRect = null
 var ward_pulse_bar: ColorRect = null
 var brute_hp_bg: ColorRect = null
 var brute_hp_fill: ColorRect = null
+var player_attack_cue: Node2D = null
+var attack_arc_primary: ColorRect = null
+var attack_arc_secondary: ColorRect = null
+var hit_impact_cue: Node2D = null
+var impact_bar_h: ColorRect = null
+var impact_bar_v: ColorRect = null
 
 var _visual_profiles: Dictionary = {}
 var _loaded_archetype: String = ""
 var _has_valid_texture: bool = false
 var _anim_elapsed: float = 0.0
 var _last_visual_state: String = "hidden"
+var _attack_cue_remaining: float = 0.0
+var _attack_cue_facing: int = 1
+var _impact_cue_remaining: float = 0.0
+var _brute_recoil_remaining: float = 0.0
+var _brute_recoil_dir: int = 1
 
 
 func _init() -> void:
@@ -147,6 +169,48 @@ func _ensure_nodes() -> void:
 		ward_pulse_bar.color = COLOR_WARD_PULSE
 		add_child(ward_pulse_bar)
 
+	if player_attack_cue == null:
+		player_attack_cue = Node2D.new()
+		player_attack_cue.name = "PlayerAttackCue"
+		player_attack_cue.visible = false
+		player_attack_cue.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+		add_child(player_attack_cue)
+
+		attack_arc_primary = ColorRect.new()
+		attack_arc_primary.name = "AttackArcPrimary"
+		attack_arc_primary.position = Vector2(0.0, -3.0)
+		attack_arc_primary.size = Vector2(12.0, 3.0)
+		attack_arc_primary.color = COLOR_ATTACK_HIT
+		player_attack_cue.add_child(attack_arc_primary)
+
+		attack_arc_secondary = ColorRect.new()
+		attack_arc_secondary.name = "AttackArcSecondary"
+		attack_arc_secondary.position = Vector2(4.0, 1.0)
+		attack_arc_secondary.size = Vector2(8.0, 2.0)
+		attack_arc_secondary.color = COLOR_ATTACK_HIT
+		player_attack_cue.add_child(attack_arc_secondary)
+
+	if hit_impact_cue == null:
+		hit_impact_cue = Node2D.new()
+		hit_impact_cue.name = "HitImpactCue"
+		hit_impact_cue.visible = false
+		hit_impact_cue.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+		add_child(hit_impact_cue)
+
+		impact_bar_h = ColorRect.new()
+		impact_bar_h.name = "ImpactBarH"
+		impact_bar_h.position = Vector2(-7.0, -1.0)
+		impact_bar_h.size = Vector2(14.0, 2.0)
+		impact_bar_h.color = COLOR_IMPACT_HIT
+		hit_impact_cue.add_child(impact_bar_h)
+
+		impact_bar_v = ColorRect.new()
+		impact_bar_v.name = "ImpactBarV"
+		impact_bar_v.position = Vector2(-1.0, -7.0)
+		impact_bar_v.size = Vector2(2.0, 14.0)
+		impact_bar_v.color = COLOR_IMPACT_HIT
+		hit_impact_cue.add_child(impact_bar_v)
+
 
 func _make_ward_post(post_name: String, world_x: float) -> ColorRect:
 	var post := ColorRect.new()
@@ -207,6 +271,77 @@ func is_hp_bar_visible() -> bool:
 	return brute_hp_bg != null and brute_hp_bg.visible
 
 
+func is_attack_cue_visible() -> bool:
+	return player_attack_cue != null and player_attack_cue.visible
+
+
+func get_attack_cue_facing() -> int:
+	return _attack_cue_facing
+
+
+func get_attack_cue_position() -> Vector2:
+	if player_attack_cue == null:
+		return Vector2.ZERO
+	return player_attack_cue.position
+
+
+func is_impact_cue_visible() -> bool:
+	return hit_impact_cue != null and hit_impact_cue.visible
+
+
+func is_brute_hit_feedback_active() -> bool:
+	return _brute_recoil_remaining > 0.0
+
+
+func get_brute_recoil_offset_x() -> float:
+	if _brute_recoil_remaining <= 0.0:
+		return 0.0
+	return roundf(float(_brute_recoil_dir) * BRUTE_RECOIL_PX)
+
+
+func trigger_player_attack_cue(player_x: float, facing_dir: int, hit_confirmed: bool) -> void:
+	_ensure_nodes()
+	var norm_dir: int = -1 if facing_dir < 0 else 1
+	_attack_cue_facing = norm_dir
+	_attack_cue_remaining = ATTACK_CUE_DURATION_SEC
+	player_attack_cue.position = Vector2(roundf(player_x + float(norm_dir) * ATTACK_CUE_OFFSET_X), ATTACK_CUE_Y)
+	player_attack_cue.scale = Vector2(float(norm_dir), 1.0)
+	var c: Color = COLOR_ATTACK_HIT if hit_confirmed else COLOR_ATTACK_MISS
+	attack_arc_primary.color = c
+	attack_arc_secondary.color = c
+	player_attack_cue.visible = true
+
+
+func trigger_hit_impact(impact_x: float, attack_facing_dir: int, defeated: bool) -> void:
+	_ensure_nodes()
+	var norm_dir: int = -1 if attack_facing_dir < 0 else 1
+	_impact_cue_remaining = IMPACT_CUE_DURATION_SEC
+	hit_impact_cue.position = Vector2(roundf(impact_x), IMPACT_CUE_Y)
+	var c: Color = COLOR_IMPACT_DEFEAT if defeated else COLOR_IMPACT_HIT
+	impact_bar_h.color = c
+	impact_bar_v.color = c
+	hit_impact_cue.visible = true
+	if not defeated:
+		_brute_recoil_dir = norm_dir
+		_brute_recoil_remaining = BRUTE_RECOIL_DURATION_SEC
+	else:
+		_brute_recoil_remaining = 0.0
+
+
+func _tick_transient_cues(delta: float) -> void:
+	var dt: float = maxf(0.0, delta)
+	if _attack_cue_remaining > 0.0:
+		_attack_cue_remaining = maxf(0.0, _attack_cue_remaining - dt)
+	if player_attack_cue != null:
+		player_attack_cue.visible = _attack_cue_remaining > 0.0
+	if _impact_cue_remaining > 0.0:
+		_impact_cue_remaining = maxf(0.0, _impact_cue_remaining - dt)
+	if hit_impact_cue != null:
+		hit_impact_cue.visible = _impact_cue_remaining > 0.0
+	if _brute_recoil_remaining > 0.0:
+		_brute_recoil_remaining = maxf(0.0, _brute_recoil_remaining - dt)
+
+
 func set_threat_hidden() -> void:
 	_ensure_nodes()
 	threat_actor.visible = false
@@ -244,8 +379,10 @@ func _apply_archetype_profile(archetype: String) -> void:
 
 func sync_from_survival(survival: EldergroveNightSurvival, player_x: float, camp_built: bool, delta: float = 0.0) -> void:
 	_ensure_nodes()
+	_tick_transient_cues(delta)
 	var protection_active: bool = survival != null and survival.is_camp_protection_active(camp_built)
 	if survival == null or not survival.is_encounter_active():
+		_brute_recoil_remaining = 0.0
 		set_threat_hidden()
 		set_perimeter_visible(protection_active, COLOR_WARD_IDLE)
 		return
@@ -259,7 +396,8 @@ func sync_from_survival(survival: EldergroveNightSurvival, player_x: float, camp
 	var native_faces_left: bool = bool(profile.get("native_faces_left", true))
 
 	threat_actor.visible = true
-	threat_actor.position = Vector2(roundf(survival.threat_x), GROUND_BASELINE_Y)
+	var recoil_x: float = get_brute_recoil_offset_x()
+	threat_actor.position = Vector2(roundf(survival.threat_x) + recoil_x, GROUND_BASELINE_Y)
 
 	# Side-view facing direction toward player
 	var moving_right: bool = player_x > survival.threat_x
