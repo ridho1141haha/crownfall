@@ -7,6 +7,15 @@ This changelog records repository changes that actually occurred. Planned featur
 
 ---
 
+## [2026-11-22] N6.9: Melee Combat Presentation & Feedback
+
+**Type:** Gameplay presentation milestone slice (N6.9)
+**Branch:** `feature/n69-melee-combat-presentation`
+
+- Added restrained, integer-aligned pixel-art player attack cue (`PlayerAttackCue`, facing-aware, `0.16s`), hit confirmation impact flash (`HitImpactCue`, `0.20s`, confirmed hits only), and temporary Brute hit recoil (`4px`, `0.12s`) in `scripts/survival/EldergroveThreatPresenter.gd`, triggered from `scripts/world/EldergroveForestArrival.gd`.
+- Kept `scripts/survival/EldergroveNightSurvival.gd` and all N6.8 combat values, Ward Pulse, First Camp integrity/repair, and `SaveManager` schema v2 untouched.
+- Added `tests/test_n69_melee_combat_presentation.gd` (registered in `tests/run_all.sh`), `docs/narrative/N69_IMPLEMENTATION_REPORT.md`, and updated roadmap & CI coverage gate.
+
 ## [2026-11-21] N6.8: Gloom Brute Combat & Threat Defeat
 
 **Type:** Gameplay milestone slice (N6.8)
