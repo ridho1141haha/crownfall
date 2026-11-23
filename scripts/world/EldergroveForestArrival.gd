@@ -24,6 +24,7 @@ signal camp_rest_completed(previous_day: int, new_day: int)
 signal camp_defense_activated(day_number: int, threat_class: int, repelled_breach: bool)
 signal camp_repaired(new_integrity: int, max_integrity: int, wood_spent: int)
 signal brute_attacked(remaining_hp: int, max_hp: int, defeated: bool)
+signal player_retreated(day_number: int, gold_lost: int)
 signal feedback_message(text: String)
 
 const SCENE_PATH: String = "res://scenes/world/EldergroveForest.tscn"
@@ -1145,6 +1146,8 @@ func _connect_night_survival_signals() -> void:
 	night_survival.threat_blocked_by_camp.connect(_on_night_threat_blocked)
 	night_survival.camp_protection_breached.connect(_on_camp_protection_breached)
 	night_survival.encounter_resolved.connect(_on_night_encounter_resolved)
+	night_survival.player_hit_by_threat.connect(_on_player_hit_by_threat)
+	night_survival.player_overwhelmed.connect(_on_player_overwhelmed)
 	_survival_signals_connected = true
 
 
@@ -1164,7 +1167,35 @@ func _on_camp_protection_breached(_day_number: int, _archetype: String, _threat_
 		prompt_label.text = _get_camp_prompt_text()
 
 
+func _on_player_hit_by_threat(_day_number: int, current_vitality: int, max_vitality: int, knockback_dir: int) -> void:
+	if current_vitality > 0 and player != null and is_instance_valid(player):
+		player.global_position.x = clampf(roundf(player.global_position.x + float(knockback_dir) * EldergroveNightSurvival.PLAYER_KNOCKBACK_PX), MIN_BOUND_X, MAX_BOUND_X)
+		_refresh_gameplay_hud()
+		var prefix: String = "First Camp BREACHED! " if (night_survival != null and night_survival.camp_breached) else ""
+		_set_feedback("%sStruck by night threat! (Vitality %d/%d)" % [prefix, current_vitality, max_vitality])
+
+
+func _on_player_overwhelmed(day_number: int, _archetype: String) -> void:
+	var retreat_x: float = CAMP_SITE_X if _first_camp_built else PLAYER_SPAWN_X
+	if player != null and is_instance_valid(player):
+		player.global_position.x = retreat_x
+	var gold_lost: int = 0
+	if ledger.can_afford({"gold": 1}) and ledger.try_spend({"gold": 1}):
+		gold_lost = 1
+		_has_unsaved_progress = true
+	_refresh_gameplay_hud()
+	var prefix: String = "First Camp BREACHED! " if (night_survival != null and night_survival.camp_breached) else ""
+	if gold_lost > 0:
+		_set_feedback("%sOverwhelmed! Retreated to safety (-1G)." % prefix)
+	else:
+		_set_feedback("%sOverwhelmed! Retreated to safety." % prefix)
+	player_retreated.emit(day_number, gold_lost)
+
+
 func _sync_threat_presentation(delta: float = 0.0) -> void:
+	if player != null and is_instance_valid(player) and player.sprite != null:
+		var hit_flash: bool = night_survival != null and night_survival.is_player_hit_flash_active()
+		player.sprite.modulate = Color(1.0, 0.58, 0.58, 1.0) if hit_flash else Color(1.0, 1.0, 1.0, 1.0)
 	if threat_presenter == null or not is_instance_valid(threat_presenter):
 		return
 	var px: float = player.global_position.x if (player != null and is_instance_valid(player)) else PLAYER_SPAWN_X
@@ -1196,6 +1227,7 @@ func _on_sunrise_reached(completed_day: int) -> void:
 	_last_sunrise_completed_day = completed_day
 	if night_survival != null:
 		night_survival.on_sunrise_reached(completed_day)
+	_refresh_gameplay_hud()
 	_sync_threat_presentation(0.0)
 	_last_sunrise_refreshed_ids.clear()
 	resource_mgr.refresh_renewable_nodes()
@@ -1255,7 +1287,9 @@ func _apply_phase_visuals() -> void:
 func _refresh_gameplay_hud() -> void:
 	if resources_label != null:
 		var b: Dictionary = ledger.get_all_balances()
-		resources_label.text = "Gold: %d | Wood: %d | Stone: %d" % [int(b["gold"]), int(b["wood"]), int(b["stone"])]
+		var vit: int = night_survival.get_player_vitality() if night_survival != null else EldergroveNightSurvival.PLAYER_MAX_VITALITY
+		var max_vit: int = night_survival.get_player_max_vitality() if night_survival != null else EldergroveNightSurvival.PLAYER_MAX_VITALITY
+		resources_label.text = "Gold: %d | Wood: %d | Stone: %d | Vitality: %d/%d" % [int(b["gold"]), int(b["wood"]), int(b["stone"]), vit, max_vit]
 
 
 func _set_feedback(text: String) -> void:
