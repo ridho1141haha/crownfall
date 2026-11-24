@@ -175,12 +175,12 @@ func _process(_delta: float) -> bool:
 				eg._update_night_survival(1.3)
 		_check(_overwhelmed_signals == 1 and eg.ledger.get_amount(&"gold") == 1 and is_equal_approx(eg.player.global_position.x, EldergroveForestArrival.CAMP_SITE_X), "N6.10 contact damage, overwhelmed retreat, and 1G loss remain intact")
 
-		# Defeat Day 3 Ordinary Threat independently
-		eg._update_night_survival(0.5)
-		eg.try_attack_threat(surv.threat_x - 24.0, 1)
-		eg._update_night_survival(0.5)
-		var res_d3: Dictionary = eg.try_attack_threat(surv.threat_x - 24.0, 1)
-		_check(bool(res_d3.get("defeated", false)) and _defeat_signals == 2 and _resolved_signals == 2 and surv.is_day_resolved(3), "Multiple Ordinary Threats (Day 2 & Day 3) resolve independently")
+		# Defeat Day 3 Ordinary Threats (Day 3 schedules 2 Ordinary Threats under N6.12)
+		var res_d3: Dictionary = {}
+		for _h: int in range(4):
+			eg._update_night_survival(0.5)
+			res_d3 = eg.try_attack_threat(surv.threat_x - 24.0, 1)
+		_check(bool(res_d3.get("defeated", false)) and _defeat_signals == 3 and _resolved_signals == 2 and surv.is_day_resolved(3), "Multiple Ordinary Threats (Day 2 & Day 3) resolve independently")
 
 		# 8. Gloom Brute combat (Day 5) remains unchanged (3 HP, 3 hits to defeat)
 		_check(surv.start_encounter(5, EldergroveNightSurvival.ThreatClass.BREACH_CAPABLE), "Started Day 5 Gloom Brute encounter")
@@ -188,7 +188,7 @@ func _process(_delta: float) -> bool:
 		for _h: int in range(3):
 			eg._update_night_survival(0.5)
 			eg.try_attack_threat(surv.threat_x - 24.0, 1)
-		_check(surv.is_threat_defeated() and _defeat_signals == 3 and _resolved_signals == 3, "Gloom Brute still takes 3 hits and defeats cleanly")
+		_check(surv.is_threat_defeated() and _defeat_signals == 4 and _resolved_signals == 3, "Gloom Brute still takes 3 hits and defeats cleanly")
 
 		_check(eg.return_to_main_menu(), "Exited Eldergrove cleanly to Main.tscn")
 		_stage = 3

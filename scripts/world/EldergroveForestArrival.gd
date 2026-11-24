@@ -753,15 +753,22 @@ func try_attack_threat(actor_x: float, facing_dir: int) -> Dictionary:
 	_has_unsaved_progress = true
 	_last_rejection_reason = ""
 	var defeated: bool = bool(res["defeated"])
+	var target_x: float = float(res.get("target_x", night_survival.threat_x))
+	var target_id: String = String(res.get("target_id", ""))
+	var target_class: int = int(res.get("target_class", night_survival.threat_class))
+	var rem_threats: int = int(res.get("remaining_active_threats", 0))
 	if threat_presenter != null and is_instance_valid(threat_presenter):
 		threat_presenter.trigger_player_attack_cue(actor_x, facing_dir, true)
-		threat_presenter.trigger_hit_impact(night_survival.threat_x, facing_dir, defeated)
+		threat_presenter.trigger_hit_impact(target_x, facing_dir, defeated, target_id)
 	_sync_threat_presentation(0.0)
 	var rem_hp: int = int(res["remaining_hp"])
 	var max_hp: int = int(res["max_hp"])
-	var target_name: String = "Gloom Brute" if night_survival.threat_class == EldergroveNightSurvival.ThreatClass.BREACH_CAPABLE else "Night Raider"
+	var target_name: String = "Gloom Brute" if target_class == EldergroveNightSurvival.ThreatClass.BREACH_CAPABLE else "Night Raider"
 	if defeated:
-		_set_feedback("%s defeated! Night %d secured." % [target_name, int(res["day"])])
+		if rem_threats > 0:
+			_set_feedback("%s defeated! (%d threat%s remaining)" % [target_name, rem_threats, "" if rem_threats == 1 else "s"])
+		else:
+			_set_feedback("%s defeated! Night %d secured." % [target_name, int(res["day"])])
 	else:
 		_set_feedback("Hit %s! (HP %d/%d)" % [target_name, rem_hp, max_hp])
 	brute_attacked.emit(rem_hp, max_hp, defeated)
