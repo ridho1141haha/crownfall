@@ -7,6 +7,16 @@ This changelog records repository changes that actually occurred. Planned featur
 
 ---
 
+## [2026-11-24] N6.12: Deterministic Multi-Threat Night Encounters
+
+**Type:** Gameplay milestone slice (N6.12)
+**Branch:** `feature/n612-multi-threat-encounters`
+
+- Refactored `scripts/survival/EldergroveNightSurvival.gd` to simulate multiple simultaneous threats with stable IDs and independent position, HP, stagger, defeat, blocked, and breach state (`1` Ordinary on Days 1–2, `2` simultaneous Ordinary Threats on Days 3–4, `1` Gloom Brute every 5th day).
+- Updated melee `[J]` targeting to hit only the nearest eligible faced threat, Ward Pulse `[Space]` to affect all active non-defeated threats once per Wood spent, and `tick()` to enforce shared player invulnerability across multiple threats.
+- Extended `scripts/survival/EldergroveThreatPresenter.gd` to render independent side-view pixel-art actors/HP bars/recoil per threat ID and `scripts/world/EldergroveForestArrival.gd` for multi-threat HUD feedback.
+- Added `tests/test_n612_multi_threat_encounters.gd` (registered in `tests/run_all.sh` and `.github/workflows/godot-ci.yml`), updated schedule expectations in `test_n64`/`test_n611`, and added `docs/narrative/N612_IMPLEMENTATION_REPORT.md`.
+
 ## [2026-11-23] N6.11: Ordinary Threat Melee Combat
 
 **Type:** Gameplay milestone slice (N6.11)

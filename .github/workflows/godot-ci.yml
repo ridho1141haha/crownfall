@@ -110,7 +110,8 @@ jobs:
             "PASS: All .* N68 Gloom Brute Combat" \
             "PASS: All .* N69 Melee Combat Presentation" \
             "PASS: All .* N610 Player Threat Vulnerability" \
-            "PASS: All .* N611 Ordinary Threat Combat"; do
+            "PASS: All .* N611 Ordinary Threat Combat" \
+            "PASS: All .* N612 Multi-Threat Encounters"; do
             grep -q "${marker}" /tmp/crownfall_run_all.log || { echo "MISSING REQUIRED COVERAGE MARKER: ${marker}"; exit 1; }
           done
           echo "COVERAGE GATE OK: all ${EXPECTED_COUNT} sandboxed Godot steps ran with failed=0 skipped=0."

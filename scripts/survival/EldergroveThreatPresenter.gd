@@ -1,12 +1,12 @@
 class_name EldergroveThreatPresenter
 extends Node2D
 
-## N6.5: Pixel-art side-view presentation adapter for EldergroveNightSurvival.
+## N6.5–N6.12: Pixel-art side-view presentation adapter for EldergroveNightSurvival.
 ##
 ## Strictly observes authoritative EldergroveNightSurvival state; never decides
 ## spawning, blocking, breaching, or resolution independently.
-## Decouples gameplay from asset paths, frame indexes, and visual hierarchy via
-## swappable archetype visual profiles (see docs/assets/N65_ASSET_MANIFEST.md).
+## Supports multiple simultaneous threats keyed by stable runtime threat IDs
+## while preserving backwards-compatible primary-actor accessors.
 
 const GROUND_BASELINE_Y: float = 0.0
 const WALK_FPS: float = 6.0
@@ -55,15 +55,17 @@ var impact_bar_h: ColorRect = null
 var impact_bar_v: ColorRect = null
 
 var _visual_profiles: Dictionary = {}
-var _loaded_archetype: String = ""
+var _threat_slots: Dictionary = {} # threat_id -> slot dict
+var _primary_slot_id: String = ""
 var _has_valid_texture: bool = false
 var _anim_elapsed: float = 0.0
 var _last_visual_state: String = "hidden"
 var _attack_cue_remaining: float = 0.0
 var _attack_cue_facing: int = 1
 var _impact_cue_remaining: float = 0.0
-var _brute_recoil_remaining: float = 0.0
-var _brute_recoil_dir: int = 1
+var _recoil_remaining: float = 0.0
+var _recoil_dir: int = 1
+var _recoil_target_id: String = ""
 
 
 func _init() -> void:
@@ -89,8 +91,6 @@ func _init_default_profiles() -> void:
 			"display_label": "Night Raider",
 		},
 		"brute": {
-			# Temporary pixel-art-compatible placeholder reusing the verified 32x32
-			# side-view raider sheet at exact 2x integer scale until final Brute art lands.
 			"texture_path": DEFAULT_RAIDER_TEXTURE_PATH,
 			"hframes": 4,
 			"frame_offset": Vector2(-16.0, -32.0),
@@ -103,50 +103,65 @@ func _init_default_profiles() -> void:
 	}
 
 
+func _create_actor_slot(slot_name: String) -> Dictionary:
+	var actor := Node2D.new()
+	actor.name = slot_name
+	actor.visible = false
+	actor.position = Vector2(EldergroveNightSurvival.THREAT_SPAWN_X, GROUND_BASELINE_Y)
+	add_child(actor)
+
+	var sprite := Sprite2D.new()
+	sprite.name = "ThreatSprite"
+	sprite.centered = false
+	sprite.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	sprite.offset = Vector2(-16.0, -32.0)
+	sprite.hframes = 4
+	actor.add_child(sprite)
+
+	var lbl := Label.new()
+	lbl.name = "ThreatLabel"
+	lbl.offset_left = -72.0
+	lbl.offset_top = -54.0
+	lbl.offset_right = 72.0
+	lbl.offset_bottom = -34.0
+	lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	actor.add_child(lbl)
+
+	var hp_bg := ColorRect.new()
+	hp_bg.name = "BruteHpBg"
+	hp_bg.visible = false
+	hp_bg.position = Vector2(-HP_BAR_WIDTH * 0.5, -72.0)
+	hp_bg.size = Vector2(HP_BAR_WIDTH, HP_BAR_HEIGHT)
+	hp_bg.color = COLOR_HP_BG
+	actor.add_child(hp_bg)
+
+	var hp_fill := ColorRect.new()
+	hp_fill.name = "BruteHpFill"
+	hp_fill.visible = false
+	hp_fill.position = Vector2(-HP_BAR_WIDTH * 0.5, -72.0)
+	hp_fill.size = Vector2(HP_BAR_WIDTH, HP_BAR_HEIGHT)
+	hp_fill.color = COLOR_HP_FILL
+	actor.add_child(hp_fill)
+
+	return {
+		"actor": actor,
+		"sprite": sprite,
+		"label": lbl,
+		"hp_bg": hp_bg,
+		"hp_fill": hp_fill,
+		"loaded_archetype": "",
+		"has_valid_texture": false,
+	}
+
+
 func _ensure_nodes() -> void:
 	if threat_actor == null:
-		threat_actor = Node2D.new()
-		threat_actor.name = "ThreatActor"
-		threat_actor.visible = false
-		threat_actor.position = Vector2(EldergroveNightSurvival.THREAT_SPAWN_X, GROUND_BASELINE_Y)
-		add_child(threat_actor)
-
-	if threat_sprite == null:
-		threat_sprite = Sprite2D.new()
-		threat_sprite.name = "ThreatSprite"
-		threat_sprite.centered = false
-		threat_sprite.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
-		threat_sprite.offset = Vector2(-16.0, -32.0)
-		threat_sprite.hframes = 4
-		threat_actor.add_child(threat_sprite)
-
-	if threat_label == null:
-		threat_label = Label.new()
-		threat_label.name = "ThreatLabel"
-		threat_label.offset_left = -72.0
-		threat_label.offset_top = -54.0
-		threat_label.offset_right = 72.0
-		threat_label.offset_bottom = -34.0
-		threat_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		threat_actor.add_child(threat_label)
-
-	if brute_hp_bg == null:
-		brute_hp_bg = ColorRect.new()
-		brute_hp_bg.name = "BruteHpBg"
-		brute_hp_bg.visible = false
-		brute_hp_bg.position = Vector2(-HP_BAR_WIDTH * 0.5, -72.0)
-		brute_hp_bg.size = Vector2(HP_BAR_WIDTH, HP_BAR_HEIGHT)
-		brute_hp_bg.color = COLOR_HP_BG
-		threat_actor.add_child(brute_hp_bg)
-
-	if brute_hp_fill == null:
-		brute_hp_fill = ColorRect.new()
-		brute_hp_fill.name = "BruteHpFill"
-		brute_hp_fill.visible = false
-		brute_hp_fill.position = Vector2(-HP_BAR_WIDTH * 0.5, -72.0)
-		brute_hp_fill.size = Vector2(HP_BAR_WIDTH, HP_BAR_HEIGHT)
-		brute_hp_fill.color = COLOR_HP_FILL
-		threat_actor.add_child(brute_hp_fill)
+		var primary_slot: Dictionary = _create_actor_slot("ThreatActor")
+		threat_actor = primary_slot["actor"] as Node2D
+		threat_sprite = primary_slot["sprite"] as Sprite2D
+		threat_label = primary_slot["label"] as Label
+		brute_hp_bg = primary_slot["hp_bg"] as ColorRect
+		brute_hp_fill = primary_slot["hp_fill"] as ColorRect
 
 	if left_ward_post == null:
 		var left_x: float = roundf(EldergroveNightSurvival.CAMP_CENTER_X - EldergroveNightSurvival.CAMP_PROTECTION_RADIUS)
@@ -235,8 +250,11 @@ func set_visual_profile(archetype: String, profile: Dictionary) -> void:
 	for k: Variant in profile.keys():
 		base[k] = profile[k]
 	_visual_profiles[archetype] = base
-	if _loaded_archetype == archetype:
-		_loaded_archetype = ""
+	for sid: String in _threat_slots.keys():
+		var slot: Dictionary = _threat_slots[sid] as Dictionary
+		if String(slot.get("loaded_archetype", "")) == archetype:
+			slot["loaded_archetype"] = ""
+			_threat_slots[sid] = slot
 
 
 func has_valid_texture() -> bool:
@@ -244,7 +262,24 @@ func has_valid_texture() -> bool:
 
 
 func is_threat_visible() -> bool:
-	return threat_actor != null and threat_actor.visible
+	return get_visible_threat_count() > 0
+
+
+func get_visible_threat_count() -> int:
+	var count: int = 0
+	for sid: String in _threat_slots.keys():
+		var slot: Dictionary = _threat_slots[sid] as Dictionary
+		var actor: Node2D = slot.get("actor", null) as Node2D
+		if actor != null and actor.visible:
+			count += 1
+	return count
+
+
+func get_threat_actor_by_id(threat_id: String) -> Node2D:
+	if not _threat_slots.has(threat_id):
+		return null
+	var slot: Dictionary = _threat_slots[threat_id] as Dictionary
+	return slot.get("actor", null) as Node2D
 
 
 func is_perimeter_visible() -> bool:
@@ -290,13 +325,13 @@ func is_impact_cue_visible() -> bool:
 
 
 func is_brute_hit_feedback_active() -> bool:
-	return _brute_recoil_remaining > 0.0
+	return _recoil_remaining > 0.0
 
 
 func get_brute_recoil_offset_x() -> float:
-	if _brute_recoil_remaining <= 0.0:
+	if _recoil_remaining <= 0.0:
 		return 0.0
-	return roundf(float(_brute_recoil_dir) * BRUTE_RECOIL_PX)
+	return roundf(float(_recoil_dir) * BRUTE_RECOIL_PX)
 
 
 func trigger_player_attack_cue(player_x: float, facing_dir: int, hit_confirmed: bool) -> void:
@@ -312,7 +347,7 @@ func trigger_player_attack_cue(player_x: float, facing_dir: int, hit_confirmed: 
 	player_attack_cue.visible = true
 
 
-func trigger_hit_impact(impact_x: float, attack_facing_dir: int, defeated: bool) -> void:
+func trigger_hit_impact(impact_x: float, attack_facing_dir: int, defeated: bool, target_id: String = "") -> void:
 	_ensure_nodes()
 	var norm_dir: int = -1 if attack_facing_dir < 0 else 1
 	_impact_cue_remaining = IMPACT_CUE_DURATION_SEC
@@ -322,10 +357,12 @@ func trigger_hit_impact(impact_x: float, attack_facing_dir: int, defeated: bool)
 	impact_bar_v.color = c
 	hit_impact_cue.visible = true
 	if not defeated:
-		_brute_recoil_dir = norm_dir
-		_brute_recoil_remaining = BRUTE_RECOIL_DURATION_SEC
+		_recoil_dir = norm_dir
+		_recoil_remaining = BRUTE_RECOIL_DURATION_SEC
+		_recoil_target_id = target_id
 	else:
-		_brute_recoil_remaining = 0.0
+		_recoil_remaining = 0.0
+		_recoil_target_id = ""
 
 
 func _tick_transient_cues(delta: float) -> void:
@@ -338,8 +375,8 @@ func _tick_transient_cues(delta: float) -> void:
 		_impact_cue_remaining = maxf(0.0, _impact_cue_remaining - dt)
 	if hit_impact_cue != null:
 		hit_impact_cue.visible = _impact_cue_remaining > 0.0
-	if _brute_recoil_remaining > 0.0:
-		_brute_recoil_remaining = maxf(0.0, _brute_recoil_remaining - dt)
+	if _recoil_remaining > 0.0:
+		_recoil_remaining = maxf(0.0, _recoil_remaining - dt)
 
 
 func set_threat_hidden() -> void:
@@ -351,35 +388,88 @@ func set_threat_hidden() -> void:
 		brute_hp_bg.visible = false
 	if brute_hp_fill != null:
 		brute_hp_fill.visible = false
+	for sid: String in _threat_slots.keys():
+		var slot: Dictionary = _threat_slots[sid] as Dictionary
+		var actor: Node2D = slot.get("actor", null) as Node2D
+		var hp_bg: ColorRect = slot.get("hp_bg", null) as ColorRect
+		var hp_fill: ColorRect = slot.get("hp_fill", null) as ColorRect
+		if actor != null:
+			actor.visible = false
+		if hp_bg != null:
+			hp_bg.visible = false
+		if hp_fill != null:
+			hp_fill.visible = false
 	_anim_elapsed = 0.0
 	_last_visual_state = "hidden"
 
 
-func _apply_archetype_profile(archetype: String) -> void:
-	_ensure_nodes()
+func _apply_archetype_profile_to_slot(slot: Dictionary, archetype: String) -> void:
 	var profile: Dictionary = get_visual_profile(archetype)
 	var tex_path: String = String(profile.get("texture_path", ""))
 	var loaded_tex: Texture2D = null
 	if not tex_path.is_empty() and ResourceLoader.exists(tex_path):
 		loaded_tex = load(tex_path) as Texture2D
 
-	_has_valid_texture = loaded_tex != null
-	threat_sprite.texture = loaded_tex
-	threat_sprite.hframes = maxi(1, int(profile.get("hframes", 4)))
-	threat_sprite.offset = profile.get("frame_offset", Vector2(-16.0, -32.0)) as Vector2
+	var valid_tex: bool = loaded_tex != null
+	slot["has_valid_texture"] = valid_tex
+	var sprite: Sprite2D = slot["sprite"] as Sprite2D
+	var lbl: Label = slot["label"] as Label
+	var hp_bg: ColorRect = slot["hp_bg"] as ColorRect
+	var hp_fill: ColorRect = slot["hp_fill"] as ColorRect
+
+	sprite.texture = loaded_tex
+	sprite.hframes = maxi(1, int(profile.get("hframes", 4)))
+	sprite.offset = profile.get("frame_offset", Vector2(-16.0, -32.0)) as Vector2
 	var s: Vector2 = profile.get("sprite_scale", Vector2(1.0, 1.0)) as Vector2
-	threat_sprite.scale = s
-	threat_sprite.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
-	threat_sprite.modulate = profile.get("modulate", Color(1.0, 1.0, 1.0, 1.0)) as Color
+	sprite.scale = s
+	sprite.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	sprite.modulate = profile.get("modulate", Color(1.0, 1.0, 1.0, 1.0)) as Color
+
 	var label_y: float = -34.0 * maxf(1.0, s.y) - 20.0
-	threat_label.offset_top = label_y
-	threat_label.offset_bottom = label_y + 20.0
+	lbl.offset_top = label_y
+	lbl.offset_bottom = label_y + 20.0
 	var hp_y: float = -34.0 * maxf(1.0, s.y) - 6.0
-	if brute_hp_bg != null:
-		brute_hp_bg.position.y = hp_y
-	if brute_hp_fill != null:
-		brute_hp_fill.position.y = hp_y
-	_loaded_archetype = archetype
+	hp_bg.position.y = hp_y
+	hp_fill.position.y = hp_y
+	slot["loaded_archetype"] = archetype
+
+
+func _get_or_assign_slot(threat_id: String, index: int) -> Dictionary:
+	if _threat_slots.has(threat_id):
+		return _threat_slots[threat_id] as Dictionary
+	var slot: Dictionary
+	if index == 0 and _primary_slot_id.is_empty():
+		_primary_slot_id = threat_id
+		slot = {
+			"actor": threat_actor,
+			"sprite": threat_sprite,
+			"label": threat_label,
+			"hp_bg": brute_hp_bg,
+			"hp_fill": brute_hp_fill,
+			"loaded_archetype": "",
+			"has_valid_texture": false,
+		}
+	else:
+		slot = _create_actor_slot("ThreatActor_%s" % threat_id)
+	_threat_slots[threat_id] = slot
+	return slot
+
+
+func _cleanup_stale_slots(active_ids: Dictionary) -> void:
+	var to_remove: Array[String] = []
+	for sid: String in _threat_slots.keys():
+		if active_ids.has(sid):
+			continue
+		var slot: Dictionary = _threat_slots[sid] as Dictionary
+		var actor: Node2D = slot.get("actor", null) as Node2D
+		if actor == threat_actor:
+			actor.visible = false
+			_primary_slot_id = ""
+		elif actor != null:
+			actor.queue_free()
+		to_remove.append(sid)
+	for sid: String in to_remove:
+		_threat_slots.erase(sid)
 
 
 func sync_from_survival(survival: EldergroveNightSurvival, player_x: float, camp_built: bool, delta: float = 0.0) -> void:
@@ -387,68 +477,114 @@ func sync_from_survival(survival: EldergroveNightSurvival, player_x: float, camp
 	_tick_transient_cues(delta)
 	var protection_active: bool = survival != null and survival.is_camp_protection_active(camp_built)
 	if survival == null or not survival.is_encounter_active():
-		_brute_recoil_remaining = 0.0
+		_recoil_remaining = 0.0
+		_recoil_target_id = ""
 		set_threat_hidden()
 		set_perimeter_visible(protection_active, COLOR_WARD_IDLE)
 		return
-
-	if _loaded_archetype != survival.threat_archetype:
-		_apply_archetype_profile(survival.threat_archetype)
-
-	var profile: Dictionary = get_visual_profile(survival.threat_archetype)
-	var base_mod: Color = profile.get("modulate", Color(1.0, 1.0, 1.0, 1.0)) as Color
-	var display_name: String = String(profile.get("display_label", survival.threat_archetype))
-	var native_faces_left: bool = bool(profile.get("native_faces_left", true))
-
-	threat_actor.visible = true
-	var recoil_x: float = get_brute_recoil_offset_x()
-	threat_actor.position = Vector2(roundf(survival.threat_x) + recoil_x, GROUND_BASELINE_Y)
-
-	# Side-view facing direction toward player
-	var moving_right: bool = player_x > survival.threat_x
-	threat_sprite.flip_h = moving_right if native_faces_left else (not moving_right)
-
-	_anim_elapsed += maxf(0.0, delta)
-	var frame_count: int = maxi(1, threat_sprite.hframes)
 
 	var pulse_active: bool = survival.defense_pulse_visual_remaining > 0.0
 	if ward_pulse_bar != null:
 		ward_pulse_bar.visible = protection_active and pulse_active
 
-	var show_hp: bool = survival.threat_max_hp > 0 and not survival.is_threat_defeated()
-	if brute_hp_bg != null and brute_hp_fill != null:
-		brute_hp_bg.visible = show_hp
-		brute_hp_fill.visible = show_hp
+	_anim_elapsed += maxf(0.0, delta)
+	var threat_list: Array[Dictionary] = survival.threats
+	var active_ids: Dictionary = {}
+	var primary_set: bool = false
+
+	for i: int in range(threat_list.size()):
+		var t: Dictionary = threat_list[i]
+		var tid: String = String(t.get("id", "threat_%d" % i))
+		active_ids[tid] = true
+		var slot: Dictionary = _get_or_assign_slot(tid, i)
+		var actor: Node2D = slot["actor"] as Node2D
+		var sprite: Sprite2D = slot["sprite"] as Sprite2D
+		var lbl: Label = slot["label"] as Label
+		var hp_bg: ColorRect = slot["hp_bg"] as ColorRect
+		var hp_fill: ColorRect = slot["hp_fill"] as ColorRect
+
+		if bool(t.get("is_defeated", false)):
+			actor.visible = false
+			hp_bg.visible = false
+			hp_fill.visible = false
+			_threat_slots[tid] = slot
+			continue
+
+		var arch: String = String(t.get("archetype", "raider"))
+		if String(slot.get("loaded_archetype", "")) != arch:
+			_apply_archetype_profile_to_slot(slot, arch)
+
+		var profile: Dictionary = get_visual_profile(arch)
+		var base_mod: Color = profile.get("modulate", Color(1.0, 1.0, 1.0, 1.0)) as Color
+		var display_name: String = String(profile.get("display_label", arch))
+		var native_faces_left: bool = bool(profile.get("native_faces_left", true))
+
+		var tx: float = float(t.get("x", 0.0))
+		var apply_recoil: bool = _recoil_remaining > 0.0 and (_recoil_target_id.is_empty() or _recoil_target_id == tid)
+		var recoil_x: float = get_brute_recoil_offset_x() if apply_recoil else 0.0
+		actor.visible = true
+		actor.position = Vector2(roundf(tx) + recoil_x, GROUND_BASELINE_Y)
+
+		var moving_right: bool = player_x > tx
+		sprite.flip_h = moving_right if native_faces_left else (not moving_right)
+
+		var frame_count: int = maxi(1, sprite.hframes)
+		var cur_hp: int = int(t.get("hp", 0))
+		var max_hp: int = int(t.get("max_hp", 0))
+		var show_hp: bool = max_hp > 0
+		hp_bg.visible = show_hp
+		hp_fill.visible = show_hp
 		if show_hp:
-			var ratio: float = clampf(float(survival.threat_hp) / float(maxi(1, survival.threat_max_hp)), 0.0, 1.0)
-			brute_hp_fill.size.x = roundf(HP_BAR_WIDTH * ratio)
-			display_name = "%s [%d/%d]" % [display_name, survival.threat_hp, survival.threat_max_hp]
+			var ratio: float = clampf(float(cur_hp) / float(maxi(1, max_hp)), 0.0, 1.0)
+			hp_fill.size.x = roundf(HP_BAR_WIDTH * ratio)
+			display_name = "%s [%d/%d]" % [display_name, cur_hp, max_hp]
+
+		var slot_state: String = "approaching"
+		if float(t.get("stagger_remaining", 0.0)) > 0.0:
+			slot_state = "staggered"
+			sprite.modulate = base_mod * COLOR_TINT_STAGGERED
+			sprite.frame = mini(frame_count - 1, 1)
+			lbl.text = "%s — Staggered" % display_name
+		elif bool(t.get("breached", false)):
+			slot_state = "breached"
+			sprite.modulate = COLOR_TINT_BREACHED
+			sprite.frame = int(floor(_anim_elapsed * BREACH_FPS)) % frame_count
+			lbl.text = "%s — BREACHED!" % display_name
+		elif bool(t.get("blocked", false)):
+			slot_state = "blocked"
+			sprite.modulate = base_mod * COLOR_TINT_BLOCKED
+			var pulse: int = int(floor(_anim_elapsed * BLOCKED_FPS)) % 2
+			sprite.frame = mini(frame_count - 1, 1 + pulse)
+			lbl.text = "%s — Blocked" % display_name
+		else:
+			sprite.modulate = base_mod
+			sprite.frame = int(floor(_anim_elapsed * WALK_FPS)) % frame_count
+			lbl.text = display_name
+
+		if float(t.get("hit_flash_remaining", 0.0)) > 0.0:
+			sprite.modulate = COLOR_TINT_HIT_FLASH
+
+		_threat_slots[tid] = slot
+		if not primary_set:
+			primary_set = true
+			_has_valid_texture = bool(slot.get("has_valid_texture", false))
+			_last_visual_state = slot_state
+			threat_actor = actor
+			threat_sprite = sprite
+			threat_label = lbl
+			brute_hp_bg = hp_bg
+			brute_hp_fill = hp_fill
+
+	_cleanup_stale_slots(active_ids)
+
+	if not primary_set:
+		_last_visual_state = "hidden"
 
 	if survival.is_threat_staggered():
-		_last_visual_state = "staggered"
-		threat_sprite.modulate = base_mod * COLOR_TINT_STAGGERED
-		threat_sprite.frame = mini(frame_count - 1, 1)
-		threat_label.text = "%s — Staggered" % display_name
 		set_perimeter_visible(protection_active, COLOR_WARD_PULSE if pulse_active else COLOR_WARD_BLOCKED)
 	elif survival.camp_breached:
-		_last_visual_state = "breached"
-		threat_sprite.modulate = COLOR_TINT_BREACHED
-		threat_sprite.frame = int(floor(_anim_elapsed * BREACH_FPS)) % frame_count
-		threat_label.text = "%s — BREACHED!" % display_name
 		set_perimeter_visible(protection_active, COLOR_WARD_BREACHED)
 	elif survival.threat_blocked:
-		_last_visual_state = "blocked"
-		threat_sprite.modulate = base_mod * COLOR_TINT_BLOCKED
-		var pulse: int = int(floor(_anim_elapsed * BLOCKED_FPS)) % 2
-		threat_sprite.frame = mini(frame_count - 1, 1 + pulse)
-		threat_label.text = "%s — Blocked" % display_name
 		set_perimeter_visible(protection_active, COLOR_WARD_BLOCKED)
 	else:
-		_last_visual_state = "approaching"
-		threat_sprite.modulate = base_mod
-		threat_sprite.frame = int(floor(_anim_elapsed * WALK_FPS)) % frame_count
-		threat_label.text = display_name
 		set_perimeter_visible(protection_active, COLOR_WARD_PULSE if pulse_active else COLOR_WARD_IDLE)
-
-	if survival.hit_flash_remaining > 0.0:
-		threat_sprite.modulate = COLOR_TINT_HIT_FLASH
